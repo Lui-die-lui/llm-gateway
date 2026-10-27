@@ -4,6 +4,7 @@ import { ConsoleLayout } from './ConsoleLayout';
 import { LoginPage } from '../pages/console/Login';
 import { TokenPage } from '../pages/console/Token';
 import { OverviewPage } from '../pages/console/Overview';
+import { LivePage } from '../pages/console/Live';
 
 export const routes = [
   { path: '/', element: <Navigate to="/console" replace /> },
@@ -17,6 +18,7 @@ export const routes = [
     ),
     children: [
       { index: true, element: <OverviewPage /> },
+      { path: 'live', element: <LivePage /> },
       { path: 'token', element: <TokenPage /> },
     ],
   },
