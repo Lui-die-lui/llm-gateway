@@ -18,7 +18,15 @@ uvicorn app.main:app --reload --env-file .env    # http://localhost:8000  (API �
 
 Docker는 `docker compose up --build` (아직 직접 빌드해 보지 못했습니다). 로컬 LLM(Ollama)까지 같이 띄우려면 `--profile local-llm`.
 
-키 없이 동작을 확인하려면 `.env`에 `UPSTREAM_MODE=mock`을 넣고 서버를 띄워 호출해 보세요. mock 업스트림은 받은 프롬프트를 그대로 되돌려줍니다.
+**API 키는 필요 없습니다.** `.env.example`의 기본값이 `UPSTREAM_MODE=mock`이라서 복사만 하면 키 없이 전부 돌아갑니다. mock 업스트림은 가린 프롬프트를 그대로 되돌려주고, 게이트웨이가 그걸 복원합니다. 실제 LLM을 붙일 때만 이 줄을 지우고 키를 넣으세요.
+
+서버 없이 핵심 장면(범용 규칙 vs 템플릿, 외부로 나가는 문장, 직원이 보는 문장)만 보려면:
+
+```bash
+python -m app.demo
+```
+
+서버를 띄워 직접 호출해 보려면:
 
 ```bash
 curl -X POST localhost:8000/v1/chat/completions \
