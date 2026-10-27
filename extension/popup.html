@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { width: 260px; margin: 0; padding: 14px; font: 14px system-ui, sans-serif; }
+    h1 { font-size: 15px; margin: 0 0 10px; }
+    label { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+    #status { margin-top: 12px; font-size: 12px; }
+    .ok { color: #1a7f4b; } .bad { color: #c0392b; }
+    h2 { font-size: 12px; margin: 14px 0 4px; color: #666; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>LLM Gateway Guard</h1>
+  <label><input type="checkbox" id="enabled"> 가림막 켜기</label>
+  <h2>적용할 산업 템플릿</h2>
+  <div id="industries">불러오는 중…</div>
+  <div id="status"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,18 +1,46 @@
-// Runs on chatgpt.com. Selectors below depend on ChatGPT's current DOM and will need upkeep.
-const COMPOSER = "#prompt-textarea";
-const SEND_BUTTON = 'button[data-testid="send-button"]';
-const REPLY = '[data-message-author-role="assistant"]';
-const PLACEHOLDER = /\[[^\[\]\s]+_\d+\]/;
+// Runs on chatgpt.com and claude.ai. The selectors depend on each site's current DOM and will need upkeep:
+// when a site changes its page, only this table has to be edited.
+const SITES = {
+  "chatgpt.com": {
+    composer: ["#prompt-textarea"],
+    send: ['button[data-testid="send-button"]'],
+    reply: ['[data-message-author-role="assistant"]'],
+  },
+  "claude.ai": {
+    composer: ['div[contenteditable="true"].ProseMirror', 'div[contenteditable="true"]'],
+    send: ['button[aria-label="Send message"]', 'button[aria-label="메시지 보내기"]'],
+    reply: [".font-claude-message", "[data-is-streaming]"],
+  },
+};
+SITES["chat.openai.com"] = SITES["chatgpt.com"];
+const site = SITES[location.hostname] ?? SITES["chatgpt.com"];
 
-let vaultId = null; // one gateway vault per page load; reload loses the mapping
-let bypass = false; // lets our own re-click through the interceptor
+const PLACEHOLDER = /\[[^\[\]\s]+_\d+\]/;
+let bypass = false; // lets our own re-send through the interceptor
 let busy = false;
 
-const gateway = (type, text) => chrome.runtime.sendMessage({ type, text, vaultId });
+const find = (selectors) => {
+  for (const s of selectors) {
+    const el = document.querySelector(s);
+    if (el) return el;
+  }
+  return null;
+};
+const toGateway = (type, text) => chrome.runtime.sendMessage({ type, text });
+
+function resend() {
+  setTimeout(() => {
+    bypass = true;
+    const button = find(site.send);
+    if (button) button.click();
+    else find(site.composer)?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    bypass = false;
+  }, 100);
+}
 
 async function guardedSend(event) {
   if (bypass) return;
-  const box = document.querySelector(COMPOSER);
+  const box = find(site.composer);
   const text = box?.innerText.trim();
   if (!text) return;
   event.preventDefault();
@@ -20,7 +48,8 @@ async function guardedSend(event) {
   if (busy) return;
   busy = true;
   try {
-    const res = await gateway("sanitize", text);
+    const res = await toGateway("sanitize", text);
+    if (res.passthrough) return resend(); // guard switched off in the popup
     if (!res.ok) {
       // Fail closed: if the gateway is down or says block, nothing is sent.
       alert(
@@ -30,17 +59,12 @@ async function guardedSend(event) {
       );
       return;
     }
-    vaultId = res.data.vault_id;
     if (res.data.text !== text) {
       box.focus();
       document.execCommand("selectAll");
       document.execCommand("insertText", false, res.data.text);
     }
-    setTimeout(() => {
-      bypass = true;
-      document.querySelector(SEND_BUTTON)?.click();
-      bypass = false;
-    }, 100);
+    resend();
   } finally {
     busy = false;
   }
@@ -50,28 +74,35 @@ document.addEventListener(
   "keydown",
   (e) => {
     // isComposing: Korean IME fires Enter to commit a syllable; that must not count as send.
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.target.closest?.(COMPOSER)) guardedSend(e);
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.target.closest?.(site.composer.join(","))) guardedSend(e);
   },
   true
 );
 document.addEventListener(
   "click",
   (e) => {
-    if (e.target.closest?.(SEND_BUTTON)) guardedSend(e);
+    if (e.target.closest?.(site.send.join(","))) guardedSend(e);
   },
   true
 );
 
-// Put the original values back into ChatGPT's reply, in the DOM only.
+// Put the original values back into the reply, in the DOM only.
+const asked = new WeakMap(); // text node -> the text we already tried to restore (avoids hammering the gateway)
 async function restoreReplies() {
-  if (!vaultId) return;
-  for (const root of document.querySelectorAll(REPLY)) {
+  for (const root of document.querySelectorAll(site.reply.join(","))) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const nodes = [];
-    while (walker.nextNode()) if (PLACEHOLDER.test(walker.currentNode.nodeValue)) nodes.push(walker.currentNode);
+    while (walker.nextNode()) {
+      const n = walker.currentNode;
+      if (PLACEHOLDER.test(n.nodeValue) && asked.get(n) !== n.nodeValue) nodes.push(n);
+    }
     for (const node of nodes) {
-      const res = await gateway("restore", node.nodeValue);
-      if (res.ok && res.data.text !== node.nodeValue) node.nodeValue = res.data.text;
+      asked.set(node, node.nodeValue);
+      const res = await toGateway("restore", node.nodeValue);
+      if (res.ok && res.data.text !== node.nodeValue) {
+        node.nodeValue = res.data.text;
+        asked.set(node, node.nodeValue);
+      }
     }
   }
 }

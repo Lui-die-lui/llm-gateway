@@ -1,31 +1,53 @@
 # Chrome 확장 (LLM Gateway Guard)
 
-chatgpt.com에서 프롬프트를 보내기 직전에 로컬 게이트웨이로 보내 민감정보를 가리고, 답변이 오면 화면에서만 원래 값으로 되돌립니다.
+웹 ChatGPT(chatgpt.com)와 Claude(claude.ai)에서 프롬프트를 보내기 직전에 로컬 게이트웨이로 보내 민감정보를 가리고,
+답변이 오면 화면에서만 원래 값으로 되돌립니다. LLM API 키는 필요 없습니다. 직원은 평소처럼 자기 계정으로 웹을 씁니다.
 빌드 도구 없이 바로 로드되는 순수 JS(Manifest V3)입니다.
 
 ## 설치 (개발용)
 
-1. 게이트웨이를 먼저 띄웁니다: `uvicorn app.main:app` (기본 `http://localhost:8000`)
+1. 게이트웨이를 먼저 띄웁니다 (루트 README의 "실행"). 기본 주소 `http://localhost:8000`.
 2. Chrome에서 `chrome://extensions` 를 열고 오른쪽 위 **개발자 모드**를 켭니다.
 3. **압축해제된 확장 프로그램을 로드합니다** → 이 `extension/` 폴더를 선택합니다.
-4. chatgpt.com을 새로고침하고 `kim@corp.co.kr` 같은 문장을 보내 봅니다. 전송 직전 입력창이 `[이메일_1]`로 바뀌고, 답변 속 `[이메일_1]`은 화면에서 원래 값으로 보입니다.
+4. 도구 모음의 확장 아이콘을 눌러 연결 상태를 확인하고, 적용할 산업 템플릿을 고릅니다.
+5. chatgpt.com 또는 claude.ai에서 `kim@corp.co.kr` 같은 문장을 보내 봅니다. 전송 직전 입력창이 `[이메일_1]`로 바뀌고, 답변 속 자리표시자는 화면에서 원래 값으로 보입니다. 아이콘의 숫자 배지는 그 탭에서 가린 항목 수입니다.
 
 ## 동작
 
 | 파일 | 역할 |
 |---|---|
-| `content.js` | 입력창의 Enter / 전송 버튼을 가로채 `/v1/sanitize` 호출, 답변 DOM의 `[유형_n]`을 `/v1/restore`로 복원 |
-| `background.js` | 게이트웨이 호출 대행 (content script는 페이지 CORS를 받으므로 서비스 워커가 대신 호출). 적용 산업은 `INDUSTRIES` 상수 |
-| `manifest.json` | `localhost:8000` 접근 권한, chatgpt.com 주입 |
+| `content.js` | 입력창의 Enter / 전송 버튼을 가로채 가리고, 답변의 `[유형_n]`을 복원. **사이트별 선택자는 파일 맨 위 `SITES` 표**에 있음 |
+| `background.js` | 게이트웨이 호출 대행 (content script는 페이지 CORS를 받으므로 서비스 워커가 대신 호출). 탭별 vault id를 세션 저장소에 보관하므로 새로고침해도 복원되고, 웹 페이지에는 노출되지 않음 |
+| `popup.html/js` | 켜기/끄기, 산업 템플릿 선택, 게이트웨이 연결 상태 |
+| `dev/` | 개발용 가짜 채팅 화면 (아래) |
 
-- 게이트웨이가 꺼져 있거나 차단(403)이면 **전송하지 않습니다** (fail closed).
+- 게이트웨이가 꺼져 있거나 차단(403)이면 **전송하지 않습니다** (fail closed). 팝업에서 끄면 그대로 통과시킵니다.
 - 한글 IME 입력 중 Enter(`isComposing`)는 전송으로 취급하지 않습니다.
-- 매핑(vault)은 게이트웨이 메모리에만 있고 30분 안 쓰면 사라집니다.
+- 매핑(vault)은 게이트웨이 메모리에만 있고 30분 안 쓰면 사라집니다. 사라지면 새 매핑으로 이어갑니다 (이전 답변의 자리표시자는 복원되지 않음).
 
-## 아직 안 된 것 / 한계
+## 확장 없이 로직만 확인하기 (dev 페이지)
 
-- **실제 chatgpt.com에서는 검증하지 못했습니다.** 입력창(`#prompt-textarea`), 전송 버튼(`data-testid="send-button"`), 답변(`data-message-author-role`) 선택자는 ChatGPT 화면 구조에 의존하므로 깨질 수 있습니다. 조원 A가 실제로 돌려보고 `content.js` 상단 상수를 고쳐주세요.
-- 페이지를 새로고침하면 그 대화의 vault id를 잃어서 이전 답변의 `[이메일_1]`이 복원되지 않습니다.
+로그인 없이 가로채기 → 가림 → 복원 흐름을 확인하는 가짜 채팅 화면입니다. 게이트웨이를 `UPSTREAM_MODE=mock`으로 띄운 뒤:
+
+```bash
+python -m http.server 5173 --directory extension
+```
+
+`http://localhost:5173/dev/fake-chat.html?industries=cosmetics` 를 열고 입력창에 문장을 쓰고 Enter를 누르면, 아래 `pre`에 "외부로 나가는 문장"이 보이고 가짜 답변이 복원돼 나타납니다. `?enabled=0`으로 열면 끄기 상태를 흉내냅니다.
+(`localhost:5173`은 게이트웨이 CORS 기본 허용 목록에 있습니다.)
+
+## 검증 상태 (솔직하게)
+
+- 가짜 채팅 화면에서 확인함: 가림, 답변 복원, 차단 시 전송 안 됨, 게이트웨이가 꺼졌을 때 전송 안 됨, 끄기 스위치.
+- **확인하지 못함**: 실제 chatgpt.com / claude.ai 화면, 확장으로 로드했을 때의 팝업·배지·`chrome.storage.session`, 한글 IME 입력. claude.ai 선택자는 추정값입니다.
+- 조원 A가 실제 사이트에서 돌려보고 `content.js`의 `SITES` 표만 고치면 됩니다. 증상별 확인법:
+  - 전송이 그냥 나감 → `composer`/`send` 선택자가 안 맞음 (개발자 도구에서 요소를 찍어 확인)
+  - 가려지긴 하는데 전송이 안 됨 → 사이트가 `insertText` 입력을 인식하지 못하거나 `send` 버튼 선택자가 틀림
+  - 답변이 복원되지 않음 → `reply` 선택자가 틀림
+
+## 한계
+
 - 확장은 사용자가 끌 수 있으므로 **강제 수단이 아닙니다.** 강제는 네트워크/기기 정책으로 합니다 (루트 README의 "차단 방향" 참고).
-- claude.ai 등 다른 사이트는 `manifest.json`의 `matches`와 선택자를 추가해야 합니다.
-- 산업 선택 팝업, 아이콘, 게이트웨이 주소 설정 UI는 없습니다.
+- 데스크톱 앱(ChatGPT/Claude 앱)은 브라우저 밖이라 이 확장으로 다룰 수 없습니다.
+- 이미지/파일 첨부는 가리지 않습니다. 텍스트 입력만 처리합니다.
+- 게이트웨이 주소(`localhost:8000`)는 `manifest.json`과 `background.js`에 고정입니다.

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>fake chat (extension dev page)</title></head>
+<body>
+  <!-- Mimics the parts of ChatGPT's page that content.js touches. Serve extension/ and open /dev/fake-chat.html -->
+  <div id="log"></div>
+  <div id="prompt-textarea" contenteditable="true" style="border:1px solid #888;min-height:2em"></div>
+  <button data-testid="send-button">send</button>
+  <pre id="sent"></pre>
+  <script src="shim.js"></script>
+  <script>
+    const composer = document.getElementById("prompt-textarea");
+    function send() {
+      const text = composer.innerText.trim();
+      if (!text) return;
+      document.getElementById("sent").textContent = text; // what would leave for the external LLM
+      composer.textContent = "";
+      setTimeout(() => {
+        const reply = document.createElement("div");
+        reply.dataset.messageAuthorRole = "assistant";
+        reply.textContent = "답변: " + text; // a model that echoes what it was sent
+        document.getElementById("log").append(reply);
+      }, 200);
+    }
+    document.querySelector("button").addEventListener("click", send);
+    composer.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+  </script>
+  <script src="../content.js"></script>
+</body>
+</html>
