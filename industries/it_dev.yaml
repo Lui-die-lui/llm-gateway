@@ -1,0 +1,78 @@
+# IT/개발 인프라 템플릿. 스키마: app/taxonomy.py, 가이드: docs/TAXONOMY.md
+# API 키/시크릿은 여기서 다루지 않음 (별도 작업).
+# 검사 명령: python -m app.check_templates
+industry: it_dev
+entities:
+  - id: internal_host            # 사내 도메인 (*.internal, *.local, *.corp, *.intra, *.lan)
+    label: 내부주소
+    detection:
+      # 앞에 @ 가 오면 제외: 이메일(admin@x.internal)은 기본 규칙이 통째로 가리게 둔다.
+      # 뒤에 .영숫자 가 이어지면 제외: foo.internal.example.com 같은 공개 도메인은 건드리지 않는다.
+      patterns: ['(?<![@A-Za-z0-9_.-])((?:[A-Za-z0-9-]+\.)+(?:internal|local|corp|intra|lan))(?![A-Za-z0-9_-]|\.[A-Za-z0-9])']
+      ner_hint: "사내에서만 쓰는 서버/서비스 도메인"
+    sensitivity: high
+    action: redact
+    regulation: ['영업비밀보호법']
+
+  - id: private_ip               # 사설 IP 대역: 10.x, 172.16~31.x, 192.168.x
+    label: 내부IP
+    detection:
+      # 각 칸 0~255 검증. 소프트웨어 버전(10.0.19045.1)은 칸 검증과 키워드로 걸러진다.
+      patterns: ['(?<!\d)(?<!\d\.)((?:10(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){2}|192\.168(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){2}))(?!\d|\.\d)']
+      context_keywords: ['IP', '아이피', '서버', '호스트', '접속', 'ssh', 'SSH', 'DB', '게이트웨이', '대역', '방화벽']
+    sensitivity: medium
+    action: redact
+    regulation: ['영업비밀보호법']
+
+  - id: internal_repo            # 사내 Git 주소 (공개 호스팅은 제외)
+    label: 저장소
+    detection:
+      # github.com / gitlab.com / bitbucket.org 의 공개 저장소는 가리지 않는다.
+      patterns: ['((?:git@|ssh://git@|https?://)(?!(?:www\.)?(?:github\.com|gitlab\.com|bitbucket\.org)[:/])[A-Za-z0-9.-]+(?::\d+)?[:/][A-Za-z0-9_./~-]+\.git)(?![A-Za-z0-9_])']
+      ner_hint: "사내 Git 저장소 주소"
+    sensitivity: high
+    action: redact
+    regulation: ['영업비밀보호법']
+
+  - id: customer_table           # 고객 데이터 테이블명 (밑줄이 있는 식별자만)
+    label: 테이블명
+    detection:
+      # tb_/tbl_/t_ 접두, 또는 cust/customer/member/user/client 가 들어간 snake_case. 밑줄 없는 users 는 영어 문장과 구분이 안 되어 제외.
+      patterns:
+        - '\b((?:[Tt][Bb][Ll]?|[Tt])_[A-Za-z0-9_]+)\b'
+        - '\b((?:[A-Za-z0-9]+_)+[A-Za-z0-9_]*(?i:cust|customer|member|user|client)[A-Za-z0-9_]*|(?i:cust|customer|member|user|client)[A-Za-z0-9]*(?:_[A-Za-z0-9]+)+)\b'
+      context_keywords: ['테이블', '컬럼', '스키마', 'SELECT', 'select', 'FROM', 'from', 'JOIN', 'join']
+      ner_hint: "고객 정보가 들어있는 DB 테이블 이름"
+    sensitivity: high
+    action: redact
+    regulation: ['개인정보보호법']
+
+tests:
+  - text: "서버 db01.fake.internal 접속 확인"
+    detect: ["db01.fake.internal"]
+  - text: "api-gw.fake.local에서 타임아웃 발생"
+    detect: ["api-gw.fake.local"]
+  - text: "print01.fake.lan, wiki.fake.intra 점검 필요"
+    detect: ["print01.fake.lan", "wiki.fake.intra"]
+  - text: "DB 서버 10.1.2.3 접속, 게이트웨이 192.168.0.1, 대역 172.20.5.9"
+    detect: ["10.1.2.3", "192.168.0.1", "172.20.5.9"]
+  - text: "git clone git@code.fake-company.test:team/app.git 실행"
+    detect: ["git@code.fake-company.test:team/app.git"]
+  - text: "SELECT * FROM tb_customer_info 조회"
+    detect: ["tb_customer_info"]
+  - text: "member_profile 테이블 컬럼 정리"
+    detect: ["member_profile"]
+  - text: "공개 문서 https://www.example.com/guide 참고"      # 공개 도메인 -> untouched
+    detect: []
+  - text: "문의 admin@mail.fake.internal 로 회신"             # 이메일은 기본 규칙 담당 -> 템플릿은 건드리지 않음
+    detect: []
+  - text: "무선 LAN 케이블 교체 일정"                          # 도메인이 아님 -> untouched
+    detect: []
+  - text: "버전 10.2.3.4 릴리스 노트"                          # IP 키워드 없는 버전 표기 -> untouched
+    detect: []
+  - text: "서버 8.8.8.8 접속 테스트"                           # 사설 대역이 아님 -> untouched
+    detect: []
+  - text: "git clone git@github.com:octocat/hello.git"        # 공개 저장소 -> untouched
+    detect: []
+  - text: "users from Korea 비교 테이블"                       # 밑줄 없는 일반 단어 -> untouched
+    detect: []

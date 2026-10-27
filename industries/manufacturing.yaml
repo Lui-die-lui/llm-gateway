@@ -1,0 +1,76 @@
+# 제조/반도체 템플릿. 스키마: app/taxonomy.py, 가이드: docs/TAXONOMY.md
+# 검사 명령: python -m app.check_templates
+industry: manufacturing
+entities:
+  - id: yield_rate               # 수율, 불량률
+    label: 수율
+    detection:
+      patterns: ['\d+(?:\.\d+)?\s*%']
+      context_keywords: ['수율', '불량률', '양품률', '불량', 'Yield', 'yield']
+      ner_hint: "생산 수율 또는 불량률 수치"
+    sensitivity: critical
+    action: redact
+    regulation: ['산업기술보호법', '영업비밀보호법']
+
+  - id: process_parameter        # 공정 조건 (온도, 압력, 가스 유량, 전력 등)
+    label: 공정조건
+    detection:
+      # 단위가 붙은 수치만. 단위 뒤에 영문이 이어지면 제외 (예: 5Wh).
+      patterns: ['\d+(?:\.\d+)?\s*(?:mTorr|Torr|sccm|℃|°C|kW|rpm|nm|μm|um|Pa|W)(?![A-Za-z])']
+      context_keywords: ['공정', '레시피', 'Recipe', 'recipe', '챔버', '증착', '식각', '에칭', 'Etch', 'CVD', 'PVD']
+      ner_hint: "반도체/제조 공정의 온도, 압력, 유량 같은 조건 수치"
+    sensitivity: critical
+    action: redact
+    regulation: ['산업기술보호법', '영업비밀보호법']
+
+  - id: equipment_lot_id         # 설비번호, Lot ID
+    label: 설비LOT
+    detection:
+      patterns: ['(?:설비번호|설비 ID|설비ID|장비번호|Lot ID|LOT ID|로트번호)\s*[:：]?\s*([A-Z0-9][A-Z0-9_-]{4,})']
+    sensitivity: medium
+    action: redact
+    regulation: ['영업비밀보호법']
+
+  - id: drawing_number           # 도면번호
+    label: 도면번호
+    detection:
+      patterns: ['(?:도면번호|도면 번호|Drawing No\.?)\s*[:：]?\s*([A-Z0-9][A-Z0-9-]{5,})']
+    sensitivity: high
+    action: redact
+    regulation: ['산업기술보호법', '영업비밀보호법']
+
+  - id: unit_cost                # 납품 단가, 원가
+    label: 단가
+    detection:
+      # Capture group 1 = 금액만. 단위(원/달러 등)가 있어야 잡습니다.
+      patterns: ['(?:단가|원가|납품가|견적가)\s*[:：]?\s*(\d[\d,]*(?:\.\d+)?\s*(?:만원|억원|원|달러|USD))']
+      ner_hint: "거래처별 납품 단가 또는 제조 원가"
+    sensitivity: high
+    action: redact
+    regulation: ['영업비밀보호법']
+
+applies_to:
+  use_cases: [document_summary, translation]
+  flow: internal_db_to_llm
+
+tests:
+  - text: "3월 라인 수율 92.4%, 불량률 1.8% 보고"
+    detect: ["92.4%", "1.8%"]
+  - text: "식각 공정 레시피: 챔버 압력 50mTorr, 온도 350℃"
+    detect: ["50mTorr", "350℃"]
+  - text: "설비번호: ETCH-A12-03, Lot ID: W24A1033 홀드 사유 공유"
+    detect: ["ETCH-A12-03", "W24A1033"]
+  - text: "도면번호 PT-440291-R2 개정 요청"
+    detect: ["PT-440291-R2"]
+  - text: "A사 납품 단가: 1,280원, 원가 820원"
+    detect: ["1,280원", "820원"]
+  - text: "임직원 참석률 87% 달성"                    # 수율 키워드 없음 -> untouched
+    detect: []
+  - text: "사무실 온도 24℃ 설정 변경"                 # 공정 키워드 없음 -> untouched
+    detect: []
+  - text: "설비 점검 일정 공유"                       # 번호 값 없음 -> untouched
+    detect: []
+  - text: "도면 검토 회의 일정"                       # 도면번호 값 없음 -> untouched
+    detect: []
+  - text: "회의 다과 단가 안내"                       # 금액 없음 -> untouched
+    detect: []
