@@ -3,7 +3,7 @@ import { RequireAuth } from '../features/auth';
 import { ConsoleLayout } from './ConsoleLayout';
 import { LoginPage } from '../pages/console/Login';
 import { TokenPage } from '../pages/console/Token';
-
+import { OverviewPage } from '../pages/console/Overview';
 
 export const routes = [
   { path: '/', element: <Navigate to="/console" replace /> },
@@ -16,7 +16,7 @@ export const routes = [
       </RequireAuth>
     ),
     children: [
-      { index: true, element: <Navigate to="/console/token" replace /> },
+      { index: true, element: <OverviewPage /> },
       { path: 'token', element: <TokenPage /> },
     ],
   },
