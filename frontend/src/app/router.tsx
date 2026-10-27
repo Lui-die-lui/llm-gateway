@@ -10,6 +10,7 @@ import { ReportsPage } from '../pages/console/Reports';
 import { PolicyPage } from '../pages/console/Policy';
 import { BasicRulesPage } from '../pages/console/BasicRules';
 import { ExceptionsPage } from '../pages/console/Exceptions';
+import { UsersPage } from '../pages/console/Users';
 
 export const routes = [
   { path: '/', element: <Navigate to="/console" replace /> },
@@ -29,6 +30,7 @@ export const routes = [
       { path: 'policy', element: <PolicyPage /> },
       { path: 'policy/basic', element: <BasicRulesPage /> },
       { path: 'exceptions', element: <ExceptionsPage /> },
+      { path: 'users', element: <UsersPage /> },
       { path: 'token', element: <TokenPage /> },
     ],
   },
