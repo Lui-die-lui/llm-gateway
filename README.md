@@ -24,6 +24,18 @@ curl -X POST localhost:8000/v1/chat/completions \
   -d '{"model":"x","messages":[{"role":"user","content":"정제수 72.4% 배합, 담당 kim@corp.co.kr"}]}'
 ```
 
+## 외부 LLM 선택 (OpenAI / Claude)
+
+사내 앱이 부르는 입구는 항상 OpenAI 호환 형식이고, 게이트웨이가 내보내는 쪽만 `.env`로 고릅니다.
+
+| 설정 | openai (기본) | anthropic |
+|---|---|---|
+| `UPSTREAM_PROVIDER` | `openai` | `anthropic` |
+| `UPSTREAM_API_KEY` | OpenAI 키 (없으면 호출자의 Authorization 전달) | Anthropic 키 (또는 `ANTHROPIC_API_KEY`) |
+| `UPSTREAM_MODEL` | 비우면 요청의 `model` 사용 | 예: `claude-opus-5-5`. 사내 앱이 `gpt-4o` 같은 이름을 보내도 이 값으로 바꿔서 보냄 |
+
+Claude 어댑터는 텍스트 대화만 변환합니다 (이미지, 도구 호출, `temperature` 등 샘플링 값은 전달하지 않음). 실제 Anthropic API 호출은 아직 검증하지 못했고, 변환 로직과 전체 흐름은 가짜 클라이언트로 테스트했습니다.
+
 ## API (프론트 연동용)
 
 | 엔드포인트 | 설명 |

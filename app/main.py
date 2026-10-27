@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 
-import httpx
 from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -59,7 +58,7 @@ async def chat_completions(
 
     try:
         body = await upstream.forward({**payload, "messages": messages}, authorization)
-    except httpx.HTTPError as e:
+    except upstream.UpstreamError as e:
         return JSONResponse({"error": {"type": "upstream_error", "message": str(e)}}, 502)
 
     body = restore_response(body, vault)
