@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main, upstream
-from app.detector import detect
+from app.detector import RESPONSE_LABELS, detect
 from app.vault import Vault
 
 
@@ -34,6 +34,53 @@ def test_builtin_korean_patterns():
     text = "메일 kim@corp.co.kr 주민 901010-1234567 폰 010-1234-5678 사업자 123-45-67890"
     labels = {m.label for m in detect(text, [])}
     assert labels == {"이메일", "주민번호", "전화번호", "사업자번호"}
+
+
+@pytest.mark.parametrize(
+    "text,value,label",
+    [
+        ("외국인 등록번호 901010-5123456", "901010-5123456", "외국인등록번호"),
+        ("외국인 등록번호 901010-7123456", "901010-7123456", "외국인등록번호"),
+        ("법인등록번호 110111-1234567", "110111-1234567", "법인등록번호"),  # same shape as 주민번호, the label tells them apart
+        ("법인등록번호 110111-0123456", "110111-0123456", "법인등록번호"),
+        ("법인번호: 110111-1234567", "110111-1234567", "법인등록번호"),
+        ("법인등록번호 110111-0123456, 대표 주민 901010-1234567", "901010-1234567", "주민번호"),  # 옆 문장의 주민번호는 그대로
+        ("법인등록번호 110111-0123456, 외국인 901010-5123456", "901010-5123456", "외국인등록번호"),
+        ("여권번호 M123A4567", "M123A4567", "여권번호"),
+        ("여권 M12345678", "M12345678", "여권번호"),
+        ("면허번호 11-23-123456-78", "11-23-123456-78", "운전면허번호"),
+        ("차량번호 12가3456", "12가3456", "차량번호"),
+        ("차량 123나4567", "123나4567", "차량번호"),
+        ("차량 12가 3456", "12가 3456", "차량번호"),
+    ],
+)
+def test_builtin_id_patterns(text, value, label):
+    assert {text[m.start : m.end]: m.label for m in detect(text, [])}.get(value) == label
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "999999-5123456",  # 없는 날짜
+        "문서 123456-0234567",  # 법인 키워드 없음, 날짜도 아님
+        "모델 AB123C4567",
+        "모델 M123A4567 재고 확인",  # 여권 키워드 없음
+        "제품코드 A1234",
+        "문서번호 11-23-123456-78",  # 면허 키워드 없음
+        "문서 12-34-56",
+        "20대 2024년",
+        "23년 2024",
+        "12시 3456",
+        "90도 2024년",  # 공백이 있으면 차량 키워드가 필요
+    ],
+)
+def test_builtin_id_patterns_ignore_lookalikes(text):
+    assert detect(text, []) == []
+
+
+def test_response_scan_covers_foreigner_id_but_not_keyword_gated_ids():
+    text = "외국인 901010-5123456 여권 M123A4567 차량 12가3456"
+    assert {m.label for m in detect(text, [], only=RESPONSE_LABELS)} == {"외국인등록번호"}
 
 
 def test_roundtrip_hides_upstream_and_restores(client, monkeypatch):

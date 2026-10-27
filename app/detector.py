@@ -12,7 +12,7 @@ CONTEXT_WINDOW = 40  # chars on each side of a pattern hit searched for context_
 
 # Labels scanned in model responses. Names and taxonomy rules are left out on purpose:
 # they would redact ordinary answers (example names, "5% 함량" advice).
-RESPONSE_LABELS = {"시크릿", "이메일", "주민번호", "전화번호", "사업자번호"}
+RESPONSE_LABELS = {"시크릿", "이메일", "주민번호", "외국인등록번호", "전화번호", "사업자번호"}
 
 
 @dataclass(frozen=True)
@@ -38,13 +38,35 @@ _NOT_NAME = (
 )
 _NAME = rf"[{_SURNAMES}][가-힣]{{2}}"
 
-# (label, regex, action). A capture group, if present, is the sensitive part.
-BUILTIN_RULES: list[tuple[str, re.Pattern[str], Action]] = [
+# Letters that appear on Korean licence plates (private, commercial, rental, delivery). Other letters ("대", "년", "시")
+# are left out so "20대 2024년" or "12시 3456" is not read as a plate.
+_PLATE = "가나다라마거너더러머버서어저고노도로모보소오조구누두루무부수우주하허호배아바사자"
+
+# (label, regex, action[, keywords]). A capture group, if present, is the sensitive part.
+# With `keywords`, a hit counts only when one of them is within CONTEXT_WINDOW chars (same rule as industry templates).
+# Rule order matters on a tie (same priority and length): the earlier rule wins, so 법인등록번호 sits before 주민번호.
+BUILTIN_RULES: list[tuple[str, re.Pattern[str], Action] | tuple[str, re.Pattern[str], Action, tuple[str, ...]]] = [
     ("시크릿", re.compile(r"sk-[A-Za-z0-9_-]{20,}"), "block"),
     ("이메일", re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"), "redact"),
+    # Same shape as 주민번호; only the label right in front tells them apart. The keyword is part of the pattern (group 1 =
+    # the number) instead of a `keywords` window, so a nearby 주민번호 in the same sentence is not relabeled.
+    ("법인등록번호", re.compile(r"(?:법인등록번호|법인번호|등기번호)\s*(?:은|는|이|가|:|：)?\s*(\d{6}-\d{7})(?!\d)"), "redact"),
     ("주민번호", re.compile(r"(?<!\d)\d{6}-[1-4][\dxX*]{6}(?!\d)"), "redact"),
+    # Foreigner registration number: second part starts with 5-8. Birth date is validated to cut false positives.
+    ("외국인등록번호", re.compile(r"(?<!\d)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])-[5-8][\dxX*]{6}(?!\d)"), "redact"),
     ("전화번호", re.compile(r"(?<!\d)01[016789]-?\d{3,4}-?\d{4}(?!\d)"), "redact"),
     ("사업자번호", re.compile(r"(?<!\d)\d{3}-\d{2}-\d{5}(?!\d)"), "redact"),
+    # Passport: new (M123A4567) and old (M12345678) formats. Product codes look alike, so a keyword is required.
+    (
+        "여권번호",
+        re.compile(r"(?<![A-Za-z0-9])(?:[A-Z]\d{3}[A-Z]\d{4}|[A-Z]\d{8})(?![A-Za-z0-9])"),
+        "redact",
+        ("여권", "passport", "Passport", "PASSPORT"),
+    ),
+    ("운전면허번호", re.compile(r"(?<!\d)\d{2}-\d{2}-\d{6}-\d{2}(?!\d)"), "redact", ("면허", "운전")),
+    # Licence plate. Without a space it is distinctive enough; with a space ("90도 2024년") it needs a keyword.
+    ("차량번호", re.compile(rf"(?<!\d)\d{{2,3}}[{_PLATE}]\d{{4}}(?!\d)"), "redact"),
+    ("차량번호", re.compile(rf"(?<!\d)\d{{2,3}}[{_PLATE}]\s\d{{4}}(?!\d)"), "redact", ("차량", "번호판")),
     # 사람: only with a title/label next to it ("고객 홍길동", "홍길동 부장님"); bare names need the LLM detector.
     ("사람", re.compile(rf"(?:{_TITLE_BEFORE})\s*[:：]?\s*(?!{_NOT_NAME})({_NAME})(?=(?:{_PARTICLE})?(?![가-힣]))"), "redact"),
     ("사람", re.compile(rf"(?<![가-힣])({_NAME})\s?{_TITLE_AFTER}"), "redact"),
@@ -62,11 +84,14 @@ def _has_context(text: str, start: int, end: int, keywords: list[str]) -> bool:
 
 def builtin_matches(text: str, only: set[str] | None = None) -> list[Match]:
     found = []
-    for label, rx, action in BUILTIN_RULES:
+    for label, rx, action, *rest in BUILTIN_RULES:
         if only is not None and label not in only:
             continue
+        keywords = list(rest[0]) if rest else []
         for m in rx.finditer(text):
             start, end = _span(m)
+            if keywords and not _has_context(text, start, end, keywords):
+                continue
             found.append(Match(start, end, label, action, priority=1))
     return found
 
@@ -98,6 +123,8 @@ def detect(
     `only` restricts to built-in labels (used for response scanning); `extra` adds matches from other detectors.
     """
     candidates = builtin_matches(text, only)
+    if only is None or "시크릿" in only:  # gitleaks-based rules; response scanning gets them through RESPONSE_LABELS
+        candidates += secret_rules.secret_matches(text)
     if only is None:
         candidates += taxonomy_matches(text, industries) + list(extra)
     candidates.sort(key=lambda m: (-m.priority, -(m.end - m.start), m.start))
@@ -106,3 +133,7 @@ def detect(
         if all(c.end <= k.start or c.start >= k.end for k in chosen):
             chosen.append(c)
     return sorted(chosen, key=lambda m: m.start)
+
+
+# Imported last: secret_rules needs Match from this module. Loading it here compiles the gitleaks rules once, at startup.
+from . import secret_rules  # noqa: E402
