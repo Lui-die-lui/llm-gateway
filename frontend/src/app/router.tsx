@@ -5,6 +5,7 @@ import { LoginPage } from '../pages/console/Login';
 import { TokenPage } from '../pages/console/Token';
 import { OverviewPage } from '../pages/console/Overview';
 import { LivePage } from '../pages/console/Live';
+import { LogsPage } from '../pages/console/Logs';
 
 export const routes = [
   { path: '/', element: <Navigate to="/console" replace /> },
@@ -19,6 +20,7 @@ export const routes = [
     children: [
       { index: true, element: <OverviewPage /> },
       { path: 'live', element: <LivePage /> },
+      { path: 'logs', element: <LogsPage /> },
       { path: 'token', element: <TokenPage /> },
     ],
   },
