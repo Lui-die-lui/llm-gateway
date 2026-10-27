@@ -1,0 +1,97 @@
+# 금융 템플릿. 스키마: app/taxonomy.py, 가이드: docs/TAXONOMY.md
+# 검사 명령: python -m app.check_templates
+industry: finance
+entities:
+  - id: account_number           # 계좌번호 (은행마다 자릿수가 달라 마지막 묶음 6자리 이상으로 사업자번호와 구분)
+    label: 계좌번호
+    detection:
+      patterns: ['(?<![\d-])\d{3,6}-\d{2,6}-\d{6,8}(?![\d-])']
+      context_keywords: ['계좌', '입금', '송금', '이체', '출금', '예금']
+      ner_hint: "고객 은행 계좌번호"
+    sensitivity: critical
+    action: redact
+    regulation: ['신용정보법', '전자금융거래법', '개인정보보호법']
+
+  - id: card_number              # 카드번호 16자리
+    label: 카드번호
+    detection:
+      patterns: ['(?<![\d-])\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{4}(?![\d-])']
+      context_keywords: ['카드', '결제', '승인', '체크', '신용']
+      ner_hint: "신용카드 또는 체크카드 번호"
+    sensitivity: critical
+    action: redact
+    regulation: ['신용정보법', '개인정보보호법']
+
+  - id: loan_amount              # 대출 한도, 잔액, 연체액
+    label: 대출금액
+    detection:
+      # 3억원, 3억 5000만원, 1,250,000원 형태. 키워드 없이는 모든 금액이 걸리므로 context_keywords 필수.
+      patterns: ['\d[\d,]*(?:\.\d+)?\s*(?:억\s*(?:\d[\d,]*\s*(?:천만|백만|만)\s*)?|천만\s*|백만\s*|만\s*)?원']
+      context_keywords: ['대출', '여신', '한도', '잔액', '연체', '상환', '채무', '원리금']
+      ner_hint: "고객의 대출 한도, 잔액, 연체 금액"
+    sensitivity: high
+    action: redact
+    regulation: ['신용정보법']
+
+  - id: credit_score             # 신용점수, 신용등급
+    label: 신용평가
+    detection:
+      # Capture group 1 = 점수/등급 값만.
+      patterns: ['(?:신용등급|신용점수|CB점수)\s*[:：]?\s*(\d{1,4}\s*점|\d{1,2}\s*등급)']
+      ner_hint: "고객의 신용점수 또는 신용등급"
+    sensitivity: high
+    action: redact
+    regulation: ['신용정보법']
+
+  - id: contract_number          # 증권번호, 계약번호, 여신번호
+    label: 계약번호
+    detection:
+      patterns: ['(?:증권번호|계약번호|여신번호|대출번호)\s*[:：]?\s*([A-Z0-9][A-Z0-9-]{7,})']
+    sensitivity: high
+    action: redact
+    regulation: ['신용정보법', '개인정보보호법']
+
+  - id: transaction_record       # 거래내역: 날짜 + 입출금 + 금액이 묶인 기록
+    label: 거래내역
+    detection:
+      # Capture group 1 = "날짜 구분 금액" 전체. 날짜와 금액의 짝 자체가 민감하므로 통째로 가린다.
+      patterns: ['((?:\d{4}[-./])?\d{1,2}[-./]\d{1,2}\s*(?:입금|출금|이체|송금|결제|승인|취소)?\s*\d[\d,]*\s*원)']
+      context_keywords: ['입금', '출금', '이체', '송금', '결제', '승인', '거래내역']
+      ner_hint: "날짜와 금액이 함께 적힌 고객의 거래 기록"
+    sensitivity: high
+    action: redact
+    regulation: ['신용정보법', '전자금융거래법', '개인정보보호법']
+
+applies_to:
+  use_cases: [customer_support, document_summary]
+  flow: internal_db_to_llm
+
+tests:
+  - text: "신한은행 110-123-456789 계좌로 송금해줘"
+    detect: ["110-123-456789"]
+  - text: "카드번호 1234-5678-9012-3456 분실 신고 접수"
+    detect: ["1234-5678-9012-3456"]
+  - text: "고객 대출 한도 3억 5000만원, 연체 잔액 1,250,000원 확인"
+    detect: ["3억 5000만원", "1,250,000원"]
+  - text: "신용점수 845점, 신용등급: 3등급 고객 심사"
+    detect: ["845점", "3등급"]
+  - text: "증권번호: LIF-2024-00123 조회"
+    detect: ["LIF-2024-00123"]
+  - text: "견적서 문서번호 110-123-456789 첨부"        # 계좌 키워드 없음 -> untouched
+    detect: []
+  - text: "시리얼 1234-5678-9012-3456 등록"            # 카드 키워드 없음 -> untouched
+    detect: []
+  - text: "점심 식비 12,000원 정산 요청"                # 대출 키워드 없음 -> untouched
+    detect: []
+  - text: "신용등급 체계 개편안 검토"                   # 숫자 값 없음 -> untouched
+    detect: []
+  - text: "계약번호 확인 요청"                          # 번호 값 없음 -> untouched
+    detect: []
+  - text: "2024-03-15 입금 1,250,000원 거래내역 확인"
+    detect: ["2024-03-15 입금 1,250,000원"]
+  - text: "03/20 출금 50,000원, 03/21 결제 12,300원"
+    detect: ["03/20 출금 50,000원", "03/21 결제 12,300원"]
+  - text: "03/20 회의 12,000원 정산"                    # 입출금 키워드 없음 -> untouched
+    detect: []
+  - text: "2024-03-15 입금 확인 요청"                   # 금액 없음 -> untouched
+    detect: []

@@ -1,0 +1,75 @@
+# 법률 템플릿. 스키마: app/taxonomy.py, 가이드: docs/TAXONOMY.md
+# 검사 명령: python -m app.check_templates
+industry: legal
+entities:
+  - id: case_number              # 사건번호 (2024가합12345, 2022다123456 ...)
+    label: 사건번호
+    detection:
+      patterns: ['(?<![\d가-힣])(\d{4}(?:가합|가단|가소|카합|카단|카기|고합|고단|고정|구합|구단|드합|드단|느합|느단|헌마|헌바|헌가|준재|가|나|다|라|마|노|도|누|두|르|머|허|후|초|아|즈|재)\d{1,7})(?!\d)']
+      context_keywords: ['사건', '법원', '판결', '소송', '재판', '항소', '상고', '청구', '심판', '선고', '변론']
+    sensitivity: high
+    action: redact
+    regulation: ['변호사법']
+
+  - id: claim_amount             # 청구금액, 합의금, 위자료
+    label: 청구금액
+    detection:
+      patterns: ['(?:청구금액|청구액|손해배상액|손해배상금|합의금|위자료|소송가액|배상액|채권액)\s*[:：]?\s*(\d[\d,]*(?:\.\d+)?\s*(?:억\s*(?:\d[\d,]*\s*(?:천만|백만|만)\s*)?|천만\s*|백만\s*|만\s*)?원)']
+      ner_hint: "소송 청구금액, 합의금, 위자료"
+    sensitivity: high
+    action: redact
+    regulation: ['변호사법']
+
+  - id: party_name               # 의뢰인, 상대방 등 당사자 이름
+    label: 당사자
+    detection:
+      # 라벨 뒤 성+2글자 이름만. "원고 주장을"처럼 이름처럼 보이는 일반 단어는 앞에서 제외.
+      patterns: ['(?<![가-힣])(?:의뢰인|상대방|피고|원고|피의자|피해자|채무자|채권자|피신청인)\s*[:：]?\s*(?!주장|입장|소송|청구|대리|진술|제출|답변|상대|사건|변호|지급|진행|조정|정리|신청|고소)([김이박최정강조윤장임한오서신권황안송류홍전고문양손배백허유남심노하곽성차주우구민나진지엄채원천방공][가-힣]{2})(?=(?:은|는|이|가|을|를|와|과|의|에게|께|도)?(?![가-힣]))']
+      ner_hint: "소송 사건의 의뢰인, 상대방, 원고, 피고 이름"
+    sensitivity: high
+    action: redact
+    regulation: ['변호사법', '개인정보보호법']
+
+  - id: property_id              # 부동산 고유번호, 등기 접수번호
+    label: 부동산번호
+    detection:
+      # Capture group 1 = 번호 값만. 고유번호는 14자리(4-4-6), 접수번호는 "제12345호" 형태.
+      # 접수번호는 민원 등 다른 곳에도 쓰이므로 등기/부동산 키워드가 반드시 있어야 한다.
+      patterns:
+        - '(?:부동산\s*)?고유번호\s*[:：]?\s*(\d{4}-?\d{4}-?\d{6})(?!\d)'
+        - '(?:등기번호|접수번호|등기접수번호)\s*[:：]?\s*(제?\s*\d{1,6}\s*호)'
+      context_keywords: ['고유번호', '등기', '등본', '소유권', '근저당', '부동산', '토지', '건물']
+      ner_hint: "부동산 고유번호 또는 등기 접수번호"
+    sensitivity: high
+    action: redact
+    regulation: ['변호사법', '개인정보보호법']
+
+applies_to:
+  use_cases: [document_summary, translation]
+  flow: internal_db_to_llm
+
+tests:
+  - text: "서울중앙지법 2024가합12345 손해배상 사건 쟁점 정리"
+    detect: ["2024가합12345"]
+  - text: "대법원 2022다123456 판결 요약"
+    detect: ["2022다123456"]
+  - text: "위자료 3천만원, 합의금: 1억원 선에서 조정 검토"
+    detect: ["3천만원", "1억원"]
+  - text: "의뢰인: 박서준, 상대방 최민우 사이 계약 분쟁 정리"
+    detect: ["박서준", "최민우"]
+  - text: "도면 코드 2024나1234는 사내 문서 분류"      # 법률 키워드 없음 -> untouched
+    detect: []
+  - text: "합의 절차 안내"                             # 금액 없음 -> untouched
+    detect: []
+  - text: "원고 주장을 요약해줘"                       # 이름처럼 보이는 일반 단어 -> untouched
+    detect: []
+  - text: "피고 측 입장 정리"                          # 이름 없음 -> untouched
+    detect: []
+  - text: "부동산 고유번호 1101-1996-123456 등기부등본 요약"
+    detect: ["1101-1996-123456"]
+  - text: "소유권이전 등기접수번호: 제12345호 확인"
+    detect: ["제12345호"]
+  - text: "민원 접수번호 제12345호 처리 완료"            # 등기 키워드 없음 -> untouched
+    detect: []
+  - text: "고유번호 확인 요청"                           # 번호 값 없음 -> untouched
+    detect: []

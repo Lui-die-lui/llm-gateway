@@ -1,5 +1,5 @@
-# Sample template (owner: team C). Schema: app/taxonomy.py, guide: docs/TAXONOMY.md
-# Check it with: python -m app.check_templates
+# 샘플 템플릿 (담당: 조원 C). 스키마: app/taxonomy.py, 가이드: docs/TAXONOMY.md
+# 검사 명령: python -m app.check_templates
 industry: medical
 entities:
   - id: patient_id               # 환자번호
