@@ -1,0 +1,15 @@
+# Placeholder template (owner: team C). Replace/extend entities; schema: app/taxonomy.py, guide: docs/TAXONOMY.md
+industry: medical
+entities:
+  - id: patient_id               # 환자번호
+    label: 환자번호
+    detection:
+      patterns: ['(?<![\dA-Za-z])\d{8}(?!\d)']
+      context_keywords: ['환자번호', '차트번호', '등록번호']
+    sensitivity: critical
+    action: redact
+    regulation: ['개인정보보호법', '의료법']
+
+applies_to:
+  use_cases: [customer_support, document_summary]
+  flow: internal_db_to_llm

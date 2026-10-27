@@ -1,0 +1,26 @@
+# Sample template (owner: team B). Schema: app/taxonomy.py, guide: docs/TAXONOMY.md
+industry: cosmetics
+entities:
+  - id: formulation_ratio        # 조성비 (영업기밀)
+    label: 조성비                # placeholder name -> [조성비_1]
+    detection:
+      patterns: ['\d+(?:\.\d+)?\s*%']
+      context_keywords: ['조성', '배합', 'INCI', '함량', '정제수']
+      ner_hint: "화장품 원료 배합 비율"
+    sensitivity: critical
+    action: redact
+    regulation: ['영업비밀보호법', 'CPNP']
+
+  - id: supplier_source          # 원료 공급처
+    label: 공급처
+    detection:
+      # Capture group 1 = the sensitive value only.
+      patterns: ['(?:공급사|원료처|제조원)\s*[:：]?\s*([가-힣A-Za-z0-9()&.\-]+)']
+      ner_hint: "원료 공급업체명"
+    sensitivity: high
+    action: redact
+    # blueprint target is internal_only (needs internal-model routing, out of scope this week)
+
+applies_to:
+  use_cases: [document_summary, translation]
+  flow: internal_db_to_llm
