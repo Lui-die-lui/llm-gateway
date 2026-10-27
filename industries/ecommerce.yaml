@@ -1,6 +1,5 @@
-# 이커머스 운영 템플릿. 초안: 파일명 앞의 `_` 때문에 서버가 로드하지 않음 (`_`를 떼면 활성화).
-# 스키마: app/taxonomy.py, 가이드: docs/TAXONOMY.md
-# 검사 명령: python -m app.check_templates   (`_` 파일은 건너뜀. 초안을 검사하려면 `_`를 뗀 사본을 다른 폴더에 두고 실행)
+# 이커머스 운영 템플릿. 스키마: app/taxonomy.py, 가이드: docs/TAXONOMY.md
+# 검사 명령: python -m app.check_templates
 industry: ecommerce
 entities:
   - id: order_number             # 주문/결제/취소/반품 번호
