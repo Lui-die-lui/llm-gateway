@@ -50,6 +50,21 @@ Claude 어댑터는 텍스트 대화만 변환합니다 (이미지, 도구 호�
 - 지금은 `stream=true`를 지원하지 않습니다 (`501`).
 - CORS 허용 오리진은 `GATEWAY_CORS_ORIGINS`로 바꿉니다. 기본값은 `localhost:5173`, `localhost:3000`.
 
+`POST /v1/sanitize`, `POST /v1/restore`는 LLM을 직접 부르는 클라이언트(Chrome 확장)용입니다.
+sanitize가 가린 문장과 `vault_id`를 돌려주고, restore는 `vault_id`로 원래 값을 되돌립니다. 같은 `vault_id`를 다시 보내면 `[이메일_1]` 번호가 이어집니다. 매핑은 메모리에만 두고 30분 뒤 사라집니다.
+
+## 브라우저 ChatGPT / 차단 방향
+
+확장 프로그램 설치는 [extension/README.md](extension/README.md)를 보세요. 다만 확장은 사용자가 끌 수 있어서 "막는" 수단이 아니라 "가려주는" 수단입니다.
+웹 ChatGPT·Claude를 실제로 막으려면 앱이 아니라 **네트워크 쪽**에서 해야 합니다.
+
+1. LLM API(api.openai.com, api.anthropic.com)는 게이트웨이 서버만 나갈 수 있게 방화벽 허용 목록으로 제한
+2. chatgpt.com, claude.ai 같은 웹 UI는 DNS/프록시에서 차단
+3. 직원은 게이트웨이 뒤에 있는 사내 채팅 화면(`frontend/`)만 사용
+4. 사외 근무 기기는 MDM으로 확장을 강제 설치하고 사이트를 차단 (Chrome 정책 `URLBlocklist`, `ExtensionInstallForcelist`)
+
+이번 주 데모에서는 1~2를 실제로 구축하지 않고, 데모 PC의 hosts 파일로 chatgpt.com만 막아 보여주는 정도를 목표로 합니다.
+
 ## 구조
 
 ```
@@ -60,7 +75,9 @@ app/
   vault.py       [유형_n] <-> 원본값 매핑 (요청 단위, 메모리에만)
   sanitizer.py   가림/복원 파이프라인
   taxonomy.py    템플릿 스키마(pydantic) + YAML 로더
-  upstream.py    외부 LLM 전달 (UPSTREAM_MODE=mock 지원)
+  upstream.py    외부 LLM 전달 (OpenAI / Claude 어댑터, UPSTREAM_MODE=mock 지원)
+  sessions.py    sanitize/restore용 vault 보관 (메모리, 30분 만료)
+extension/       Chrome 확장 (MV3)  ← 조원 A가 실제 사이트에서 검증
 industries/      산업별 템플릿 YAML  ← 조원 B, C 작업 공간
 docs/            블루프린트, 템플릿 작성 가이드
 tests/

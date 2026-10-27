@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "LLM Gateway Guard",
+  "version": "0.1.0",
+  "description": "Masks sensitive data through the local LLM gateway before a prompt is sent to ChatGPT, and restores it in the reply.",
+  "host_permissions": ["http://localhost:8000/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

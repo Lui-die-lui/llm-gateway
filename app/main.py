@@ -1,12 +1,14 @@
 import os
+from collections import Counter
 from pathlib import Path
 
 from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
-from . import upstream
-from .sanitizer import Blocked, restore_response, sanitize_messages
+from . import sessions, upstream
+from .sanitizer import Blocked, restore_response, sanitize_messages, sanitize_text
 from .taxonomy import load_industries
 from .vault import Vault
 
@@ -63,3 +65,39 @@ async def chat_completions(
 
     body = restore_response(body, vault)
     return JSONResponse(body, headers={"X-Gateway-Redacted": str(sum(findings.values()))})
+
+
+class SanitizeIn(BaseModel):
+    text: str
+    industries: list[str] = []
+    vault_id: str | None = None  # pass the previous one to keep placeholder numbering across messages
+
+
+class RestoreIn(BaseModel):
+    vault_id: str
+    text: str
+
+
+@app.post("/v1/sanitize")
+def sanitize(body: SanitizeIn):
+    """For clients that talk to the LLM themselves (browser extension): mask text, keep the mapping here."""
+    unknown = [n for n in body.industries if n not in industries]
+    if unknown:
+        return JSONResponse({"error": {"type": "unknown_industry", "message": ", ".join(unknown)}}, 400)
+    vault = sessions.get(body.vault_id) if body.vault_id else Vault()
+    if vault is None:
+        return JSONResponse({"error": {"type": "unknown_vault"}}, 404)
+    findings: Counter = Counter()
+    try:
+        text = sanitize_text(body.text, vault, [industries[n] for n in body.industries], findings)
+    except Blocked as b:
+        return JSONResponse({"error": {"type": "gateway_blocked", "findings": b.findings}}, 403)
+    return {"text": text, "vault_id": body.vault_id or sessions.create(vault), "findings": dict(findings)}
+
+
+@app.post("/v1/restore")
+def restore(body: RestoreIn):
+    vault = sessions.get(body.vault_id)
+    if vault is None:
+        return JSONResponse({"error": {"type": "unknown_vault"}}, 404)
+    return {"text": vault.restore(body.text)}
