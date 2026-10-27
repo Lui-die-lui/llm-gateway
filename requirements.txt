@@ -4,3 +4,4 @@ httpx
 anthropic
 pydantic
 pyyaml
+python-dotenv

@@ -71,7 +71,7 @@ def test_gateway_end_to_end_with_anthropic_provider(monkeypatch):
 def test_upstream_failure_returns_502(monkeypatch):
     monkeypatch.delenv("UPSTREAM_MODE", raising=False)
 
-    async def boom(payload, auth):
+    async def boom(payload, auth, route="external"):
         raise upstream.UpstreamError("down")
 
     monkeypatch.setattr(upstream, "forward", boom)

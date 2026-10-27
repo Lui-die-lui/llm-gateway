@@ -1,4 +1,5 @@
-# Placeholder template (owner: team C). Replace/extend entities; schema: app/taxonomy.py, guide: docs/TAXONOMY.md
+# Sample template (owner: team C). Schema: app/taxonomy.py, guide: docs/TAXONOMY.md
+# Check it with: python -m app.check_templates
 industry: medical
 entities:
   - id: patient_id               # 환자번호
@@ -6,10 +7,36 @@ entities:
     detection:
       patterns: ['(?<![\dA-Za-z])\d{8}(?!\d)']
       context_keywords: ['환자번호', '차트번호', '등록번호']
+      ner_hint: "환자 등록번호 또는 차트번호"
     sensitivity: critical
     action: redact
     regulation: ['개인정보보호법', '의료법']
 
+  - id: diagnosis                # 진단명 (민감정보)
+    label: 진단명
+    detection:
+      patterns: ['(?:진단명|병명|상병명)\s*[:：]\s*([^\s,.;]+)']
+      ner_hint: "환자의 병명 또는 진단명"
+    sensitivity: critical
+    action: redact
+    regulation: ['개인정보보호법']
+
+  - id: dosage                   # 처방 용량
+    label: 처방용량
+    detection:
+      patterns: ['\d+(?:\.\d+)?\s*(?:mg|mcg|mL|ml|정|캡슐)']
+      context_keywords: ['처방', '투약', '복용', '용량']
+    sensitivity: high
+    action: redact
+
 applies_to:
   use_cases: [customer_support, document_summary]
   flow: internal_db_to_llm
+
+tests:
+  - text: "환자번호 20240115 내원 기록 요약해줘"
+    detect: ["20240115"]
+  - text: "진단명: 제2형당뇨병, 처방 메트포르민 500mg"
+    detect: ["제2형당뇨병", "500mg"]
+  - text: "오늘 날짜는 20240115 입니다"        # 8 digits without a patient keyword -> untouched
+    detect: []

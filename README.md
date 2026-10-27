@@ -1,6 +1,6 @@
 # 외부 LLM 게이트웨이
 
-사내 앱이 외부 LLM(ChatGPT 등)을 호출할 때, 민감정보를 가린 채로 내보내고 응답이 오면 원래 값으로 되돌려주는 프록시입니다.
+사내 앱이 외부 LLM(ChatGPT, Claude 등)을 호출할 때, 민감정보를 가린 채로 내보내고 응답이 오면 원래 값으로 되돌려주는 프록시입니다.
 `redact → forward → restore`. 전체 설계는 [docs/blueprint.html](docs/blueprint.html)을 브라우저로 열어 보세요.
 
 ## 실행
@@ -13,20 +13,37 @@ python -m venv .venv
 pip install -r requirements-dev.txt
 cp .env.example .env            # UPSTREAM_MODE=mock 으로 두면 API 키 없이 돌아갑니다
 python -m pytest                # 테스트
-uvicorn app.main:app --reload   # http://localhost:8000
+uvicorn app.main:app --reload --env-file .env    # http://localhost:8000  (API 문서: /docs)
 ```
 
-키 없이 동작을 확인하려면 `UPSTREAM_MODE=mock`으로 서버를 띄우고 호출해 보세요. mock 업스트림은 받은 프롬프트를 그대로 되돌려줍니다.
+Docker는 `docker compose up --build` (아직 직접 빌드해 보지 못했습니다). 로컬 LLM(Ollama)까지 같이 띄우려면 `--profile local-llm`.
+
+키 없이 동작을 확인하려면 `.env`에 `UPSTREAM_MODE=mock`을 넣고 서버를 띄워 호출해 보세요. mock 업스트림은 받은 프롬프트를 그대로 되돌려줍니다.
 
 ```bash
 curl -X POST localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" -H "X-Gateway-Industry: cosmetics" \
-  -d '{"model":"x","messages":[{"role":"user","content":"정제수 72.4% 배합, 담당 kim@corp.co.kr"}]}'
+  -d '{"model":"x","messages":[{"role":"user","content":"고객 홍길동(901010-1xxxxxx)의 정제수 72.4% 배합, 담당 kim@corp.co.kr"}]}'
 ```
 
-## 외부 LLM 선택 (OpenAI / Claude)
+## 무엇을 하나
 
-사내 앱이 부르는 입구는 항상 OpenAI 호환 형식이고, 게이트웨이가 내보내는 쪽만 `.env`로 고릅니다.
+- **가림/복원**: 요청의 민감값을 `[이메일_1]` 같은 자리표시자로 바꿔 보내고, 응답(스트리밍 포함)에서 원래 값으로 되돌립니다. 매핑은 요청 단위로 메모리에만 있습니다.
+- **탐지**: 기본 규칙(이메일, 주민번호, 전화번호, 사업자번호, API 키, 직함이 붙은 사람 이름) + 산업 템플릿(정규식 + 문맥 키워드) + 선택적으로 로컬 LLM 보조 (`LOCAL_LLM_MODEL`).
+- **정책**: 항목별 `redact`(가림) / `block`(차단) / `internal_only`(내부 모델로만 처리). 활용처·흐름 헤더로 템플릿 적용 여부를 조절합니다.
+- **응답 스캐너**: 모델 답변에 새로 섞인 이메일·번호는 가리고 API 키는 차단합니다 (`RESPONSE_SCAN=off`로 끔).
+- **감사**: SQLite에 유형·건수·경로·시간만 기록합니다 (내용·값은 저장 안 함). 통계 API 제공.
+- **외부 LLM**: OpenAI 호환 엔드포인트 또는 Claude(`UPSTREAM_PROVIDER=anthropic`). 입구는 항상 OpenAI 호환입니다.
+
+## 문서
+
+| 문서 | 대상 |
+|---|---|
+| [docs/API.md](docs/API.md) | 프론트엔드 (엔드포인트, 요청/응답 예, 스트리밍 사용법) |
+| [docs/TAXONOMY.md](docs/TAXONOMY.md) | 템플릿 작성자 (스키마, 검사 명령, tests 쓰는 법) |
+| [extension/README.md](extension/README.md) | Chrome 확장 설치 |
+
+## 외부 LLM 선택 (OpenAI / Claude)
 
 | 설정 | openai (기본) | anthropic |
 |---|---|---|
@@ -34,24 +51,7 @@ curl -X POST localhost:8000/v1/chat/completions \
 | `UPSTREAM_API_KEY` | OpenAI 키 (없으면 호출자의 Authorization 전달) | Anthropic 키 (또는 `ANTHROPIC_API_KEY`) |
 | `UPSTREAM_MODEL` | 비우면 요청의 `model` 사용 | 예: `claude-opus-5-5`. 사내 앱이 `gpt-4o` 같은 이름을 보내도 이 값으로 바꿔서 보냄 |
 
-Claude 어댑터는 텍스트 대화만 변환합니다 (이미지, 도구 호출, `temperature` 등 샘플링 값은 전달하지 않음). 실제 Anthropic API 호출은 아직 검증하지 못했고, 변환 로직과 전체 흐름은 가짜 클라이언트로 테스트했습니다.
-
-## API (프론트 연동용)
-
-| 엔드포인트 | 설명 |
-|---|---|
-| `POST /v1/chat/completions` | OpenAI 호환. 사내 앱은 `base_url`만 이 서버로 바꾸면 됩니다. |
-| `GET /v1/industries` | 로드된 산업 템플릿 목록 (산업 선택 UI용) |
-| `GET /health` | 상태 확인 |
-
-- 요청 헤더 `X-Gateway-Industry: cosmetics,medical` 로 적용할 산업 템플릿을 고릅니다. 생략하면 기본 PII 규칙만 적용됩니다.
-- 응답 헤더 `X-Gateway-Redacted`는 가린 건수입니다.
-- 차단되면 `403` + `{"error":{"type":"gateway_blocked","findings":{"시크릿":1}}}`. 원본 값은 절대 응답에 넣지 않습니다.
-- 지금은 `stream=true`를 지원하지 않습니다 (`501`).
-- CORS 허용 오리진은 `GATEWAY_CORS_ORIGINS`로 바꿉니다. 기본값은 `localhost:5173`, `localhost:3000`.
-
-`POST /v1/sanitize`, `POST /v1/restore`는 LLM을 직접 부르는 클라이언트(Chrome 확장)용입니다.
-sanitize가 가린 문장과 `vault_id`를 돌려주고, restore는 `vault_id`로 원래 값을 되돌립니다. 같은 `vault_id`를 다시 보내면 `[이메일_1]` 번호가 이어집니다. 매핑은 메모리에만 두고 30분 뒤 사라집니다.
+Claude 어댑터는 텍스트 대화만 변환합니다 (이미지, 도구 호출, `temperature` 등 샘플링 값은 전달하지 않음). 내부 모델(`INTERNAL_MODEL`)은 Ollama 같은 OpenAI 호환 서버면 됩니다.
 
 ## 브라우저 ChatGPT / 차단 방향
 
@@ -69,17 +69,22 @@ sanitize가 가린 문장과 `vault_id`를 돌려주고, restore는 `vault_id`�
 
 ```
 app/
-  main.py        FastAPI 엔드포인트
-  detector.py    탐지 엔진 (내장 PII 정규식 + 산업 템플릿)
-  policy.py      정책 판정 (block / internal_only 는 차단, 나머지는 가림)
-  vault.py       [유형_n] <-> 원본값 매핑 (요청 단위, 메모리에만)
-  sanitizer.py   가림/복원 파이프라인
-  taxonomy.py    템플릿 스키마(pydantic) + YAML 로더
-  upstream.py    외부 LLM 전달 (OpenAI / Claude 어댑터, UPSTREAM_MODE=mock 지원)
-  sessions.py    sanitize/restore용 vault 보관 (메모리, 30분 만료)
-extension/       Chrome 확장 (MV3)  ← 조원 A가 실제 사이트에서 검증
-industries/      산업별 템플릿 YAML  ← 조원 B, C 작업 공간
-docs/            블루프린트, 템플릿 작성 가이드
+  main.py          FastAPI 엔드포인트
+  detector.py      탐지 엔진 (내장 규칙 + 산업 템플릿)
+  llm_detector.py  로컬 LLM 탐지 보조 (선택)
+  policy.py        경로 결정 (external / internal / block), 템플릿 적용 조건
+  vault.py         [유형_n] <-> 원본값 매핑 (요청 단위, 메모리에만)
+  sessions.py      sanitize/restore용 vault 보관 (메모리, 30분 만료)
+  sanitizer.py     요청 가림, 응답 스캔/복원
+  stream.py        스트리밍 응답 필터 (조각 경계에서도 안전하게 복원)
+  upstream.py      외부/내부 LLM 전달 (OpenAI, Claude, mock)
+  audit.py         SQLite 감사 로그와 통계 쿼리
+  taxonomy.py      템플릿 스키마(pydantic) + YAML 로더
+  evaluate.py      범용 vs 템플릿 탐지율 비교 (python -m app.evaluate)
+  check_templates.py  템플릿 검사 (python -m app.check_templates)
+extension/         Chrome 확장 (MV3)  ← 조원 A가 실제 사이트에서 검증
+industries/        산업별 템플릿 YAML  ← 조원 B, C 작업 공간
+docs/              블루프린트, API 명세, 템플릿 가이드
 tests/
 ```
 
@@ -87,22 +92,24 @@ tests/
 
 | 담당 | 작업 | 건드리는 곳 |
 |---|---|---|
-| 본인(코어) | 프록시, 탐지/정책/볼트, 스트리밍, 응답 스캐너, 감사 로그 | `app/` |
-| 조원 A | 프론트엔드 (산업 선택, 차단 통계 대시보드) | `frontend/` (새로 만들기) |
-| 조원 B, C | 산업별 템플릿 정리 + 테스트 문장 | `industries/`, `tests/fixtures/` |
+| 본인(코어) | 백엔드 전체 | `app/` |
+| 조원 A | 프론트엔드 (채팅 화면, 산업 선택, 차단 통계 대시보드) | `frontend/` (새로 만들기) |
+| 조원 B, C | 산업별 템플릿 | `industries/` |
 
-템플릿 작성법은 [docs/TAXONOMY.md](docs/TAXONOMY.md)에 있습니다. B, C는 `app/`을 건드릴 필요가 없습니다. 스키마에 필요한 필드가 없으면 이슈로 남겨주세요.
+B, C는 `app/`을 건드릴 필요가 없습니다. 스키마에 필요한 필드가 없으면 이슈로 남겨주세요.
 
 ## 협업 규칙
 
 - `main`에 직접 푸시하지 않습니다. `feature/이름-작업` 브랜치에서 작업하고 PR로 올립니다.
-- PR 전에 `python -m pytest`가 통과해야 합니다.
+- PR 전에 `python -m pytest`가 통과해야 합니다. 템플릿은 `python -m app.check_templates`도 통과해야 합니다.
 - `.env`, API 키, 실제 고객 데이터는 커밋하지 않습니다. 테스트 문장은 가짜 값만 씁니다.
 - 감사 로그에는 유형·건수·시각만 남기고 원문은 남기지 않습니다.
 
-## 아직 안 된 것
+## 한계와 아직 안 된 것
 
-- 스트리밍(SSE) 중계와 응답 역방향 스캔
-- 이름 등 정규식으로 못 잡는 항목 (Presidio / NER / 로컬 LLM)
-- `internal_only` 내부 모델 라우팅 (지금은 차단으로 처리)
-- 감사 로그(SQLite)와 대시보드용 API
+- **실제 외부 API는 호출해 보지 못했습니다.** OpenAI/Claude/Ollama 연동은 가짜 서버로 테스트했습니다. 키를 넣고 한 번 확인이 필요합니다.
+- 사람 이름은 "고객 홍길동", "김부장님"처럼 직함이 붙은 경우만 규칙으로 잡습니다. 이름만 덩그러니 있는 경우는 로컬 LLM 보조(`LOCAL_LLM_MODEL`)를 켜야 합니다.
+- 응답 스캐너는 기본 PII와 API 키만 봅니다. 템플릿 규칙을 응답에 적용하면 정상 답변까지 가려져서 일부러 뺐습니다. 프롬프트 인젝션 자체를 판별하지는 않습니다.
+- 텍스트 대화만 지원합니다 (이미지, 도구 호출 제외).
+- 게이트웨이를 호출하는 쪽의 인증(누가 쓸 수 있나)은 없습니다. 통계/관리 API만 `GATEWAY_ADMIN_TOKEN`으로 막을 수 있습니다.
+- Docker 이미지는 이 PC에 Docker가 없어 빌드해 보지 못했습니다.

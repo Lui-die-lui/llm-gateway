@@ -1,0 +1,23 @@
+# docker compose up --build                       gateway only
+# docker compose --profile local-llm up --build   gateway + local Ollama (detection assist / internal model)
+services:
+  gateway:
+    build: .
+    ports: ["8000:8000"]
+    env_file: .env
+    volumes:
+      - ./data:/app/data          # audit.db survives restarts
+      - ./industries:/app/industries   # edit templates, then POST /v1/industries/reload
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
+    profiles: ["local-llm"]
+    ports: ["11434:11434"]
+    volumes:
+      - ollama:/root/.ollama
+    # then: docker compose exec ollama ollama pull <model>
+    # and in .env: LOCAL_LLM_URL=http://ollama:11434  INTERNAL_BASE_URL=http://ollama:11434/v1
+
+volumes:
+  ollama:

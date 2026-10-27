@@ -40,9 +40,9 @@ def test_roundtrip_hides_upstream_and_restores(client, monkeypatch):
     sent = {}
     real = upstream.forward
 
-    async def spy(payload, auth):
+    async def spy(payload, auth, route="external"):
         sent.update(payload)
-        return await real(payload, auth)
+        return await real(payload, auth, route)
 
     monkeypatch.setattr(upstream, "forward", spy)
     r = chat(client, "연락처 kim@corp.co.kr 로 보내줘")
@@ -79,7 +79,5 @@ def test_supplier_capture_group_only(client):
     assert "공급사" not in "공급사: 코스맥스 에서 받음"[ms[0].start : ms[0].end]
 
 
-def test_unknown_industry_and_stream(client):
+def test_unknown_industry(client):
     assert chat(client, "hi", industry="nope").status_code == 400
-    r = client.post("/v1/chat/completions", json={"messages": [], "stream": True})
-    assert r.status_code == 501

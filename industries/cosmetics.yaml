@@ -1,4 +1,5 @@
 # Sample template (owner: team B). Schema: app/taxonomy.py, guide: docs/TAXONOMY.md
+# Check it with: python -m app.check_templates
 industry: cosmetics
 entities:
   - id: formulation_ratio        # 조성비 (영업기밀)
@@ -11,16 +12,33 @@ entities:
     action: redact
     regulation: ['영업비밀보호법', 'CPNP']
 
-  - id: supplier_source          # 원료 공급처
+  - id: supplier_source          # 원료 공급처 -> 내부 모델로만 처리
     label: 공급처
     detection:
       # Capture group 1 = the sensitive value only.
       patterns: ['(?:공급사|원료처|제조원)\s*[:：]?\s*([가-힣A-Za-z0-9()&.\-]+)']
       ner_hint: "원료 공급업체명"
     sensitivity: high
+    action: internal_only        # needs INTERNAL_MODEL (or UPSTREAM_MODE=mock), otherwise the request is blocked
+    regulation: ['영업비밀보호법']
+
+  - id: batch_number             # 배치/LOT 번호
+    label: 배치번호
+    detection:
+      patterns: ['(?:배치번호|배치|LOT|로트)\s*[:：]?\s*([A-Z0-9-]{6,})']
+    sensitivity: medium
     action: redact
-    # blueprint target is internal_only (needs internal-model routing, out of scope this week)
 
 applies_to:
   use_cases: [document_summary, translation]
   flow: internal_db_to_llm
+
+tests:
+  - text: "정제수 72.4%, 글리세린 5% 배합 비율 공유"
+    detect: ["72.4%", "5%"]
+  - text: "원료 공급사: 코스맥스 에서 납품"
+    detect: ["코스맥스"]
+  - text: "배치번호: LOT240315A 출하 완료"
+    detect: ["LOT240315A"]
+  - text: "이번 분기 점유율 30% 상승"        # no formulation keyword -> must stay untouched
+    detect: []

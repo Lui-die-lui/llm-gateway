@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 Action = Literal["redact", "block", "internal_only"]
 
@@ -11,7 +11,7 @@ Action = Literal["redact", "block", "internal_only"]
 class Detection(BaseModel):
     patterns: list[str] = Field(default_factory=list)
     context_keywords: list[str] = Field(default_factory=list)
-    ner_hint: str | None = None  # reserved for the local-LLM detector (Day 4-5)
+    ner_hint: str | None = None  # description handed to the local LLM detector (LOCAL_LLM_MODEL)
 
 
 class Entity(BaseModel):
@@ -28,10 +28,25 @@ class AppliesTo(BaseModel):
     flow: str | None = None
 
 
+class Example(BaseModel):
+    """Self-test: `detect` lists values this template must mask in `text`; empty means it must mask nothing."""
+
+    text: str
+    detect: list[str] = Field(default_factory=list)
+
+
 class Industry(BaseModel):
     industry: str
     entities: list[Entity]
     applies_to: AppliesTo = Field(default_factory=AppliesTo)
+    tests: list[Example] = Field(default_factory=list)
+
+
+def load_industry(path: Path) -> Industry:
+    try:
+        return Industry.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+    except (ValidationError, yaml.YAMLError) as e:
+        raise ValueError(f"{path.name}: {e}") from e
 
 
 def load_industries(directory: Path) -> dict[str, Industry]:
@@ -39,7 +54,6 @@ def load_industries(directory: Path) -> dict[str, Industry]:
     for path in sorted(directory.glob("*.yaml")):
         if path.name.startswith("_"):
             continue
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        industry = Industry.model_validate(data)
+        industry = load_industry(path)
         industries[industry.industry] = industry
     return industries
