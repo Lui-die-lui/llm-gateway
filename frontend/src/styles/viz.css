@@ -1,0 +1,209 @@
+/* Chart kit ("viz kit" in the design). Charts are plain SVG/HTML; colours come from tokens. */
+.vz {
+  --vz-ink: var(--ink);
+  --vz-ink2: var(--ink-2);
+  --vz-mute: var(--ink-mute);
+  --vz-grid: rgba(15, 26, 43, 0.07);
+  --vz-base: rgba(15, 26, 43, 0.22);
+  --vz-track: rgba(15, 26, 43, 0.06);
+}
+.vz-card {
+  background: var(--glass-bg-strong);
+}
+.vz-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.vz-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--vz-ink2);
+}
+.vz-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.vz-hero b {
+  font: 600 28px/1.1 var(--font-mono);
+  letter-spacing: -0.02em;
+  color: var(--vz-ink);
+}
+.vz-hero span {
+  font-size: 12px;
+  color: var(--vz-ink2);
+}
+.vz-leg {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.vz-leg > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+  color: var(--vz-ink2);
+}
+.vz-leg > div > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vz-leg > div > b {
+  font: 600 14px var(--font-mono);
+  color: var(--vz-ink);
+}
+.vz-sw {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+.vz-swl {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+.vz-swd {
+  width: 14px;
+  border-top: 2px dashed var(--c-pass);
+  display: inline-block;
+}
+.vz-plot {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 0 8px;
+}
+.vz-plot:focus-visible {
+  outline-offset: 6px;
+  border-radius: 6px;
+}
+.vz-y {
+  position: relative;
+  font: 500 10.5px var(--font-mono);
+  color: var(--vz-mute);
+}
+.vz-y span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+}
+.vz-area {
+  position: relative;
+}
+.vz-gl {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid var(--vz-grid);
+}
+.vz-gl.base {
+  border-top-color: var(--vz-base);
+}
+.vz-x {
+  display: flex;
+  justify-content: space-between;
+  font: 500 10.5px var(--font-mono);
+  color: var(--vz-mute);
+  margin-top: 8px;
+  grid-column: 2;
+}
+.vz-tip {
+  position: absolute;
+  top: 0;
+  z-index: 5;
+  min-width: 150px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(15, 26, 43, 0.94);
+  color: #fff;
+  font-size: 11.5px;
+  box-shadow: 0 14px 30px -14px rgba(15, 26, 43, 0.7);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.vz-tip .h {
+  font: 600 11px var(--font-mono);
+  color: #c7d0dc;
+  margin-bottom: 6px;
+}
+.vz-tip .r {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 2px 0;
+}
+.vz-tip .r b {
+  font: 600 11.5px var(--font-mono);
+}
+.vz-hbar {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 84px;
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 12.5px;
+  padding: 6px 0;
+}
+.vz-hbar .rk {
+  font: 600 11px var(--font-mono);
+  color: var(--vz-mute);
+}
+.vz-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--vz-track);
+  overflow: hidden;
+  display: flex;
+}
+.vz-track i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+.vz-num {
+  text-align: right;
+  font: 500 12px var(--font-mono);
+  color: var(--vz-ink);
+}
+.vz-num small {
+  color: var(--vz-mute);
+  font-weight: 400;
+  margin-left: 4px;
+}
+.vz-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed rgba(15, 26, 43, 0.35);
+}
+.vz-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px #fff;
+}
+.vz-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}

@@ -1,0 +1,61 @@
+/* Design tokens taken from the Gateway 콘솔 v2 canvas. Everything else in styles/ reads these. */
+:root {
+  /* type */
+  --font-sans: 'IBM Plex Sans KR', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* ink */
+  --ink: #0f1a2b;
+  --ink-2: #4a5568;
+  --ink-3: #5f6b7d;
+  --ink-mute: #8a94a3;
+  --ink-body: #1f2a3c;
+  --link: #1d4ed8;
+  --link-hover: #1e3a8a;
+  --accent: #2563eb;
+  --accent-ink: #1e40af;
+  --line: rgba(15, 26, 43, 0.1);
+  --line-soft: rgba(15, 26, 43, 0.07);
+  --tint: rgba(15, 26, 43, 0.07);
+
+  /* processing colours (charts) */
+  --c-pass: #a9b6c8;
+  --c-redact: #2a78d6;
+  --c-block: #e34948;
+  --c-total: #64748b;
+
+  /* status badges */
+  --st-redact: #b45309;
+  --st-redact-bg: rgba(217, 119, 6, 0.14);
+  --st-block: #dc2626;
+  --st-block-bg: rgba(220, 38, 38, 0.14);
+  --st-clean: #047857;
+  --st-clean-bg: rgba(16, 185, 129, 0.14);
+  --st-accent: #1d4ed8;
+  --st-accent-bg: rgba(37, 99, 235, 0.16);
+  --danger: #b91c1c;
+
+  /* glass */
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-strong: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.78);
+  --glass-blur: blur(22px) saturate(1.4);
+  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 18px 40px -24px rgba(60, 42, 25, 0.45);
+  --glass-shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 24px 50px -28px rgba(60, 42, 25, 0.55);
+  --radius-card: 20px;
+  --radius-lg: 22px;
+
+  /* page */
+  --page-base: #d8cdbf;
+  --page-bg: radial-gradient(900px 620px at 12% 8%, #f7f2ea 0%, rgba(247, 242, 234, 0) 60%),
+    radial-gradient(800px 600px at 88% 14%, #cfdcee 0%, rgba(207, 220, 238, 0) 62%),
+    radial-gradient(1100px 820px at 62% 96%, #b7a38c 0%, rgba(183, 163, 140, 0) 66%),
+    linear-gradient(135deg, #eae1d5 0%, #d3c6b6 52%, #ae9c88 100%);
+
+  /* heatmap ramp */
+  --ramp-1: #cde2fb;
+  --ramp-2: #9ec5f4;
+  --ramp-3: #6da7ec;
+  --ramp-4: #3987e5;
+  --ramp-5: #256abf;
+}

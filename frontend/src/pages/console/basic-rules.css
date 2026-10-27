@@ -1,0 +1,43 @@
+.p2row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1.3fr) minmax(0, 2fr) 92px;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+}
+.p2row.p2head {
+  cursor: default;
+  background: transparent;
+  border-color: transparent;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.p2row.off {
+  background: rgba(255, 255, 255, 0.35);
+}
+.p2row.off .nm {
+  color: var(--ink-mute);
+}
+.p2row.changed {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+.p2row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  margin: 0;
+  cursor: pointer;
+}
+.p2cat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 6px 4px 2px;
+  gap: 10px;
+  flex-wrap: wrap;
+}

@@ -1,0 +1,106 @@
+.portal-main {
+  margin: 0 auto;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.portal-hint {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  font-size: 12.5px;
+}
+.faq {
+  border: 0;
+  background: rgba(255, 255, 255, 0.75);
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 14px;
+  font: 600 13.5px var(--font-sans);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.entry {
+  border: 0;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  font-family: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+.ph {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  color: var(--link);
+  background: rgba(37, 99, 235, 0.09);
+  border-radius: 5px;
+  padding: 0 4px;
+}
+.al {
+  color: #065f46;
+  background: rgba(16, 185, 129, 0.12);
+  border-radius: 5px;
+  padding: 0 4px;
+  font-weight: 600;
+}
+.kp {
+  background: rgba(217, 119, 6, 0.14);
+  border-radius: 5px;
+  padding: 0 4px;
+}
+.opt {
+  flex: 1 1 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--ink);
+  border: 1px solid #fff;
+}
+.opt[aria-pressed='true'] {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.opt[aria-pressed='true'] .t3 {
+  color: rgba(255, 255, 255, 0.75);
+}
+.portal .in-lg {
+  width: 100%;
+  min-height: 120px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 14px;
+  color: var(--ink);
+  padding: 10px 14px;
+  font: 13.5px/1.6 var(--font-sans);
+  resize: vertical;
+}
+.portal .btn-lg {
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 13.5px;
+}

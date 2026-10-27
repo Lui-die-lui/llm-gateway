@@ -1,0 +1,203 @@
+/* Console shell: sidebar + main. The sidebar column stretches with the page so its glass runs to the bottom. */
+.app-shell {
+  display: flex;
+  flex-wrap: wrap;
+  min-height: 100vh;
+  background: var(--page-bg);
+}
+.app-side {
+  flex: 1 1 240px;
+  max-width: 100%;
+  display: flex;
+  background: rgba(255, 255, 255, 0.42);
+  -webkit-backdrop-filter: blur(26px) saturate(1.4);
+  backdrop-filter: blur(26px) saturate(1.4);
+  border-right: 1px solid rgba(255, 255, 255, 0.8);
+}
+.app-main {
+  flex: 999 1 560px;
+  min-width: 0;
+  padding: 26px 28px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@media (min-width: 841px) {
+  .app-side {
+    flex: 0 0 240px;
+  }
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  min-height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  padding: 22px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+@media (max-width: 840px) {
+  .sidebar {
+    position: static;
+    min-height: 0;
+    max-height: none;
+  }
+}
+.sb-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 16px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.sb-brand:hover {
+  color: var(--ink);
+}
+.sb-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--ink);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.sb-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 12px;
+}
+.sb-group-label {
+  font: 500 10px var(--font-mono);
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  padding: 0 12px 6px;
+}
+.sb-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 9px;
+  text-decoration: none;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.sb-item:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.5);
+}
+.sb-item[aria-current='page'] {
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 6px 16px -10px rgba(60, 42, 25, 0.5);
+}
+.sb-item svg {
+  flex: 0 0 auto;
+  stroke: var(--ink-2);
+}
+.sb-item[aria-current='page'] svg {
+  stroke: var(--accent);
+}
+.sb-count {
+  font: 600 10.5px var(--font-mono);
+  background: var(--st-block);
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.sb-company {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sb-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.sb-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 8px 0;
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.av {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--tint);
+  flex: 0 0 auto;
+}
+
+/* User portal top nav */
+.portal-nav {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 28px;
+  background: rgba(255, 255, 255, 0.45);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.8);
+}
+.portal .card {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(255, 255, 255, 0.88);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--glass-shadow-lg);
+}
+.portal .btn {
+  min-height: 38px;
+  padding: 0 15px;
+  font-size: 12.5px;
+  background: #fff;
+  border-color: rgba(15, 26, 43, 0.12);
+}
+.portal .btn-p {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.portal .btn-p:hover {
+  background: #1e2a3f;
+}
+.portal .b-redact {
+  background: rgba(217, 119, 6, 0.12);
+}
+.portal .b-block {
+  color: var(--danger);
+  background: rgba(220, 38, 38, 0.1);
+}
+.portal .b-clean {
+  background: rgba(16, 185, 129, 0.12);
+}
+.portal .b-accent {
+  background: rgba(37, 99, 235, 0.1);
+}
+.portal table {
+  font-size: 13px;
+}
