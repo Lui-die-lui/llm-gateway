@@ -40,6 +40,7 @@ export const INDUSTRY_KO: Record<string, string> = {
   legal: '법무',
   it_dev: 'IT 개발',
   ecommerce: '이커머스',
+  logistics: '물류',
 };
 export const industryName = (id: string): string => INDUSTRY_KO[id] ?? id;
 
