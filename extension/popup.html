@@ -9,6 +9,7 @@
     #status { margin-top: 12px; font-size: 12px; }
     .ok { color: #1a7f4b; } .bad { color: #c0392b; }
     #gw { display: flex; gap: 6px; } #gw input { flex: 1; min-width: 0; padding: 4px 6px; font: inherit; font-size: 12px; }
+    #page { font-size: 12px; line-height: 1.6; }
     #gw-msg { font-size: 11px; margin-top: 4px; color: #666; }
     h2 { font-size: 12px; margin: 14px 0 4px; color: #666; font-weight: 600; }
   </style>
@@ -16,6 +17,7 @@
 <body>
   <h1>LLM Gateway Guard</h1>
   <label><input type="checkbox" id="enabled"> 가림막 켜기</label>
+  <label><input type="checkbox" id="hint"> 가린 자리 안내 문장 붙이기</label>
   <h2>적용할 산업 템플릿</h2>
   <div id="industries">불러오는 중…</div>
   <h2>게이트웨이 주소</h2>
@@ -25,6 +27,8 @@
   </form>
   <div id="gw-msg"></div>
   <div id="status"></div>
+  <h2>이 탭 상태</h2>
+  <div id="page">확인 중…</div>
   <script src="popup.js"></script>
 </body>
 </html>

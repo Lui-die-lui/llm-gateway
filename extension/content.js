@@ -2,8 +2,14 @@
 // when a site changes its page, only this table has to be edited.
 const SITES = {
   "chatgpt.com": {
-    composer: ["#prompt-textarea"],
-    send: ['button[data-testid="send-button"]'],
+    // #prompt-textarea is a contenteditable on the logged-in page; other layouts use a <textarea> (read .value, not innerText).
+    composer: ["#prompt-textarea", 'textarea[name="prompt-textarea"]', 'div.ProseMirror[contenteditable="true"]'],
+    send: [
+      'button[data-testid="send-button"]',
+      'button[aria-label="Send prompt"]',
+      'button[aria-label="프롬프트 보내기"]',
+      'button[aria-label="Send message"]',
+    ],
     reply: ['[data-message-author-role="assistant"]'],
   },
   "claude.ai": {
@@ -14,6 +20,10 @@ const SITES = {
 };
 SITES["chat.openai.com"] = SITES["chatgpt.com"];
 const site = SITES[location.hostname] ?? SITES["chatgpt.com"];
+
+// Without a note the model reads "[사람_1]" as a blank someone forgot to fill in ("what is the recipient?") instead of a name.
+// Appended only to messages where something was masked, and only if the popup setting is on. It contains no real placeholder.
+const HINT = "\n\n(안내: 이 글의 [종류_번호] 모양 표시는 개인정보를 가려 둔 자리표시자입니다. 실제 값을 묻거나 추측하지 말고, 그대로 사용해서 답해 주세요.)";
 
 const PLACEHOLDER = /\[[^\[\]\s]+_\d+\]/;
 let bypass = false; // lets our own re-send through the interceptor
@@ -27,6 +37,26 @@ const find = (selectors) => {
   return null;
 };
 const toGateway = (type, text) => chrome.runtime.sendMessage({ type, text });
+const composerSelector = site.composer.join(",");
+const sendSelector = site.send.join(",");
+
+// What the popup shows when asked "does the extension see this page?" (see the probe listener below).
+const seen = { intercepted: 0, last: "아직 가로챈 전송이 없어요" };
+
+// <textarea>/<input> keep their text in .value; a contenteditable keeps it in the DOM.
+const readComposer = (box) => (("value" in box ? box.value : box.innerText) ?? "").trim();
+
+function writeComposer(box, text) {
+  box.focus();
+  if ("value" in box) {
+    // Frameworks track <textarea> through the native setter and an input event, not through a plain assignment.
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(box), "value").set.call(box, text);
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  } else {
+    document.execCommand("selectAll");
+    document.execCommand("insertText", false, text);
+  }
+}
 
 function resend() {
   setTimeout(() => {
@@ -40,18 +70,31 @@ function resend() {
 
 async function guardedSend(event) {
   if (bypass) return;
-  const box = find(site.composer);
-  const text = box?.innerText.trim();
+  const box = event.target.closest?.(composerSelector) ?? find(site.composer);
+  if (!box) {
+    // The send button was pressed but we cannot read what is being sent: stop it rather than let it through unchecked.
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    seen.last = "보내기를 막았어요: 입력창을 찾지 못함 (선택자 점검 필요)";
+    alert("입력창을 찾지 못해 전송을 막았습니다. 확장의 사이트 선택자를 점검해야 합니다.");
+    return;
+  }
+  const text = readComposer(box);
   if (!text) return;
   event.preventDefault();
   event.stopImmediatePropagation();
   if (busy) return;
   busy = true;
+  seen.intercepted++;
   try {
     const res = await toGateway("sanitize", text);
-    if (res.passthrough) return resend(); // guard switched off in the popup
+    if (res.passthrough) {
+      seen.last = "가림막이 꺼져 있어서 그대로 보냈어요";
+      return resend(); // guard switched off in the popup
+    }
     if (!res.ok) {
       // Fail closed: if the gateway is down or says block, nothing is sent.
+      seen.last = res.status === 403 ? "차단했어요 (민감정보 포함)" : "게이트웨이에 연결할 수 없어 막았어요";
       alert(
         res.status === 403
           ? "게이트웨이가 이 프롬프트를 차단했습니다 (민감정보 포함)."
@@ -59,10 +102,10 @@ async function guardedSend(event) {
       );
       return;
     }
+    seen.last = res.data.text !== text ? "가려서 보냈어요" : "찾은 게 없어 그대로 보냈어요";
     if (res.data.text !== text) {
-      box.focus();
-      document.execCommand("selectAll");
-      document.execCommand("insertText", false, res.data.text);
+      const masked = Object.keys(res.data.findings ?? {}).length > 0;
+      writeComposer(box, res.hint && masked ? res.data.text + HINT : res.data.text);
     }
     resend();
   } finally {
@@ -74,14 +117,14 @@ document.addEventListener(
   "keydown",
   (e) => {
     // isComposing: Korean IME fires Enter to commit a syllable; that must not count as send.
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.target.closest?.(site.composer.join(","))) guardedSend(e);
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.target.closest?.(composerSelector)) guardedSend(e);
   },
   true
 );
 document.addEventListener(
   "click",
   (e) => {
-    if (e.target.closest?.(site.send.join(","))) guardedSend(e);
+    if (e.target.closest?.(sendSelector)) guardedSend(e);
   },
   true
 );
@@ -112,3 +155,17 @@ new MutationObserver(() => {
   clearTimeout(timer);
   timer = setTimeout(restoreReplies, 300);
 }).observe(document.body, { childList: true, subtree: true, characterData: true });
+
+// The popup asks this tab whether the extension is alive and recognises the page (no page content is returned).
+chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+  if (msg?.type !== "probe") return false;
+  reply({
+    host: location.hostname,
+    composer: !!find(site.composer),
+    send: !!find(site.send),
+    reply: !!find(site.reply),
+    intercepted: seen.intercepted,
+    last: seen.last,
+  });
+  return false;
+});

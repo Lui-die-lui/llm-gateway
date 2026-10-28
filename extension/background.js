@@ -3,7 +3,7 @@
 // it survives page reloads but is never handed to the web page.
 // The gateway address is a popup setting (storage.local.gatewayUrl); the popup asks Chrome for permission to that origin.
 const DEFAULT_GATEWAY = "http://localhost:8000";
-const DEFAULTS = { enabled: true, industries: [] };
+const DEFAULTS = { enabled: true, industries: [], hint: true };
 
 async function gatewayUrl() {
   const { gatewayUrl: url } = await chrome.storage.local.get({ gatewayUrl: DEFAULT_GATEWAY });
@@ -43,6 +43,7 @@ async function sanitize(text, tabId, site) {
     res = await call("/v1/sanitize", body);
   }
   if (res.ok) {
+    res.hint = settings.hint !== false; // content.js appends the placeholder note when something was masked
     const stored = await chrome.storage.session.get(countKey(tabId));
     const total = (stored[countKey(tabId)] || 0) + Object.values(res.data.findings).reduce((a, b) => a + b, 0);
     await chrome.storage.session.set({ [vaultKey(tabId)]: res.data.vault_id, [countKey(tabId)]: total });
