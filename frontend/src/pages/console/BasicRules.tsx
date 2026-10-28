@@ -1,6 +1,7 @@
 // 05-2 정책 엔진 2 · 기본 규칙 고르기 (Policy2.dc.html).
-// Rule list: industry rules from GET /v1/industries, built-ins from features/catalog. Status strip: /health, /v1/config.
-// Turning rules on/off and "적용" are mocks: the gateway applies every built-in rule and picks templates per request.
+// Rule list: industry rules from GET /v1/industries, built-ins from GET /v1/rules/builtin. Status strip: /health, /v1/config.
+// Switches are real (GET/PUT /v1/policy/builtin): a rule that is off stops matching for every request. Industry rules still
+// only apply to requests that name the industry (extension popup / X-Gateway-Industry).
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,10 +10,10 @@ import { errorMessage } from '../../api/client';
 import { gateway } from '../../api/gateway';
 import { Seg } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
-import { BUILTIN_GROUPS, industryGroup, useIndustries, type CatalogGroup } from '../../features/catalog';
+import { industryGroup, useBuiltinGroups, useIndustries, type CatalogGroup } from '../../features/catalog';
 import { useFeedback } from '../../features/feedback';
 import { ACTION_KO, providerName } from '../../features/format';
-import { qk, useHealth, useSettings } from '../../features/queries';
+import { qk, useHealth } from '../../features/queries';
 import './basic-rules.css';
 
 type Cat = 'all' | CatalogGroup['id'];
@@ -22,23 +23,23 @@ const CATS = [
   ['secret', '보안 정보'],
   ['industry', '업종 묶음'],
 ] as const;
-const ACT_CLS = { redact: 'b-redact', block: 'b-block', internal_only: 'b-internal' } as const;
+const ACT_CLS = { redact: 'b-redact', block: 'b-block', internal_only: 'b-internal', log: 'b-clean' } as const;
 
 export function BasicRulesPage() {
   const qc = useQueryClient();
   const { toast } = useFeedback();
   const industries = useIndustries();
-  const settings = useSettings();
+  const builtin = useBuiltinGroups();
   const health = useHealth();
   const config = useQuery({ queryKey: qk.config, queryFn: gateway.config });
   const [cat, setCat] = useState<Cat>('all');
 
   const groups = useMemo(
-    () => (industries.data ? [...BUILTIN_GROUPS, industryGroup(industries.data, settings.data?.industry ?? 'cosmetics')] : BUILTIN_GROUPS),
-    [industries.data, settings.data?.industry],
+    () => (builtin && industries.data ? [...builtin, industryGroup(industries.data)] : []),
+    [builtin, industries.data],
   );
   const defaults = useMemo(() => Object.fromEntries(groups.flatMap((g) => g.rules.map((r) => [r.id, r.defaultOn]))), [groups]);
-  const applied = useQuery({ queryKey: [...qk.basicRules, Object.keys(defaults).length], queryFn: () => consoleApi.basicRules(defaults), enabled: !!industries.data });
+  const applied = useQuery({ queryKey: [...qk.basicRules, Object.keys(defaults).length], queryFn: () => consoleApi.basicRules(defaults), enabled: groups.length > 0 });
 
   const [cur, setCur] = useState<Record<string, boolean>>({});
   useEffect(() => {
@@ -51,7 +52,7 @@ export function BasicRulesPage() {
   const total = Object.keys(defaults).length;
 
   const apply = useMutation({
-    mutationFn: () => consoleApi.applyBasicRules(cur, changes.length),
+    mutationFn: () => consoleApi.applyBasicRules(cur),
     onSuccess: () => {
       toast(`${changes.length}건을 적용했어요 · 직원 확장이 몇 분 안에 받아요 · 관리자 작업에 기록`);
       qc.invalidateQueries({ queryKey: qk.basicRules });

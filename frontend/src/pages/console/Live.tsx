@@ -1,5 +1,5 @@
 // 02 실시간 모니터링 (Live.dc.html). Event stream = /v1/audit/events polled at the chosen interval.
-// The per-minute chart and anomalies are mocks: the gateway only buckets by hour/day and has no anomaly detection.
+// The per-minute chart is real (/v1/stats/timeseries?bucket=minute). Anomalies are mocks: the gateway has no anomaly detection.
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -77,7 +77,6 @@ export function LivePage() {
           <div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <h2 className="vz-title">분당 전송 · 최근 60분</h2>
-              <MockBadge />
             </div>
             <div className="vz-hero">
               <b>{last?.total ?? '—'}</b>
@@ -104,7 +103,7 @@ export function LivePage() {
         {m.length > 0 && (
           <LineChart
             height={220}
-            yMax={300}
+            yMax={Math.max(10, ...m.map((p) => p.total))}
             aria={`최근 60분 분당 전송 수. 평균 ${avg}건, ${spike?.t ?? ''} 차단이 ${spike?.block ?? 0}건으로 가장 많아요.`}
             series={[
               { name: '전체', color: '#64748B', values: m.map((p) => p.total), area: true },
@@ -113,7 +112,7 @@ export function LivePage() {
             ]}
             xLabels={m.filter((_, i) => i % step === 0 || i === m.length - 1).map((p) => p.t)}
             titleAt={(i) => m[i]?.t ?? ''}
-            annotation={spike && spike.block > 20 ? { index: spikeIdx, value: spike.block, text: `${spike.t} 차단 ${spike.block}건 · 같은 사람 API 키 4회` } : undefined}
+            annotation={spike && spike.block > 20 ? { index: spikeIdx, value: spike.block, text: `${spike.t} 차단 ${spike.block}건` } : undefined}
           />
         )}
       </section>

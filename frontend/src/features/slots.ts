@@ -12,8 +12,8 @@ export function toSlots(points: TimeseriesPoint[], range: Range, now = new Date(
   const stack = (p?: TimeseriesPoint): Omit<StackDatum, 'title'> => {
     if (!p) return { pass: 0, redact: 0, block: 0 };
     const block = p.blocked;
-    // The gateway counts redacted *items*, not redacted requests; cap at the non-blocked requests (approximation).
-    const redact = Math.min(p.redacted_items, Math.max(0, p.requests - block));
+    // Redacted *requests* (older gateways only report items: cap those at the non-blocked requests, an approximation).
+    const redact = Math.min(p.redacted_requests ?? p.redacted_items, Math.max(0, p.requests - block));
     return { block, redact, pass: Math.max(0, p.requests - block - redact) };
   };
   if (range === '24H') {

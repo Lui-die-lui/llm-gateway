@@ -8,6 +8,8 @@
     label { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
     #status { margin-top: 12px; font-size: 12px; }
     .ok { color: #1a7f4b; } .bad { color: #c0392b; }
+    #gw { display: flex; gap: 6px; } #gw input { flex: 1; min-width: 0; padding: 4px 6px; font: inherit; font-size: 12px; }
+    #gw-msg { font-size: 11px; margin-top: 4px; color: #666; }
     h2 { font-size: 12px; margin: 14px 0 4px; color: #666; font-weight: 600; }
   </style>
 </head>
@@ -16,6 +18,12 @@
   <label><input type="checkbox" id="enabled"> 가림막 켜기</label>
   <h2>적용할 산업 템플릿</h2>
   <div id="industries">불러오는 중…</div>
+  <h2>게이트웨이 주소</h2>
+  <form id="gw">
+    <input id="gw-url" type="url" placeholder="http://localhost:8000" aria-label="게이트웨이 주소" spellcheck="false">
+    <button type="submit">저장</button>
+  </form>
+  <div id="gw-msg"></div>
   <div id="status"></div>
   <script src="popup.js"></script>
 </body>

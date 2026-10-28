@@ -1,16 +1,18 @@
 import json
+import logging
 import os
 import secrets
 import time
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from . import audit, llm_detector, policy, sessions, upstream
+from . import audit, company_policy, llm_detector, policy, rules_catalog, sessions, upstream
 from .evaluate import evaluate
 from .sanitizer import (
     ResponseBlocked,
@@ -27,26 +29,59 @@ from .vault import Vault
 INDUSTRIES_DIR = Path(os.getenv("INDUSTRIES_DIR", Path(__file__).resolve().parent.parent / "industries"))
 industries = load_industries(INDUSTRIES_DIR)
 audit.configure(os.getenv("AUDIT_DB", str(Path(__file__).resolve().parent.parent / "data" / "audit.db")))
+company_policy.configure(os.getenv("POLICY_DB", str(Path(__file__).resolve().parent.parent / "data" / "policy.db")))
 
 app = FastAPI(title="LLM Gateway")
+if not os.getenv("GATEWAY_ADMIN_TOKEN"):
+    logging.getLogger("uvicorn.error").warning(
+        "GATEWAY_ADMIN_TOKEN is not set: stats, audit log and policy endpoints are open to anyone who can reach this server."
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("GATEWAY_CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Gateway-Redacted", "X-Gateway-Route"],
+    expose_headers=["X-Gateway-Redacted", "X-Gateway-Route", "X-Total-Count"],
 )
+
+
+class AdminTokenRequired(Exception):
+    pass
+
+
+def error(status: int, type_: str, **extra) -> JSONResponse:
+    return JSONResponse({"error": {"type": type_, **extra}}, status)
+
+
+@app.exception_handler(AdminTokenRequired)
+def admin_token_required(_request: Request, _exc: AdminTokenRequired) -> JSONResponse:
+    # Same {"error": {...}} shape as every other gateway error, instead of FastAPI's {"detail": ...}.
+    return error(401, "unauthorized", message="admin token required (X-Admin-Token)")
+
+
+@app.exception_handler(company_policy.PolicyError)
+def policy_error(_request: Request, exc: company_policy.PolicyError) -> JSONResponse:
+    return error(exc.status, exc.type, message=exc.message)
+
+
+@app.exception_handler(RequestValidationError)
+def validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:
+    # Same {"error": {...}} shape as every other gateway error; the first problem, in plain words.
+    first = exc.errors()[0] if exc.errors() else {}
+    msg = str(first.get("msg", "invalid request"))
+    if first.get("type") == "value_error":  # our own validators already write a full sentence
+        message = msg.removeprefix("Value error, ")
+    else:
+        where = ".".join(str(p) for p in first.get("loc", ()) if p != "body")
+        message = f"{where}: {msg}" if where else msg
+    return error(422, "invalid_request", message=message)
 
 
 def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
     """Stats / admin endpoints. Open when GATEWAY_ADMIN_TOKEN is unset (local dev), token-gated otherwise."""
     token = os.getenv("GATEWAY_ADMIN_TOKEN")
     if token and not (x_admin_token and secrets.compare_digest(x_admin_token, token)):
-        raise HTTPException(401, "admin token required (X-Admin-Token)")
-
-
-def error(status: int, type_: str, **extra) -> JSONResponse:
-    return JSONResponse({"error": {"type": type_, **extra}}, status)
+        raise AdminTokenRequired
 
 
 def pick_industries(names: list[str], use_case: str | None, flow: str | None):
@@ -138,10 +173,15 @@ async def chat_completions(
     x_gateway_industry: str | None = Header(default=None),
     x_gateway_use_case: str | None = Header(default=None),
     x_gateway_flow: str | None = Header(default=None),
+    x_gateway_site: str | None = Header(default=None),
+    x_gateway_client: str | None = Header(default=None),
 ):
     t0 = time.monotonic()
-    payload = await request.json()
-    if not isinstance(payload.get("messages"), list) or not payload["messages"]:
+    try:
+        payload = await request.json()
+    except ValueError:  # malformed JSON or not UTF-8 (UnicodeDecodeError is a ValueError)
+        return error(400, "invalid_request", message="body must be valid UTF-8 JSON")
+    if not isinstance(payload, dict) or not isinstance(payload.get("messages"), list) or not payload["messages"]:
         return error(400, "invalid_request", message="messages must be a non-empty list")
 
     names = split_header(x_gateway_industry)
@@ -165,6 +205,8 @@ async def chat_completions(
             use_case=x_gateway_use_case,
             stream=streaming,
             latency_ms=int((time.monotonic() - t0) * 1000),
+            site=x_gateway_site,
+            client=x_gateway_client,
             request_matches=matches,
             response_matches=response_matches,
         )
@@ -175,7 +217,7 @@ async def chat_completions(
 
     outbound = {**payload, "messages": messages}
     scan = route == "external" and response_scan_enabled()  # internal answers never left the company
-    headers = {"X-Gateway-Redacted": str(len(matches)), "X-Gateway-Route": route}
+    headers = {"X-Gateway-Redacted": str(sum(m.action != "log" for m in matches)), "X-Gateway-Route": route}
 
     if streaming:
         flt = StreamFilter(vault, scan)
@@ -237,6 +279,8 @@ class SanitizeIn(BaseModel):
     use_case: str | None = None
     flow: str | None = None
     vault_id: str | None = None  # pass the previous one to keep placeholder numbering across messages
+    site: str | None = None  # audit label only: where the text was typed, e.g. "chatgpt.com"
+    client: str | None = None  # audit label only: e.g. "extension/0.3.0"
 
 
 class RestoreIn(BaseModel):
@@ -266,6 +310,8 @@ def sanitize(body: SanitizeIn):
         use_case=body.use_case,
         stream=False,
         latency_ms=int((time.monotonic() - t0) * 1000),
+        site=body.site,
+        client=body.client,
         request_matches=matches,
     )
     if route == "block":
@@ -286,6 +332,7 @@ class AnalyzeIn(BaseModel):
     industries: list[str] = []
     use_case: str | None = None
     flow: str | None = None
+    use_draft: bool = False  # also apply the console's unapplied draft rules, to try them before applying
 
 
 @app.post("/v1/analyze")
@@ -297,13 +344,80 @@ def analyze(body: AnalyzeIn):
     templates, unknown = pick_industries(body.industries, body.use_case, body.flow)
     if unknown:
         return error(400, "unknown_industry", message=", ".join(unknown))
-    text, matches = redact_text(body.text, Vault(), templates)
+    engine = company_policy.draft_engine() if body.use_draft else None
+    text, matches = redact_text(body.text, Vault(), templates, engine)
     return {
         "sanitized": text,
         "route": policy.decide(matches, upstream.internal_available()),
         "spans": [{"start": m.start, "end": m.end, "label": m.label, "action": m.action} for m in matches],
         "findings": count_by_label(matches),
     }
+
+
+# ---------------------------------------------------------------- company policy (console)
+
+@app.get("/v1/rules/builtin")
+def builtin_rules():
+    """The built-in rules the console lists, with the action each one has by default."""
+    return {"groups": rules_catalog.catalog()}
+
+
+admin = [Depends(require_admin)]
+
+
+@app.get("/v1/policy", dependencies=admin)
+def policy_get():
+    return company_policy.view()
+
+
+@app.post("/v1/policy/rules", dependencies=admin)
+def policy_add(body: company_policy.RuleIn):
+    state, rule_id = company_policy.add_rule(body)
+    return {"policy": state, "id": rule_id}
+
+
+@app.put("/v1/policy/rules/{rule_id}", dependencies=admin)
+def policy_save(rule_id: str, body: company_policy.RuleIn):
+    return company_policy.save_rule(rule_id, body)
+
+
+@app.post("/v1/policy/rules/{rule_id}/toggle", dependencies=admin)
+def policy_toggle(rule_id: str):
+    return company_policy.toggle_rule(rule_id)
+
+
+@app.delete("/v1/policy/rules/{rule_id}", dependencies=admin)
+def policy_delete(rule_id: str):
+    return company_policy.delete_rule(rule_id)
+
+
+@app.post("/v1/policy/apply", dependencies=admin)
+def policy_apply():
+    return company_policy.apply()
+
+
+@app.get("/v1/policy/versions", dependencies=admin)
+def policy_versions():
+    return company_policy.versions()
+
+
+@app.post("/v1/policy/versions/{version}/rollback", dependencies=admin)
+def policy_rollback(version: int):
+    return company_policy.rollback(version)
+
+
+class BuiltinIn(BaseModel):
+    enabled: dict[str, bool]
+
+
+@app.get("/v1/policy/builtin", dependencies=admin)
+def policy_builtin_get():
+    return company_policy.builtin_view()
+
+
+@app.put("/v1/policy/builtin", dependencies=admin)
+def policy_builtin_put(body: BuiltinIn):
+    return company_policy.set_builtin(body.enabled)
 
 
 # ---------------------------------------------------------------- audit / dashboard (metadata only)
@@ -314,13 +428,28 @@ def stats_summary(since: float = 0.0):
     return audit.summary(since)
 
 
+TZ_OFFSET = Query(0, ge=-840, le=840, description="minutes east of UTC, e.g. 540 for Korea")
+
+
 @app.get("/v1/stats/timeseries", dependencies=[Depends(require_admin)])
-def stats_timeseries(bucket: str = "hour", since: float = 0.0):
-    if bucket not in ("hour", "day"):
-        return error(400, "invalid_request", message="bucket must be hour or day")
-    return audit.timeseries(bucket, since)
+def stats_timeseries(bucket: str = "hour", since: float = 0.0, tz_offset: int = TZ_OFFSET):
+    """Bucket labels carry the offset ("2026-10-28T00:00:00+09:00"); without `tz_offset` they are UTC ("...Z")."""
+    if bucket not in ("minute", "hour", "day"):
+        return error(400, "invalid_request", message="bucket must be minute, hour or day")
+    return audit.timeseries(bucket, since, tz_offset)
 
 
 @app.get("/v1/audit/events", dependencies=[Depends(require_admin)])
-def audit_events(limit: int = 50, offset: int = 0, label: str | None = None, status: str | None = None):
-    return audit.events(limit, offset, label, status)
+def audit_events(
+    limit: int = 50,
+    offset: int = 0,
+    label: str | None = None,
+    status: str | None = None,
+    since: float | None = None,
+    until: float | None = None,
+    site: str | None = None,
+    client: str | None = None,
+):
+    """Newest first. `since` (inclusive) / `until` (exclusive) are unix seconds. Total matches: X-Total-Count header."""
+    rows, total = audit.events(limit, offset, label, status, since, until, site, client)
+    return JSONResponse(rows, headers={"X-Total-Count": str(total)})

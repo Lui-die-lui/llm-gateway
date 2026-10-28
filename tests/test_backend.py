@@ -1,5 +1,6 @@
 """Names, local-LLM assist, routing, response scan, streaming, audit, templates, config."""
 import json
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -7,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app import audit, llm_detector, main, upstream
 from app.check_templates import check_industry
-from app.detector import detect
+from app.detector import Match, detect
 from app.evaluate import evaluate
 from app.stream import StreamFilter
 from app.vault import Vault
@@ -287,3 +288,98 @@ def test_checker_reports_broken_template():
         }
     )
     assert any("bad regex" in p for p in check_industry(bad))
+
+
+# ---- dashboard API additions -------------------------------------------------
+
+def test_malformed_chat_body_is_a_400_not_a_500():
+    for content in (b"{oops", b'{"a":"\xb7"}', b"[1, 2]", b"null"):
+        r = client.post("/v1/chat/completions", content=content, headers={"Content-Type": "application/json"})
+        assert r.status_code == 400, content
+        assert r.json()["error"]["type"] == "invalid_request"
+
+
+def test_admin_401_uses_the_gateway_error_shape(monkeypatch):
+    monkeypatch.setenv("GATEWAY_ADMIN_TOKEN", "s3cret")
+    r = client.get("/v1/audit/events")
+    assert r.status_code == 401
+    assert r.json()["error"]["type"] == "unauthorized"
+    assert "detail" not in r.json()
+
+
+def test_summary_counts_redacted_requests_and_p95():
+    # Two requests with redactions, one with nothing, one blocked: only the first two count as "redacted".
+    for latency, matches in ((10, [Match(0, 3, "이메일", "redact", 1)]), (20, [Match(0, 3, "이메일", "redact", 1)]), (30, []), (400, [Match(0, 3, "시크릿", "block", 1)])):
+        audit.record(endpoint="chat", status="ok", route="external", provider="mock", industries=[], use_case=None,
+                     stream=False, latency_ms=latency, request_matches=matches)
+    s = client.get("/v1/stats/summary").json()
+    assert s["requests"] == 4 and s["redacted_requests"] == 2
+    assert s["latency_p95_ms"] == 400  # nearest rank: ceil(0.95 * 4) = 4th of 4
+    assert client.get("/v1/stats/summary?since=" + str(time.time() + 60)).json()["latency_p95_ms"] is None
+
+
+def test_timeseries_redacted_requests_minute_bucket_and_tz_offset(monkeypatch):
+    # 2026-01-01 20:30:15 UTC is already 2026-01-02 05:30 in Korea.
+    monkeypatch.setattr(audit.time, "time", lambda: 1767299415.0)
+    chat_ts = dict(endpoint="chat", status="ok", route="external", provider="mock", industries=[], use_case=None, stream=False, latency_ms=1)
+    audit.record(**chat_ts, request_matches=[Match(0, 3, "이메일", "redact", 1), Match(4, 7, "전화번호", "redact", 1)])
+    audit.record(**chat_ts)
+
+    utc = client.get("/v1/stats/timeseries?bucket=day").json()
+    assert utc == [{"bucket": "2026-01-01T00:00:00Z", "requests": 2, "blocked": 0, "redacted_requests": 1, "redacted_items": 2}]
+    kst = client.get("/v1/stats/timeseries?bucket=day&tz_offset=540").json()
+    assert kst[0]["bucket"] == "2026-01-02T00:00:00+09:00" and kst[0]["redacted_items"] == 2
+    assert client.get("/v1/stats/timeseries?bucket=minute").json()[0]["bucket"] == "2026-01-01T20:30:00Z"
+    assert client.get("/v1/stats/timeseries?bucket=hour&tz_offset=-300").json()[0]["bucket"] == "2026-01-01T15:00:00-05:00"
+    assert client.get("/v1/stats/timeseries?bucket=day&tz_offset=9999").status_code == 422
+
+
+def test_events_range_total_site_and_client_filters(mock, monkeypatch):
+    clock = iter([100.0, 200.0, 300.0])
+    monkeypatch.setattr(audit.time, "time", lambda: next(clock))
+    chat("hello", **{"X-Gateway-Site": "chatgpt.com", "X-Gateway-Client": "extension/0.3.0"})
+    client.post("/v1/sanitize", json={"text": "a@b.com", "site": "claude.ai", "client": "extension/0.3.0"})
+    chat("hello again")
+
+    r = client.get("/v1/audit/events?limit=1")
+    assert len(r.json()) == 1 and r.headers["X-Total-Count"] == "3"  # one page, total of all
+    assert r.json()[0]["site"] is None  # the newest one sent no site
+
+    def page(query):
+        r = client.get("/v1/audit/events?" + query)
+        return [e["ts"] for e in r.json()], int(r.headers["X-Total-Count"])
+
+    assert page("since=200") == ([300.0, 200.0], 2)
+    assert page("until=200") == ([100.0], 1)  # until is exclusive
+    assert page("since=150&until=250") == ([200.0], 1)
+    assert page("site=chatgpt.com") == ([100.0], 1)
+    assert page("site=claude.ai") == ([200.0], 1)
+    assert page("client=extension/0.3.0") == ([200.0, 100.0], 2)
+    assert page("site=claude.ai&client=nope") == ([], 0)
+    assert page("offset=2")[1] == 3
+
+
+def test_site_and_client_are_capped_and_never_break_sql():
+    audit.record(endpoint="chat", status="ok", route="external", provider="mock", industries=[], use_case=None,
+                 stream=False, latency_ms=1, site="x'); DROP TABLE requests;--" + "a" * 500, client="  ")
+    e = client.get("/v1/audit/events").json()[0]
+    assert len(e["site"]) == 100 and e["client"] is None
+
+
+def test_old_audit_database_gets_the_new_columns(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    db = sqlite3.connect(path)
+    db.executescript(
+        "CREATE TABLE requests (id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, endpoint TEXT NOT NULL,"
+        " provider TEXT NOT NULL, route TEXT NOT NULL, status TEXT NOT NULL, industries TEXT NOT NULL, use_case TEXT,"
+        " stream INTEGER NOT NULL, latency_ms INTEGER NOT NULL);"
+        "INSERT INTO requests VALUES (1, 1.0, 'chat', 'mock', 'external', 'ok', '', NULL, 0, 5);"
+    )
+    db.commit()
+    db.close()
+    audit.configure(str(path))
+    rows, total = audit.events()
+    assert total == 1 and rows[0]["site"] is None and rows[0]["latency_ms"] == 5
+    audit.configure(":memory:")

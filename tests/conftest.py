@@ -1,10 +1,11 @@
 import os
 
 os.environ["AUDIT_DB"] = ":memory:"  # before app.main is imported
+os.environ["POLICY_DB"] = ":memory:"
 
 import pytest
 
-from app import audit
+from app import audit, company_policy
 
 ENV_KEYS = [
     "UPSTREAM_MODE", "UPSTREAM_PROVIDER", "UPSTREAM_MODEL", "UPSTREAM_API_KEY", "UPSTREAM_BASE_URL",
@@ -17,3 +18,4 @@ def clean_env(monkeypatch):
     for k in ENV_KEYS:
         monkeypatch.delenv(k, raising=False)
     audit.configure(":memory:")
+    company_policy.configure(":memory:")

@@ -57,7 +57,7 @@ describe('chart helpers', () => {
   it('toSlots stacks blocked / redacted / passed and never goes negative', () => {
     const now = new Date(2026, 9, 27, 15, 0, 0);
     const bucket = new Date(2026, 9, 27, 10, 0, 0).toISOString();
-    const { data, x } = toSlots([{ bucket, requests: 10, blocked: 2, redacted_items: 30 }], '24H', now);
+    const { data, x } = toSlots([{ bucket, requests: 10, blocked: 2, redacted_requests: 8, redacted_items: 30 }], '24H', now);
     expect(data).toHaveLength(24);
     expect(x[0]).toBe('00시');
     expect(data[10]).toMatchObject({ block: 2, redact: 8, pass: 0 });

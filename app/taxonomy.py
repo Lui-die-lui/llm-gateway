@@ -5,7 +5,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, Field, ValidationError
 
-Action = Literal["redact", "block", "internal_only"]
+Action = Literal["redact", "block", "internal_only", "log"]  # log: let it through, record it
 
 
 class Detection(BaseModel):

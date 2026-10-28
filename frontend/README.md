@@ -72,11 +72,11 @@ src/
 |---|---|---|
 | 사이드바 | `GET /health` (검사 서버 상태) | 회사 이름·코드·구성원 수, 대기 건수 배지 |
 | 01 개요 | `/v1/stats/summary` (오늘·어제 비교), `/v1/stats/timeseries` (시간대·일별, 14일 스파크라인), `/v1/audit/events` (실시간 이벤트) | "확인 대기" 카드, 상단 알림 3개 |
-| 02 실시간 | `/v1/audit/events` 이벤트 스트림 (5초/30초/일시정지) | 분당 그래프(서버는 시간·일 단위만), 이상 징후 |
+| 02 실시간 | `/v1/audit/events` 이벤트 스트림 (5초/30초/일시정지), 분당 그래프 (`/v1/stats/timeseries?bucket=minute`) | 이상 징후 |
 | 03 기록 | 전송 기록 = `/v1/audit/events` (limit·offset·label·status), CSV는 받은 메타데이터로 브라우저에서 생성 | 관리자 작업 탭, 오탐 신고(이 탭에서만 유지) |
-| 04 리포트 | 검사 수·차단률(`summary`), 일별 가림·차단(`timeseries`), 정보 종류별 집계(`summary.findings`), 규칙별 정확도(`/v1/eval`), 가림률·p95(최근 500건 표본) | 잘못 찾은 비율, 부서 × 정보 종류, 교육 대상 후보·Slack, 정기 리포트 |
-| 05 정책 엔진 | 미리 시험하기 = `POST /v1/analyze` | 규칙 목록·편집·새 규칙·켜고 끄기·버전·적용 |
-| 05-2 기본 규칙 | 업종 규칙 목록 `GET /v1/industries`, 상태 `GET /health`·`/v1/config` | 기본 규칙 켜고 끄기·적용 (기본 규칙 목록은 서버 코드와 맞춘 고정 목록) |
+| 04 리포트 | 검사 수·차단률(`summary`), 일별 가림·차단(`timeseries`), 정보 종류별 집계(`summary.findings`), 규칙별 정확도(`/v1/eval`), 가림률·p95 (`summary`의 `redacted_requests`, `latency_p95_ms`) | 잘못 찾은 비율, 부서 × 정보 종류, 교육 대상 후보·Slack, 정기 리포트 |
+| 05 정책 엔진 | 규칙 목록·편집·새 규칙·켜고 끄기·삭제·승인 적용 (`/v1/policy/*`), 미리 시험하기 = `POST /v1/analyze` (초안 포함) | 부서별 적용(저장만 됨), 검토 창·예외·알림 옵션(저장만 됨) |
+| 05-2 기본 규칙 | 기본 규칙 목록 `GET /v1/rules/builtin`, 업종 규칙 `GET /v1/industries`, 켜고 끄기·적용 `GET/PUT /v1/policy/builtin`, 상태 `GET /health`·`/v1/config` | — |
 | 06 · 07 · 08 | — | 전부 |
 | P2 로그인 | — | 로그인·잠금·2단계 인증 |
 | U7 · U8 · U9 | — | 전부 (포털에서 보낸 예외 요청은 06에 그대로 나타남) |
@@ -89,7 +89,7 @@ mock 숫자가 실제 숫자와 섞이는 카드에는 "예시 값" 배지를 �
 
 프론트엔드 코드는 `app/`을 건드리지 않았습니다. 아래는 mock을 실제로 바꾸려면 서버에 필요한 것들의 초안입니다.
 
-**지금 API를 조금 고치면 되는 것**
+**지금 API를 조금 고치면 되는 것** (1~6번은 서버에 반영했습니다. 응답 형식은 `docs/API.md`, 남은 일은 `docs/REVIEW.md`)
 1. 토큰 검사 실패 응답 형식 통일: `require_admin`이 `HTTPException`이라 `{"detail": ...}`가 옵니다. 다른 오류처럼 `{"error":{"type":"unauthorized"}}`이면 좋겠습니다 (지금도 둘 다 처리함).
 2. `GET /v1/stats/timeseries`에 `redacted_requests`(가린 항목이 1개 이상인 요청 수). 지금은 가린 *항목* 수만 있어 개요의 가림 막대는 `min(가린 항목, 요청 - 차단)`으로 근사합니다.
 3. `GET /v1/stats/timeseries?tz=Asia/Seoul` 또는 `tz_offset`. 일 단위 버킷이 UTC 자정 기준이라 한국 시간과 9시간 어긋납니다.
