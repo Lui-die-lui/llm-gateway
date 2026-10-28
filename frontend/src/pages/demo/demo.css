@@ -1,0 +1,77 @@
+.demo {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.demo-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.demo-head h1 {
+  margin: 4px 0 6px;
+}
+.demo-head p {
+  margin: 0;
+  max-width: 62ch;
+}
+.demo-note {
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  font-size: 12.5px;
+}
+.demo-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.demo-chips,
+.demo-samples {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.demo-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.demo-ex {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+.demo-col p {
+  margin: 6px 0 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.demo-col mark {
+  background: var(--st-accent-bg);
+  color: var(--accent-ink);
+  border-radius: 4px;
+  padding: 0 3px;
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+}
+.demo-warn {
+  color: var(--danger);
+}
+.demo-code pre {
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(15, 26, 43, 0.06);
+  font-size: 12.5px;
+  overflow-x: auto;
+}
