@@ -20,7 +20,9 @@
       async sendMessage(msg) {
         if (msg.type === "sanitize") {
           if (!enabled) return { ok: true, passthrough: true };
-          const res = await post("/v1/sanitize", { text: msg.text, industries, vault_id: vaultId });
+          let res = await post("/v1/sanitize", { text: msg.text, industries, vault_id: vaultId });
+          // Same as background.js: the gateway forgot this vault (restart / 30 min idle), start a new one.
+          if (res.status === 404 && vaultId) res = await post("/v1/sanitize", { text: msg.text, industries });
           if (res.ok) {
             sessionStorage.setItem("dev-vault", (vaultId = res.data.vault_id));
             res.hint = q.get("hint") !== "0";

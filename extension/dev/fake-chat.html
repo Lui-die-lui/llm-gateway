@@ -10,7 +10,17 @@
   <pre id="sent"></pre>
   <script src="shim.js"></script>
   <script>
-    let composer = document.getElementById("prompt-textarea");
+    // ?layout=odd: a layout content.js has no selector for (role=textbox, send button known only by its aria-label).
+    // ?layout=nobutton: the same, and a send button with no label at all.
+    const layout = new URLSearchParams(location.search).get("layout");
+    if (layout) {
+      document.getElementById("prompt-textarea").removeAttribute("id");
+      document.querySelector("button").removeAttribute("data-testid");
+      document.querySelector("div[contenteditable]").id = "x1";
+      document.querySelector("div[contenteditable]").setAttribute("role", "textbox");
+      if (layout === "odd") document.querySelector("button").setAttribute("aria-label", "Send message");
+    }
+    let composer = document.querySelector("div[contenteditable], textarea");
     const useTextarea = new URLSearchParams(location.search).has("textarea");
     if (useTextarea) {
       const ta = document.createElement("textarea");

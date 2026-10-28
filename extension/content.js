@@ -40,8 +40,36 @@ const toGateway = (type, text) => chrome.runtime.sendMessage({ type, text });
 const composerSelector = site.composer.join(",");
 const sendSelector = site.send.join(",");
 
+// A page layout the table above does not know (ChatGPT has more than one and changes them) falls back to guessing:
+// the biggest visible text box is the composer, a button labelled send / 보내기 / 전송 is the send button.
+const GUESS_COMPOSER = 'textarea, div[role="textbox"], [contenteditable="true"]';
+const SEND_WORDS = /send|submit|보내기|전송/i;
+const visible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+const labelOf = (el) => `${el.getAttribute("aria-label") ?? ""} ${el.getAttribute("data-testid") ?? ""}`;
+const area = (el) => el.offsetWidth * el.offsetHeight;
+const describe = (el) =>
+  `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""} ${el.getAttribute("aria-label") ?? el.getAttribute("placeholder") ?? el.getAttribute("data-testid") ?? ""}`.trim();
+
+const knownComposer = () => find(site.composer);
+const guessComposer = () => [...document.querySelectorAll(GUESS_COMPOSER)].filter(visible).sort((a, b) => area(b) - area(a))[0] ?? null;
+const composerEl = () => knownComposer() ?? guessComposer();
+const composerOf = (target) => {
+  const own = target.closest?.(composerSelector);
+  if (own) return own;
+  if (knownComposer()) return null; // the page has its known input; this target is something else
+  const guess = guessComposer();
+  return guess && guess.contains(target) ? guess : null;
+};
+const sendButton = () =>
+  find(site.send) ?? [...document.querySelectorAll("button")].find((b) => visible(b) && !b.disabled && SEND_WORDS.test(labelOf(b))) ?? null;
+const isSend = (target) => {
+  const b = target.closest?.("button");
+  return !!b && (b.matches(sendSelector) || (!find(site.send) && SEND_WORDS.test(labelOf(b))));
+};
+
 // What the popup shows when asked "does the extension see this page?" (see the probe listener below).
 const seen = { intercepted: 0, last: "아직 가로챈 전송이 없어요" };
+let armed = null; // text already checked and left in the box because there was no button to click: the next Enter passes untouched
 
 // <textarea>/<input> keep their text in .value; a contenteditable keeps it in the DOM.
 const readComposer = (box) => (("value" in box ? box.value : box.innerText) ?? "").trim();
@@ -58,19 +86,23 @@ function writeComposer(box, text) {
   }
 }
 
-function resend() {
+function submitMessage(box) {
+  const button = sendButton();
+  if (!button) {
+    armed = readComposer(box);
+    seen.last = "보내기 버튼을 못 찾았어요. 확인한 글을 입력창에 넣어 뒀어요 (Enter를 한 번 더)";
+    alert("보내기 버튼을 찾지 못했습니다. 확인을 마친 글을 입력창에 넣어 두었으니 Enter를 한 번 더 눌러 주세요.");
+    return;
+  }
   setTimeout(() => {
     bypass = true;
-    const button = find(site.send);
-    if (button) button.click();
-    else find(site.composer)?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    button.click();
     bypass = false;
   }, 100);
 }
 
-async function guardedSend(event) {
+async function guardedSend(event, box) {
   if (bypass) return;
-  const box = event.target.closest?.(composerSelector) ?? find(site.composer);
   if (!box) {
     // The send button was pressed but we cannot read what is being sent: stop it rather than let it through unchecked.
     event.preventDefault();
@@ -81,6 +113,11 @@ async function guardedSend(event) {
   }
   const text = readComposer(box);
   if (!text) return;
+  if (armed !== null && text === armed) {
+    armed = null;
+    return; // checked a moment ago; let the person's own Enter send it
+  }
+  armed = null;
   event.preventDefault();
   event.stopImmediatePropagation();
   if (busy) return;
@@ -90,7 +127,7 @@ async function guardedSend(event) {
     const res = await toGateway("sanitize", text);
     if (res.passthrough) {
       seen.last = "가림막이 꺼져 있어서 그대로 보냈어요";
-      return resend(); // guard switched off in the popup
+      return submitMessage(box); // guard switched off in the popup
     }
     if (!res.ok) {
       // Fail closed: if the gateway is down or says block, nothing is sent.
@@ -107,7 +144,7 @@ async function guardedSend(event) {
       const masked = Object.keys(res.data.findings ?? {}).length > 0;
       writeComposer(box, res.hint && masked ? res.data.text + HINT : res.data.text);
     }
-    resend();
+    submitMessage(box);
   } finally {
     busy = false;
   }
@@ -116,15 +153,16 @@ async function guardedSend(event) {
 document.addEventListener(
   "keydown",
   (e) => {
-    // isComposing: Korean IME fires Enter to commit a syllable; that must not count as send.
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.target.closest?.(composerSelector)) guardedSend(e);
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing) return; // isComposing: Korean IME fires Enter to commit a syllable
+    const box = composerOf(e.target);
+    if (box) guardedSend(e, box);
   },
   true
 );
 document.addEventListener(
   "click",
   (e) => {
-    if (e.target.closest?.(sendSelector)) guardedSend(e);
+    if (isSend(e.target)) guardedSend(e, composerEl());
   },
   true
 );
@@ -161,11 +199,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg?.type !== "probe") return false;
   reply({
     host: location.hostname,
-    composer: !!find(site.composer),
-    send: !!find(site.send),
+    composer: knownComposer() ? "known" : guessComposer() ? "guess" : "none",
+    send: find(site.send) ? "known" : sendButton() ? "guess" : "none",
     reply: !!find(site.reply),
     intercepted: seen.intercepted,
     last: seen.last,
+    // What is on the page that looks like a text box / send button, so a wrong selector can be fixed from one screenshot.
+    boxes: [...document.querySelectorAll(GUESS_COMPOSER)].filter(visible).slice(0, 4).map(describe),
+    buttons: [...document.querySelectorAll("button")].filter((b) => visible(b) && SEND_WORDS.test(labelOf(b))).slice(0, 4).map(describe),
   });
   return false;
 });

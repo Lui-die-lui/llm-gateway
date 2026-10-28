@@ -31,7 +31,6 @@ async function saveGateway(e) {
 // Asks the content script in the active tab what it can see, so "it did nothing" can be told apart from "it does not see this page".
 async function showPage() {
   const el = $("page");
-  const mark = (ok) => (ok ? "✓" : "✗");
   let probe;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -44,13 +43,17 @@ async function showPage() {
     return;
   }
   el.textContent = "";
-  for (const line of [
-    `${probe.host}`,
-    `${mark(probe.composer)} 입력창을 찾았어요`,
-    `${mark(probe.send)} 보내기 버튼 (글을 쓰기 전에는 안 보일 수 있어요)`,
-    `${mark(probe.reply)} 답변 영역 (답변이 있어야 보여요)`,
+  const kind = { known: "✓ 찾았어요", guess: "△ 짐작으로 골랐어요", none: "✗ 못 찾았어요" };
+  const lines = [
+    probe.host,
+    `입력창: ${kind[probe.composer]}`,
+    `보내기 버튼: ${kind[probe.send]} (글을 쓰기 전에는 안 보일 수 있어요)`,
+    `답변 영역: ${probe.reply ? "✓ 찾았어요" : "✗ 아직 없어요 (답변이 있어야 보여요)"}`,
     `가로챈 전송 ${probe.intercepted}번 · ${probe.last}`,
-  ]) {
+  ];
+  if (probe.composer !== "known") lines.push(`입력창 후보: ${probe.boxes.join(" / ") || "없음"}`);
+  if (probe.send !== "known") lines.push(`보내기 후보: ${probe.buttons.join(" / ") || "없음"}`);
+  for (const line of lines) {
     const row = document.createElement("div");
     row.textContent = line;
     el.append(row);
