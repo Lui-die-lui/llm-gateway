@@ -8,7 +8,7 @@
     label { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
     #status { margin-top: 12px; font-size: 12px; }
     .ok { color: #1a7f4b; } .bad { color: #c0392b; }
-    #gw { display: flex; gap: 6px; } #gw input { flex: 1; min-width: 0; padding: 4px 6px; font: inherit; font-size: 12px; }
+    #gw, #key { display: flex; gap: 6px; } #gw input, #key input { flex: 1; min-width: 0; padding: 4px 6px; font: inherit; font-size: 12px; }
     #page { font-size: 12px; line-height: 1.6; }
     #gw-msg { font-size: 11px; margin-top: 4px; color: #666; }
     h2 { font-size: 12px; margin: 14px 0 4px; color: #666; font-weight: 600; }
@@ -23,6 +23,11 @@
   <h2>게이트웨이 주소</h2>
   <form id="gw">
     <input id="gw-url" type="url" placeholder="http://localhost:8000" aria-label="게이트웨이 주소" spellcheck="false">
+    <button type="submit">저장</button>
+  </form>
+  <h2>접속 키 (회사에서 받은 경우)</h2>
+  <form id="key">
+    <input id="gw-key" type="password" placeholder="gw_..." aria-label="접속 키" autocomplete="off" spellcheck="false">
     <button type="submit">저장</button>
   </form>
   <div id="gw-msg"></div>

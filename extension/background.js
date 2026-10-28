@@ -10,11 +10,17 @@ async function gatewayUrl() {
   return String(url).replace(/\/+$/, "");
 }
 
+// The access key the company gave out for the extension (popup setting). Only sent to the gateway address, never to the sites.
+async function keyHeaders() {
+  const { gatewayKey } = await chrome.storage.local.get({ gatewayKey: "" });
+  return gatewayKey ? { "X-Gateway-Key": gatewayKey } : {};
+}
+
 async function call(path, body) {
   try {
     const r = await fetch((await gatewayUrl()) + path, {
       method: body ? "POST" : "GET",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await keyHeaders()) },
       body: body ? JSON.stringify(body) : undefined,
     });
     return { ok: r.ok, status: r.status, data: await r.json() };
@@ -58,12 +64,22 @@ async function restore(text, tabId) {
   return call("/v1/restore", { vault_id: vaultId, text });
 }
 
+// Reachable? Does it want a key, and is ours accepted? (/v1/restore with an unknown vault answers 404 once the key is fine.)
+async function status() {
+  const health = await call("/health");
+  if (!health.ok) return health;
+  const cfg = await call("/v1/config");
+  if (!cfg.ok || !cfg.data.caller_auth) return { ...health, keyRequired: false };
+  const probe = await call("/v1/restore", { vault_id: "probe", text: "" });
+  return { ...health, keyRequired: true, keyOk: probe.status !== 401 };
+}
+
 async function handle(msg, tabId, site) {
   switch (msg.type) {
     case "sanitize": return sanitize(msg.text, tabId, site);
     case "restore": return restore(msg.text, tabId);
     case "industries": return call("/v1/industries");
-    case "status": return call("/health");
+    case "status": return status();
   }
 }
 

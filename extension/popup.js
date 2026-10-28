@@ -60,6 +60,13 @@ async function showPage() {
   }
 }
 
+async function saveKey(e) {
+  e.preventDefault();
+  await chrome.storage.local.set({ gatewayKey: $("gw-key").value.trim() });
+  $("gw-msg").textContent = "저장했어요";
+  location.reload();
+}
+
 async function init() {
   const settings = await chrome.storage.local.get(DEFAULTS);
   $("enabled").checked = settings.enabled;
@@ -70,11 +77,18 @@ async function init() {
   const { gatewayUrl } = await chrome.storage.local.get({ gatewayUrl: DEFAULT_GATEWAY });
   $("gw-url").value = gatewayUrl;
   $("gw").addEventListener("submit", saveGateway);
+  $("key").addEventListener("submit", saveKey);
+  $("gw-key").value = (await chrome.storage.local.get({ gatewayKey: "" })).gatewayKey;
 
   const health = await chrome.runtime.sendMessage({ type: "status" });
   const status = $("status");
-  status.textContent = health.ok ? "게이트웨이 연결됨" : `게이트웨이에 연결할 수 없음 (${gatewayUrl})`;
-  status.className = health.ok ? "ok" : "bad";
+  const keyBad = health.ok && health.keyRequired && !health.keyOk;
+  status.textContent = !health.ok
+    ? `게이트웨이에 연결할 수 없음 (${gatewayUrl})`
+    : keyBad
+      ? "연결은 되지만 접속 키가 없거나 맞지 않아요 (전송이 막혀요)"
+      : "게이트웨이 연결됨";
+  status.className = health.ok && !keyBad ? "ok" : "bad";
 
   showPage();
 

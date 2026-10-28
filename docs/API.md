@@ -5,6 +5,22 @@
 
 개발 중에는 `.env`에 `UPSTREAM_MODE=mock`을 넣으세요. API 키 없이 "가린 프롬프트를 그대로 되돌려주는" 가짜 LLM이 답합니다.
 
+## 0. 접속 키 (누가 게이트웨이를 쓰나)
+
+`GATEWAY_API_KEYS`를 설정하면 앱, 확장, 시연 화면은 키를 보내야 합니다. 비워 두면 열려 있습니다(로컬 개발용).
+
+```
+GATEWAY_API_KEYS="hr-app:gw_aaaa...,extension:gw_bbbb..."      # 이름:키, 쉼표로 여러 개
+python -m app.keys hr-app                                       # 새 항목 만들기 (그 줄을 위 값에 붙임)
+```
+
+- 앱은 `Authorization: Bearer gw_...` (OpenAI SDK의 `api_key`에 이 키를 넣으면 됨) 또는 `X-Gateway-Key: gw_...`로 보냅니다. 없거나 틀리면 `401 {"error":{"type":"unauthorized"}}`입니다.
+- 키가 필요한 곳은 `POST /v1/chat/completions`, `POST /v1/sanitize`, `POST /v1/restore`입니다. `/health`, `/v1/config`, `/v1/industries`, `/v1/rules/builtin`, `POST /v1/analyze`(저장·전송 없는 미리보기)는 열려 있습니다. 관리자 쪽(`/v1/policy`, `/v1/stats` 등)은 `GATEWAY_ADMIN_TOKEN`으로 따로 막고, 앱 키로는 열리지 않습니다.
+- **이 키는 게이트웨이용입니다. 모델 제공자에게는 보내지 않습니다.** 키를 켜면 앱이 보낸 Authorization은 버리고, 서버의 `UPSTREAM_API_KEY`로 모델을 부릅니다. (`UPSTREAM_API_KEY`가 없으면 모델이 거절합니다.)
+- 감사 기록에는 키의 이름이 `caller`로 남습니다 (콘솔 기록의 "사용자" 칸). 클라이언트가 보내는 `site`·`client`와 달리 서버가 정한 값이라 믿어도 됩니다.
+- 키를 없애려면 항목을 지우고 다시 배포합니다. 바꾸려면 새 키를 먼저 추가하고, 앱을 옮긴 뒤 옛 키를 지웁니다.
+- 아직 없는 것: 키별 사용량 한도, 요청 횟수 제한. 키가 새면 제한 없이 쓸 수 있으니 한도는 모델 제공자 쪽에서도 걸어 두세요.
+
 ## 1. 채팅 프록시 `POST /v1/chat/completions`
 
 OpenAI 호환입니다. 요청 본문은 OpenAI chat.completions와 같습니다 (텍스트 대화만 지원).

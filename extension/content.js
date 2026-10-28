@@ -131,11 +131,13 @@ async function guardedSend(event, box) {
     }
     if (!res.ok) {
       // Fail closed: if the gateway is down or says block, nothing is sent.
-      seen.last = res.status === 403 ? "차단했어요 (민감정보 포함)" : "게이트웨이에 연결할 수 없어 막았어요";
+      seen.last = res.status === 403 ? "차단했어요 (민감정보 포함)" : res.status === 401 ? "접속 키가 없거나 맞지 않아 막았어요" : "게이트웨이에 연결할 수 없어 막았어요";
       alert(
         res.status === 403
           ? "게이트웨이가 이 프롬프트를 차단했습니다 (민감정보 포함)."
-          : "게이트웨이에 연결할 수 없어 전송을 막았습니다."
+          : res.status === 401
+            ? "게이트웨이 접속 키가 없거나 맞지 않아 전송을 막았습니다. 확장 팝업에서 접속 키를 확인하세요."
+            : "게이트웨이에 연결할 수 없어 전송을 막았습니다."
       );
       return;
     }

@@ -3,12 +3,15 @@
 Goes through /v1/sanitize only, so nothing is ever forwarded to an LLM, whatever UPSTREAM_MODE says.
 Every value below is fake. The requests land in the real audit database (data/audit.db): delete that file to start clean.
 """
+import os
 import sys
 import time
 
 import httpx
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000").rstrip("/")
+# Needed only when the gateway has GATEWAY_API_KEYS set: GATEWAY_KEY=gw_...
+KEY_HEADERS = {"Authorization": f"Bearer {os.environ['GATEWAY_KEY']}"} if os.getenv("GATEWAY_KEY") else {}
 
 # (text, industries, site)
 DEMO = [
@@ -48,8 +51,11 @@ def main() -> None:
         r = httpx.post(
             BASE + "/v1/sanitize",
             json={"text": text, "industries": industries, "site": site, "client": "demo-seed"},
+            headers=KEY_HEADERS,
             timeout=10,
         )
+        if r.status_code == 401:
+            sys.exit("게이트웨이에 접속 키가 필요합니다. GATEWAY_KEY=gw_... 를 설정하고 다시 실행하세요.")
         counts["차단" if r.status_code == 403 else "통과/가림"] += 1
     print(f"데모 요청 {len(DEMO)}건을 보냈습니다: {counts}")
 

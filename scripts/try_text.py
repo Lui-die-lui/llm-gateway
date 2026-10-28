@@ -12,6 +12,8 @@ import sys
 import httpx
 
 BASE = os.getenv("GATEWAY_URL", "http://localhost:8000").rstrip("/")
+# Needed only when the gateway has GATEWAY_API_KEYS set: GATEWAY_KEY=gw_...
+KEY_HEADERS = {"Authorization": f"Bearer {os.environ['GATEWAY_KEY']}"} if os.getenv("GATEWAY_KEY") else {}
 
 
 def main() -> None:
@@ -19,7 +21,7 @@ def main() -> None:
         sys.exit(__doc__)
     text, industries = sys.argv[1], sys.argv[2:]
     try:
-        r = httpx.post(f"{BASE}/v1/sanitize", json={"text": text, "industries": industries, "client": "try_text"}, timeout=10)
+        r = httpx.post(f"{BASE}/v1/sanitize", json={"text": text, "industries": industries, "client": "try_text"}, headers=KEY_HEADERS, timeout=10)
     except httpx.HTTPError:
         sys.exit(f"게이트웨이({BASE})에 연결하지 못했습니다. dev.bat으로 먼저 켜 주세요.")
     body = r.json()

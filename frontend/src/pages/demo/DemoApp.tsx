@@ -34,6 +34,14 @@ interface Exchange {
 }
 
 const PLACEHOLDER = /(\[[^[\]\s]+_\d+\])/;
+const KEY_STORE = 'gw.demo.key';
+const readKey = () => {
+  try {
+    return sessionStorage.getItem(KEY_STORE) ?? '';
+  } catch {
+    return '';
+  }
+};
 
 /** The text with every [유형_n] placeholder highlighted. */
 function Marked({ text }: { text: string }) {
@@ -54,6 +62,7 @@ export function DemoPage() {
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<Exchange[]>([]);
+  const [key, setKey] = useState(readKey); // only asked for when the gateway has keys on; kept for this tab only
 
   async function send() {
     const body = text.trim();
@@ -64,7 +73,11 @@ export function DemoPage() {
       ex.sent = await gateway.analyze({ text: body, industries: picked });
       const res = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(picked.length ? { 'X-Gateway-Industry': picked.join(',') } : {}) },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(picked.length ? { 'X-Gateway-Industry': picked.join(',') } : {}),
+          ...(key ? { Authorization: `Bearer ${key}` } : {}),
+        },
         body: JSON.stringify({ model: 'demo', messages: [{ role: 'user', content: body }] }),
       });
       const data = await res.json().catch(() => ({}));
@@ -72,6 +85,9 @@ export function DemoPage() {
         ex.reply = data.choices?.[0]?.message?.content ?? '';
         ex.redacted = res.headers.get('X-Gateway-Redacted');
         ex.route = res.headers.get('X-Gateway-Route');
+      } else if (res.status === 401) {
+        ex.outcome = 'error';
+        ex.message = '접속 키가 없거나 맞지 않아요. 위 칸에 사내 앱에 발급된 키를 넣어 주세요.';
       } else if (res.status === 403) {
         ex.outcome = 'blocked';
         ex.findings = data.error?.findings;
@@ -114,6 +130,26 @@ export function DemoPage() {
       )}
 
       <section className="card demo-form" aria-label="보내기">
+        {config.data?.caller_auth && (
+          <label className="demo-key">
+            <span className="lbl">접속 키 (이 게이트웨이는 키가 있어야 써요)</span>
+            <input
+              className="in"
+              type="password"
+              autoComplete="off"
+              value={key}
+              placeholder="gw_..."
+              onChange={(e) => {
+                setKey(e.target.value);
+                try {
+                  sessionStorage.setItem(KEY_STORE, e.target.value);
+                } catch {
+                  /* not remembered */
+                }
+              }}
+            />
+          </label>
+        )}
         <div className="lbl">쓸 업종 (사내 앱이 헤더로 알려 줘요)</div>
         <div className="demo-chips" role="group" aria-label="업종">
           {(industries.data ?? []).map((i) => (
@@ -195,7 +231,7 @@ export function DemoPage() {
 
       <section className="card demo-code" aria-label="사내 앱 코드">
         <div className="lbl">사내 앱 쪽에서 바꾸는 것</div>
-        <pre className="mono">{`client = OpenAI(base_url="${shownBase}/v1", api_key="...")   # 이 한 줄만 바뀝니다
+        <pre className="mono">{`client = OpenAI(base_url="${shownBase}/v1", api_key="gw_...")   # 바뀌는 건 이 한 줄(주소와 발급받은 키)
 client.chat.completions.create(
     model="...",
     messages=[{"role": "user", "content": "..."}],

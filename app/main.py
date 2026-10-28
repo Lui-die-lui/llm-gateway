@@ -37,6 +37,14 @@ if not os.getenv("GATEWAY_ADMIN_TOKEN"):
     logging.getLogger("uvicorn.error").warning(
         "GATEWAY_ADMIN_TOKEN is not set: stats, audit log and policy endpoints are open to anyone who can reach this server."
     )
+if not os.getenv("GATEWAY_API_KEYS"):
+    logging.getLogger("uvicorn.error").warning(
+        "GATEWAY_API_KEYS is not set: anyone who can reach this server can use the gateway (and the model behind it)."
+    )
+elif os.getenv("UPSTREAM_MODE") != "mock" and not os.getenv("UPSTREAM_API_KEY") and not os.getenv("INTERNAL_MODEL"):
+    logging.getLogger("uvicorn.error").warning(
+        "GATEWAY_API_KEYS is set but UPSTREAM_API_KEY is not: callers' keys are not forwarded, so the model provider will refuse."
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("GATEWAY_CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(","),
@@ -78,6 +86,44 @@ def validation_error(_request: Request, exc: RequestValidationError) -> JSONResp
     return error(422, "invalid_request", message=message)
 
 
+class CallerKeyRequired(Exception):
+    pass
+
+
+@app.exception_handler(CallerKeyRequired)
+def caller_key_required(_request: Request, _exc: CallerKeyRequired) -> JSONResponse:
+    resp = error(401, "unauthorized", message="API key required: Authorization: Bearer <key> (or X-Gateway-Key)")
+    resp.headers["WWW-Authenticate"] = "Bearer"
+    return resp
+
+
+def api_keys() -> dict[str, str]:
+    """GATEWAY_API_KEYS="hr-app:gw_abc,extension:gw_xyz" -> {key: name}. Unset = open (local development)."""
+    keys = {}
+    for item in os.getenv("GATEWAY_API_KEYS", "").split(","):
+        name, _, key = item.strip().partition(":")
+        if name and key:
+            keys[key] = name
+    return keys
+
+
+def require_caller(
+    authorization: str | None = Header(default=None), x_gateway_key: str | None = Header(default=None)
+) -> str | None:
+    """Apps, the extension and the demo page must present a key to use the gateway. Returns the key's name for the audit log.
+    The key is for this gateway only: it is never forwarded to the model provider."""
+    keys = api_keys()
+    if not keys:
+        return None
+    bearer = authorization[7:].strip() if authorization and authorization[:7].lower() == "bearer " else None
+    for supplied in (x_gateway_key, bearer):
+        if supplied:
+            for key, name in keys.items():
+                if secrets.compare_digest(supplied.encode(), key.encode()):
+                    return name
+    raise CallerKeyRequired
+
+
 def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
     """Stats / admin endpoints. Open when GATEWAY_ADMIN_TOKEN is unset (local dev), token-gated otherwise."""
     token = os.getenv("GATEWAY_ADMIN_TOKEN")
@@ -117,6 +163,7 @@ def config():
         "local_llm_detector": llm_detector.enabled(),
         "streaming": True,
         "admin_protected": bool(os.getenv("GATEWAY_ADMIN_TOKEN")),
+        "caller_auth": bool(api_keys()),
     }
 
 
@@ -170,6 +217,7 @@ def sse(obj: dict) -> str:
 @app.post("/v1/chat/completions")
 async def chat_completions(
     request: Request,
+    caller: str | None = Depends(require_caller),
     authorization: str | None = Header(default=None),
     x_gateway_industry: str | None = Header(default=None),
     x_gateway_use_case: str | None = Header(default=None),
@@ -190,6 +238,8 @@ async def chat_completions(
     if unknown:
         return error(400, "unknown_industry", message=", ".join(unknown))
 
+    # With gateway keys on, the Authorization header is the gateway key: the provider is called with the server's own key.
+    authorization = None if api_keys() else authorization
     streaming = bool(payload.get("stream"))
     vault = Vault()
     messages, matches, route = await run_in_threadpool(
@@ -208,6 +258,7 @@ async def chat_completions(
             latency_ms=int((time.monotonic() - t0) * 1000),
             site=x_gateway_site,
             client=x_gateway_client,
+            caller=caller,
             request_matches=matches,
             response_matches=response_matches,
         )
@@ -318,7 +369,7 @@ class RestoreIn(BaseModel):
 
 
 @app.post("/v1/sanitize")
-def sanitize(body: SanitizeIn):
+def sanitize(body: SanitizeIn, caller: str | None = Depends(require_caller)):
     """Browser extension etc.: mask text, keep the mapping here (in memory, 30 min)."""
     t0 = time.monotonic()
     templates, unknown = pick_industries(body.industries, body.use_case, body.flow)
@@ -341,6 +392,7 @@ def sanitize(body: SanitizeIn):
         latency_ms=int((time.monotonic() - t0) * 1000),
         site=body.site,
         client=body.client,
+        caller=caller,
         request_matches=matches,
     )
     if route == "block":
@@ -349,7 +401,7 @@ def sanitize(body: SanitizeIn):
 
 
 @app.post("/v1/restore")
-def restore(body: RestoreIn):
+def restore(body: RestoreIn, _caller: str | None = Depends(require_caller)):
     vault = sessions.get(body.vault_id)
     if vault is None:
         return error(404, "unknown_vault")

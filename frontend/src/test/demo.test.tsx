@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { Providers, makeQueryClient } from '../app/Providers';
 import { routes } from '../app/router';
 
-function renderDemo(chat: (body: { messages: { content: string }[] }, headers: Headers) => Response) {
+function renderDemo(chat: (body: { messages: { content: string }[] }, headers: Headers) => Response, caller_auth = false) {
   const calls: { url: string; headers: Headers }[] = [];
   vi.stubGlobal(
     'fetch',
@@ -17,7 +17,7 @@ function renderDemo(chat: (body: { messages: { content: string }[] }, headers: H
         return new Response(JSON.stringify({ sanitized: '고객 [사람_1] 메일 [이메일_1]', route: 'external', spans: [], findings: { 사람: 1, 이메일: 1 } }), { status: 200 });
       }
       if (url.includes('/v1/industries')) return new Response(JSON.stringify([{ industry: 'cosmetics', entities: [], applies_to: null, test_cases: 1 }]), { status: 200 });
-      if (url.includes('/v1/config')) return new Response(JSON.stringify({ provider: 'openai', mock: true }), { status: 200 });
+      if (url.includes('/v1/config')) return new Response(JSON.stringify({ provider: 'openai', mock: true, caller_auth }), { status: 200 });
       return new Response('{}', { status: 200 });
     }),
   );
@@ -54,5 +54,26 @@ describe('사내 앱 시연', () => {
     expect(await screen.findByText(/차단됐어요\. 보내면 안 되는 정보\(시크릿\)/)).toBeInTheDocument();
     expect(screen.getByText('전송 안 됨')).toBeInTheDocument();
     expect(screen.getByText('받은 답이 없어요.')).toBeInTheDocument();
+  });
+});
+
+describe('접속 키', () => {
+  it('asks for a key only when the gateway wants one, and sends it as a Bearer token', async () => {
+    const user = userEvent.setup();
+    const calls = renderDemo(() => new Response(JSON.stringify({ choices: [{ message: { content: '답' } }] }), { status: 200 }), true);
+    await user.type(await screen.findByPlaceholderText('gw_...'), 'gw_demo');
+    await user.type(screen.getByLabelText('LLM에게 시킬 일'), '안녕');
+    await user.click(screen.getByRole('button', { name: '보내기' }));
+    await screen.findByLabelText('주고받은 내용');
+    expect(calls.find((c) => c.url.includes('/v1/chat/completions'))?.headers.get('Authorization')).toBe('Bearer gw_demo');
+  });
+
+  it('shows no key box when the gateway is open, and explains a 401', async () => {
+    const user = userEvent.setup();
+    renderDemo(() => new Response(JSON.stringify({ error: { type: 'unauthorized' } }), { status: 401 }));
+    await user.type(await screen.findByLabelText('LLM에게 시킬 일'), '안녕');
+    expect(screen.queryByPlaceholderText('gw_...')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '보내기' }));
+    expect(await screen.findByText(/접속 키가 없거나 맞지 않아요/)).toBeInTheDocument();
   });
 });
