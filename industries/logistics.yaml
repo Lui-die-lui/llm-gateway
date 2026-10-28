@@ -1,0 +1,96 @@
+# 물류/해운/공급망 템플릿. 스키마: app/taxonomy.py, 가이드: docs/TAXONOMY.md
+# 검사 명령: python -m app.check_templates
+industry: logistics
+entities:
+  - id: bl_number                # 선하증권(B/L) 번호, 화물관리번호
+    label: 선하증권번호
+    detection:
+      # Capture group 1 = 번호 값만. 영문 대문자 4자리 + 영숫자 8~12자리.
+      patterns: ['(?:선하증권(?:번호)?|화물관리번호|B/?L\s*(?:No\.?|번호)?|BL\s*(?:No\.?|번호)?)\s*[:：]?\s*([A-Z]{4}[A-Z0-9]{8,12})']
+    sensitivity: high
+    action: redact
+    regulation: ['관세법', '영업비밀보호법']
+
+  - id: container_number         # ISO 6346 컨테이너 번호
+    label: 컨테이너번호
+    detection:
+      # 소유주코드 3글자 + U/J/Z + 일련번호 6자리 + 체크디지트 1자리.
+      patterns: ['(?<![A-Z0-9])([A-Z]{3}[UJZ]\d{7})(?![A-Z0-9])']
+      context_keywords: ['컨테이너', 'Container', 'CNTR', '선적', '하역', '반입', '반출']
+    sensitivity: medium
+    action: redact
+    regulation: ['관세법']
+
+  - id: customs_code             # 개인통관고유부호 (P + 숫자 12자리)
+    label: 통관고유부호
+    detection:
+      patterns: ['(?<![A-Z0-9])(P\d{12})(?![A-Z0-9])']
+      context_keywords: ['통관', '통관부호', '통관고유부호', '수입신고', '관세청']
+    sensitivity: critical
+    action: redact
+    regulation: ['관세법', '개인정보보호법']
+
+  - id: freight_rate             # 선사/포워더 계약 운임 단가 (영업기밀)
+    label: 운임단가
+    detection:
+      # Capture group 1 = 금액만. 키워드 바로 뒤의 달러/USD/원 금액.
+      patterns: ['(?:계약운임|해상운임|항공운임|내륙운임|포워딩\s*단가|운임단가|운임)\s*[:：]?\s*(\d[\d,]*(?:\.\d+)?\s*(?:달러|USD|만원|원))']
+      ner_hint: "선사 또는 포워더와의 계약 운임 단가"
+    sensitivity: critical
+    action: internal_only
+    regulation: ['영업비밀보호법']
+
+  - id: warehouse_location       # 물류센터 랙/빈(Rack/Bin) 로케이션
+    label: 창고로케이션
+    detection:
+      # Capture group 1 = 위치 코드만. 예: A-04-12-B, B02-15-03
+      patterns: ['(?:로케이션|보관위치|창고위치|랙위치|빈위치)\s*[:：]?\s*([A-Z]\d{0,2}(?:[-/][A-Z0-9]{1,4}){2,3})']
+    sensitivity: medium
+    action: redact
+    regulation: ['영업비밀보호법']
+
+applies_to:
+  use_cases: [document_summary, translation]
+  flow: internal_db_to_llm
+
+tests:
+  # ---- 양성: 템플릿이 있어야만 잡히는 실무 문장 ----
+  - text: "선하증권번호: KOSL20240315A001 조회 요청"
+    detect: ["KOSL20240315A001"]
+  - text: "B/L No. MAEU240815001234 화물 추적"
+    detect: ["MAEU240815001234"]
+  - text: "컨테이너 MSCU1234567 선적 완료 보고"
+    detect: ["MSCU1234567"]
+  - text: "CNTR HDMU7654321 하역 일정 공유"
+    detect: ["HDMU7654321"]
+  - text: "통관고유부호 P240012345678 수입신고 접수"
+    detect: ["P240012345678"]
+  - text: "계약운임: 1,850달러, 해상운임 2,400 USD 확정"
+    detect: ["1,850달러", "2,400 USD"]
+  - text: "포워딩 단가: 85만원 견적 회신"
+    detect: ["85만원"]
+  - text: "로케이션: A-04-12-B 피킹 지시"
+    detect: ["A-04-12-B"]
+  - text: "보관위치 B02-15-03 재고 실사"
+    detect: ["B02-15-03"]
+  # ---- 음성: 숫자는 비슷하지만 키워드 없거나 값 없음 -> 건드리면 안 됨 ----
+  - text: "회의 코드 KOSL20240315A001 공유"
+    detect: []
+  - text: "시리얼 MSCU1234567 장비 등록"
+    detect: []
+  - text: "프로모션코드 P240012345678 이벤트 안내"
+    detect: []
+  - text: "점심 식비 12,000원 정산 요청"
+    detect: []
+  - text: "좌석 A-04-12-B 배정 완료"
+    detect: []
+  - text: "선하증권 서류 검토 요청"
+    detect: []
+  - text: "컨테이너 점검 일정 공유"
+    detect: []
+  - text: "통관 절차 안내 자료"
+    detect: []
+  - text: "운임 협상 미팅 일정"
+    detect: []
+  - text: "보관위치 확인 요청"
+    detect: []
