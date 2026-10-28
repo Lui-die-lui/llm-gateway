@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
@@ -453,3 +453,26 @@ def audit_events(
     """Newest first. `since` (inclusive) / `until` (exclusive) are unix seconds. Total matches: X-Total-Count header."""
     rows, total = audit.events(limit, offset, label, status, since, until, site, client)
     return JSONResponse(rows, headers={"X-Total-Count": str(total)})
+
+
+# ---------------------------------------------------------------- the console, served from here (optional)
+
+def mount_console(application: FastAPI, directory: Path) -> None:
+    """Serve the built console (frontend/dist) from this server, so a single deployment hosts both.
+
+    Registered last: every API route above wins. The console uses browser routing, so any other path gets index.html.
+    """
+    root = directory.resolve()
+
+    @application.get("/{path:path}", include_in_schema=False)
+    def console(path: str):
+        if path == "v1" or path.startswith("v1/"):
+            return error(404, "not_found", message="no such endpoint")
+        target = (root / path).resolve()
+        if path and target.is_file() and root in target.parents:
+            return FileResponse(target)
+        return FileResponse(root / "index.html")
+
+
+if (_console := os.getenv("CONSOLE_DIR")) and (Path(_console) / "index.html").is_file():
+    mount_console(app, Path(_console))
