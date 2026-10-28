@@ -1,7 +1,7 @@
 // Shapes returned by the gateway (docs/API.md). Only metadata; no prompt text or original values ever.
 
 export type Direction = 'request' | 'response';
-export type Action = 'redact' | 'block' | 'internal_only';
+export type Action = 'redact' | 'block' | 'internal_only' | 'log'; // log: let it through, record it
 export type AuditStatus = 'ok' | 'blocked' | 'response_blocked' | 'upstream_error';
 export type Route = 'external' | 'internal' | 'block';
 
@@ -20,12 +20,15 @@ export interface StatsSummary {
   findings: Finding[];
   redacted_items: number;
   response_redacted_items: number;
+  redacted_requests: number; // requests with at least one masked item
+  latency_p95_ms: number | null;
 }
 
 export interface TimeseriesPoint {
   bucket: string; // ISO, UTC
   requests: number;
   blocked: number;
+  redacted_requests: number;
   redacted_items: number;
 }
 
@@ -40,6 +43,8 @@ export interface AuditEvent {
   use_case: string | null;
   stream: number | boolean;
   latency_ms: number | null;
+  site: string | null;
+  client: string | null;
   findings: Finding[];
 }
 
@@ -86,6 +91,7 @@ export interface AnalyzeRequest {
   industries?: string[];
   use_case?: string | null;
   flow?: string | null;
+  use_draft?: boolean; // also apply the policy draft that is not applied yet
 }
 
 export interface AnalyzeSpan {
@@ -110,4 +116,20 @@ export interface GatewayConfig {
   local_llm_detector: boolean;
   streaming: boolean;
   admin_protected: boolean;
+}
+
+export interface BuiltinRule {
+  id: string;
+  name: string;
+  desc: string;
+  example: string;
+  labels: string[];
+  action: Action;
+}
+
+export interface BuiltinGroup {
+  id: 'basic' | 'secret';
+  name: string;
+  desc: string;
+  rules: BuiltinRule[];
 }

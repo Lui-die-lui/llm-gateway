@@ -67,7 +67,7 @@ export function toApiError(status: number, body: unknown): ApiError {
 }
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   query?: Record<string, string | number | undefined | null>;
   body?: unknown;
   signal?: AbortSignal;

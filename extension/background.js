@@ -17,17 +17,24 @@ async function call(path, body) {
   }
 }
 
+// Audit labels only (which site, which extension build); the gateway never sees page content beyond the typed text.
+const CLIENT = `extension/${chrome.runtime.getManifest().version}`;
+const siteOf = (url) => {
+  try { return new URL(url).hostname; } catch { return undefined; }
+};
+
 const vaultKey = (tabId) => `vault:${tabId}`;
 const countKey = (tabId) => `count:${tabId}`;
 
-async function sanitize(text, tabId) {
+async function sanitize(text, tabId, site) {
   const settings = await chrome.storage.local.get(DEFAULTS);
   if (!settings.enabled) return { ok: true, passthrough: true };
   let vaultId = (await chrome.storage.session.get(vaultKey(tabId)))[vaultKey(tabId)];
-  let res = await call("/v1/sanitize", { text, industries: settings.industries, vault_id: vaultId });
+  const body = { text, industries: settings.industries, site, client: CLIENT };
+  let res = await call("/v1/sanitize", { ...body, vault_id: vaultId });
   if (res.status === 404 && vaultId) {
     // The gateway forgot this vault (30 min idle or restart): start a new one.
-    res = await call("/v1/sanitize", { text, industries: settings.industries });
+    res = await call("/v1/sanitize", body);
   }
   if (res.ok) {
     const stored = await chrome.storage.session.get(countKey(tabId));
@@ -44,9 +51,9 @@ async function restore(text, tabId) {
   return call("/v1/restore", { vault_id: vaultId, text });
 }
 
-async function handle(msg, tabId) {
+async function handle(msg, tabId, site) {
   switch (msg.type) {
-    case "sanitize": return sanitize(msg.text, tabId);
+    case "sanitize": return sanitize(msg.text, tabId, site);
     case "restore": return restore(msg.text, tabId);
     case "industries": return call("/v1/industries");
     case "status": return call("/health");
@@ -54,7 +61,7 @@ async function handle(msg, tabId) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
-  handle(msg, sender.tab?.id).then(reply);
+  handle(msg, sender.tab?.id, siteOf(sender.tab?.url)).then(reply);
   return true; // async reply
 });
 

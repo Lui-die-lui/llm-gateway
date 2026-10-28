@@ -96,10 +96,14 @@ def builtin_matches(text: str, only: set[str] | None = None) -> list[Match]:
     return found
 
 
-def taxonomy_matches(text: str, industries: list[Industry]) -> list[Match]:
+def taxonomy_matches(
+    text: str, industries: list[Industry], skip_entities: frozenset[tuple[str, str]] = frozenset()
+) -> list[Match]:
     found: list[Match] = []
     for industry in industries:
         for entity in industry.entities:
+            if (industry.industry, entity.id) in skip_entities:
+                continue
             keywords = entity.detection.context_keywords
             for pattern in entity.detection.patterns:
                 for m in re.finditer(pattern, text):
@@ -117,16 +121,21 @@ def detect(
     industries: list[Industry],
     extra: list[Match] | tuple[Match, ...] = (),
     only: set[str] | None = None,
+    skip_labels: frozenset[str] = frozenset(),
+    skip_entities: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[Match]:
     """Non-overlapping matches sorted by position. On overlap, higher priority then longer wins.
 
     `only` restricts to built-in labels (used for response scanning); `extra` adds matches from other detectors.
+    `skip_labels` / `skip_entities` are the built-in rules and template entities the company has switched off.
     """
     candidates = builtin_matches(text, only)
     if only is None or "시크릿" in only:  # gitleaks-based rules; response scanning gets them through RESPONSE_LABELS
         candidates += secret_rules.secret_matches(text)
+    if skip_labels:
+        candidates = [c for c in candidates if c.label not in skip_labels]
     if only is None:
-        candidates += taxonomy_matches(text, industries) + list(extra)
+        candidates += taxonomy_matches(text, industries, skip_entities) + list(extra)
     candidates.sort(key=lambda m: (-m.priority, -(m.end - m.start), m.start))
     chosen: list[Match] = []
     for c in candidates:

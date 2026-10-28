@@ -1,8 +1,19 @@
-// Console features the gateway does not serve yet. Pages call these like any other api; today they resolve
-// against src/mocks. Swapping one for a real endpoint means changing only the body of that function.
+// Console features. Pages call these like any other api. The company policy (custom rules, built-in switches) is real:
+// it is stored and enforced by the gateway. Everything else still resolves against src/mocks (the gateway has no
+// users, sessions, exceptions or settings yet); swapping one for a real endpoint means changing only that function's body.
 import * as mock from '../mocks/db';
-import { ApiError } from './client';
-import type { Decision, MemberStatus, RuleDraft, Settings, Ttl } from './consoleTypes';
+import { ApiError, request } from './client';
+import { gateway } from './gateway';
+import type { BasicRuleState, Decision, MinutePoint, MemberStatus, PolicyRule, PolicyState, RuleDraft, Settings, Ttl } from './consoleTypes';
+
+/** The gateway's policy view, with the "new" flag the editor shows for rules that exist only in the draft. */
+interface ServerPolicy extends Omit<PolicyState, 'rules'> {
+  rules: PolicyRule[];
+}
+const withNewFlag = (p: ServerPolicy): PolicyState => ({
+  ...p,
+  rules: p.rules.map((r) => ({ ...r, isNew: p.pending.some((x) => x.ruleId === r.id && x.note.endsWith('규칙 새로 만듦')) })),
+});
 
 const LATENCY = import.meta.env.MODE === 'test' ? 0 : 160;
 
@@ -30,14 +41,19 @@ export const consoleApi = {
   setMemberStatus: (id: string, s: MemberStatus) => served(() => mock.setMemberStatus(id, s)),
   regenerateCode: () => served(mock.regenerateCode),
 
-  policy: () => served(mock.getPolicy),
-  toggleRule: (id: string) => served(() => mock.toggleRule(id)),
-  saveRule: (id: string, d: RuleDraft) => served(() => mock.saveRule(id, d)),
-  addRule: (d: RuleDraft) => served(() => mock.addRule(d)),
-  applyPolicy: () => served(mock.applyPolicy),
+  policy: () => request<ServerPolicy>('/v1/policy').then(withNewFlag),
+  toggleRule: (id: string) => request<ServerPolicy>(`/v1/policy/rules/${id}/toggle`, { method: 'POST' }).then(withNewFlag),
+  saveRule: (id: string, d: RuleDraft) => request<ServerPolicy>(`/v1/policy/rules/${id}`, { method: 'PUT', body: d }).then(withNewFlag),
+  addRule: (d: RuleDraft) =>
+    request<{ policy: ServerPolicy; id: string }>('/v1/policy/rules', { method: 'POST', body: d }).then((r) => ({ policy: withNewFlag(r.policy), id: r.id })),
+  deleteRule: (id: string) => request<ServerPolicy>(`/v1/policy/rules/${id}`, { method: 'DELETE' }).then(withNewFlag),
+  applyPolicy: () => request<{ version: number; applied: number }>('/v1/policy/apply', { method: 'POST' }),
 
-  basicRules: (defaults: Record<string, boolean>) => served(() => mock.getBasicRules(defaults)),
-  applyBasicRules: (next: Record<string, boolean>, changed: number) => served(() => mock.applyBasicRules(next, changed)),
+  /** `defaults` fills in rules the gateway has no stored switch for yet (they are on). */
+  basicRules: (defaults: Record<string, boolean>) =>
+    request<BasicRuleState>('/v1/policy/builtin').then((s) => ({ version: s.version, applied: { ...defaults, ...s.applied } })),
+  applyBasicRules: (next: Record<string, boolean>) =>
+    request<BasicRuleState>('/v1/policy/builtin', { method: 'PUT', body: { enabled: next } }),
 
   exceptions: () => served(mock.listExceptions),
   decideException: (id: string, d: Decision, ttl: Ttl, memo: string) => served(() => mock.decideException(id, d, ttl, memo)),
@@ -48,7 +64,18 @@ export const consoleApi = {
   sendSlack: (id: string) => served(() => mock.sendSlack(id)),
   anomalies: () => served(mock.listAnomalies),
   ackAnomaly: (id: string, action: 'ack' | 'primary') => served(() => mock.ackAnomaly(id, action)),
-  minuteSeries: () => served(() => mock.minuteSeries()),
+  /** Real: the gateway's per-minute buckets for the last 60 minutes (empty minutes are 0). */
+  minuteSeries: async (): Promise<MinutePoint[]> => {
+    const nowMin = Math.floor(Date.now() / 60_000);
+    const pts = await gateway.timeseries('minute', (nowMin - 59) * 60);
+    const byMinute = new Map(pts.map((p) => [Math.floor(new Date(p.bucket).getTime() / 60_000), p]));
+    return Array.from({ length: 60 }, (_, i) => {
+      const k = nowMin - 59 + i;
+      const d = new Date(k * 60_000);
+      const p = byMinute.get(k);
+      return { t: `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`, total: p?.requests ?? 0, redact: p?.redacted_requests ?? 0, block: p?.blocked ?? 0 };
+    });
+  },
   deptHeatmap: () => served(mock.deptHeatmap),
   schedules: () => served(mock.schedules),
 

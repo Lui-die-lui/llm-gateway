@@ -40,10 +40,13 @@ def _chat(prompt: str) -> str:
     return resp.json()["message"]["content"]
 
 
-def llm_matches(text: str, industries: list[Industry]) -> list[Match]:
+def llm_matches(text: str, industries: list[Industry], company_targets: tuple[tuple[str, str, str], ...] = ()) -> list[Match]:
+    """`company_targets`: (label, description, action) from the company's "ai" rules."""
     if not enabled() or len(text.strip()) < 2:
         return []
     targets = {"사람": (PERSON_HINT, "redact")}
+    for label, hint, action in company_targets:
+        targets[label] = (hint, action)
     for industry in industries:
         for e in industry.entities:
             if e.detection.ner_hint:

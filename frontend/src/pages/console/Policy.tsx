@@ -9,7 +9,7 @@ import type { PolicyRule, RuleAction, RuleDraft, RuleKind } from '../../api/cons
 import type { AnalyzeResult } from '../../api/types';
 import { Help, Seg, Toggle } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
-import { industryName, useIndustries } from '../../features/catalog';
+import { industryName, useBuiltinGroups, useIndustries } from '../../features/catalog';
 import { useFeedback } from '../../features/feedback';
 import { ACTION_KO, splitByCodepoints } from '../../features/format';
 import { qk, useSettings } from '../../features/queries';
@@ -37,7 +37,6 @@ const ACTION_HELP: Record<RuleAction, string> = {
   block: '보내지 않아요. 직원은 그 부분만 지우거나 예외를 요청할 수 있어요.',
   log: '바꾸지 않고 보내되 몇 번 나왔는지만 기록해요. 새 규칙을 시험할 때 써요.',
 };
-const BUILTINS = ['이름', '전화번호', '이메일', '주민등록번호', '계좌번호', '카드번호', '주소', 'API 키', '비밀번호'];
 const DEPTS = ['전사', '연구소', '영업', '개발', '정보보호팀'];
 const BLANK: RuleDraft = {
   name: '',
@@ -74,12 +73,22 @@ export function PolicyPage() {
   const policy = useQuery({ queryKey: qk.policy, queryFn: consoleApi.policy });
   const settings = useSettings();
   const industries = useIndustries();
+  const BUILTINS = useBuiltinGroups()?.flatMap((g) => g.rules.map((r) => r.name)) ?? [];
 
   const [mode, setMode] = useState<'edit' | 'new'>('edit');
-  const [selId, setSelId] = useState('r50');
+  const [selId, setSelId] = useState('');
   const [draft, setDraft] = useState<RuleDraft>(BLANK);
   const rules = policy.data?.rules ?? [];
   const sel = rules.find((r) => r.id === selId);
+
+  // First visit: select the first rule, or start a new one when the company has none yet.
+  useEffect(() => {
+    if (!policy.data || mode === 'new' || sel) return;
+    const first = rules[0];
+    if (first) setSelId(first.id);
+    else setMode('new');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [policy.data, mode, sel]);
 
   // Load the selected rule into the editor (or a blank one for "새 규칙").
   useEffect(() => {
@@ -116,7 +125,7 @@ export function PolicyPage() {
   const [sample, setSample] = useState(SAMPLE);
   const [tplOn, setTplOn] = useState(true);
   const companyIndustry = settings.data?.industry ?? 'cosmetics';
-  const run = useMutation({ mutationFn: (text: string) => gateway.analyze({ text, industries: tplOn && industries.data?.some((i) => i.industry === companyIndustry) ? [companyIndustry] : [] }) });
+  const run = useMutation({ mutationFn: (text: string) => gateway.analyze({ text, use_draft: true, industries: tplOn && industries.data?.some((i) => i.industry === companyIndustry) ? [companyIndustry] : [] }) });
   const result: AnalyzeResult | undefined = run.data;
   const pieces = useMemo(() => (result && run.variables ? splitByCodepoints(run.variables, result.spans) : []), [result, run.variables]);
 
@@ -130,9 +139,14 @@ export function PolicyPage() {
     if (ok) apply.mutate();
   }
 
+  const remove = useMutation({
+    mutationFn: () => consoleApi.deleteRule(selId),
+    onSuccess: () => (refresh(), setSelId(''), toast('삭제를 변경으로 저장했어요 · 승인해야 적용돼요')),
+    onError: fail,
+  });
   async function onDelete() {
     const ok = await confirm({ title: '규칙 삭제', body: `"${sel?.name}" 규칙을 삭제 변경으로 저장해요. 승인해야 실제로 빠져요.`, ok: '삭제로 저장', danger: true });
-    if (ok) toast('삭제는 규칙 편집 API가 생기면 저장돼요 (지금은 예시)', 'error');
+    if (ok) remove.mutate();
   }
 
   const chipToggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
@@ -386,6 +400,9 @@ export function PolicyPage() {
                 </button>
               ))}
             </div>
+            <span className="t3" style={{ fontSize: 11.5 }}>
+              부서별 적용은 아직 저장만 돼요. 지금은 누가 쓰는지 서버가 몰라서 어느 부서를 골라도 전사에 적용돼요.
+            </span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

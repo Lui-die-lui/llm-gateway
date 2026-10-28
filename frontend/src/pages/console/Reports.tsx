@@ -1,6 +1,6 @@
 // 04 분석 리포트 (Reports.dc.html).
 // Real: totals and daily lines (/v1/stats/*), info-type totals (summary.findings), rule accuracy (/v1/eval),
-//       redaction rate and p95 latency sampled from the latest 500 audit events.
+//       redaction rate and p95 latency from the server (summary); older servers fall back to the latest 500 audit events.
 // Mock: false-positive rate, department heatmap, training candidates + Slack, scheduled reports.
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -101,6 +101,9 @@ export function ReportsPage() {
     return { n: ev.length, redactRate: (red / ev.length) * 100, p95: lat[Math.min(lat.length - 1, Math.floor(lat.length * 0.95))] ?? 0 };
   }, [sample.data, since]);
 
+  const redactRate = s?.requests && s.redacted_requests != null ? (s.redacted_requests / s.requests) * 100 : sampleStats?.redactRate ?? null;
+  const p95 = s?.latency_p95_ms ?? (s?.redacted_requests == null ? sampleStats?.p95 ?? null : null);
+
   const blockTop = (s?.findings ?? []).filter((f) => f.action === 'block').slice(0, 2);
   const blockTotal = (s?.findings ?? []).filter((f) => f.action === 'block').reduce((a, f) => a + f.count, 0);
 
@@ -142,10 +145,10 @@ export function ReportsPage() {
 
   const kpis = [
     { label: '검사한 프롬프트', value: fmt(s?.requests), delta: reqDelta, ds: neutral, note: s ? `하루 평균 ${fmt(Math.round((s.requests / days) * 10) / 10)}` : '…' },
-    { label: '가림률', value: sampleStats ? `${sampleStats.redactRate.toFixed(1)}%` : '—', delta: null, ds: neutral, note: sampleStats ? `1건 이상 가린 전송 비율 · 최근 ${sampleStats.n}건 기준` : '1건 이상 가린 전송 비율' },
+    { label: '가림률', value: redactRate == null ? '—' : `${redactRate.toFixed(1)}%`, delta: null, ds: neutral, note: '1건 이상 가린 전송 비율' },
     { label: '차단률', value: blockRate == null ? '—' : `${blockRate.toFixed(1)}%`, delta: dpct(blockRate, prevBlockRate), ds: blockRate != null && prevBlockRate != null && blockRate <= prevBlockRate ? okStyle : neutral, note: blockTop.length ? blockTop.map((f) => `${f.label} ${Math.round((f.count / (blockTotal || 1)) * 100)}%`).join(' · ') : '차단 없음' },
     { label: '잘못 찾은 비율', value: '3.1%', delta: '-0.9p', ds: okStyle, note: '직원 신고 · 관리자 확인 기준', mock: true },
-    { label: '검사 시간 p95', value: sampleStats ? `${Math.round(sampleStats.p95)}ms` : '—', delta: null, ds: neutral, note: '목표 80ms 이내 · 외부 LLM 시간 포함' },
+    { label: '검사 시간 p95', value: p95 == null ? '—' : `${Math.round(p95)}ms`, delta: null, ds: neutral, note: '목표 80ms 이내 · 외부 LLM 시간 포함' },
   ];
 
   const slackOn = settings.data?.slackConnected ?? true;

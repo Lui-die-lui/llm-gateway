@@ -14,6 +14,7 @@ OpenAI 호환입니다. 요청 본문은 OpenAI chat.completions와 같습니다
 | `X-Gateway-Industry` | 적용할 산업 템플릿. 쉼표로 여러 개 (`cosmetics,medical`). 생략하면 기본 PII 규칙만 |
 | `X-Gateway-Use-Case` | 활용처 (`translation` 등). 템플릿의 `applies_to.use_cases`에 없으면 그 템플릿은 건너뜀 |
 | `X-Gateway-Flow` | 데이터 흐름. 템플릿의 `applies_to.flow`와 다르면 건너뜀 |
+| `X-Gateway-Site` · `X-Gateway-Client` | 감사 기록에만 남는 꼬리표 (예: `chatgpt.com`, `extension/0.3.0`). 100자까지만 저장 |
 | `X-Admin-Token` | 이 엔드포인트에는 필요 없음 |
 
 | 응답 헤더 | 설명 |
@@ -75,8 +76,8 @@ const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
 
 ## 4. 대시보드용 통계 (메타데이터만)
 
-`GATEWAY_ADMIN_TOKEN`이 설정되어 있으면 `X-Admin-Token` 헤더가 필요하고, 없으면 401입니다. 비어 있으면 열려 있습니다.
-`since`는 유닉스 초이고 생략하면 전체 기간입니다.
+`GATEWAY_ADMIN_TOKEN`이 설정되어 있으면 `X-Admin-Token` 헤더가 필요하고, 없으면 401이고, 본문은 다른 오류와 같은 `{"error":{"type":"unauthorized","message":...}}` 모양입니다. 비어 있으면 열려 있습니다.
+`since`·`until`은 유닉스 초이고 생략하면 전체 기간입니다.
 
 **`GET /v1/stats/summary?since=`**
 
@@ -87,20 +88,58 @@ const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   "by_route": {"external": 110, "internal": 6, "block": 4},
   "by_industry": {"cosmetics": 70, "(none)": 50},
   "findings": [{"direction": "request", "label": "조성비", "action": "redact", "count": 41}],
+  "redacted_requests": 80,
+  "latency_p95_ms": 412,
   "redacted_items": 96,
   "response_redacted_items": 3
 }
 ```
 
-**`GET /v1/stats/timeseries?bucket=hour|day&since=`** → `[{"bucket":"2026-10-27T09:00:00Z","requests":12,"blocked":1,"redacted_items":9}]` (UTC)
+`redacted_requests`는 가린 항목이 1개 이상인 요청 수(`redacted_items`는 가린 항목 수), `latency_p95_ms`는 전체 요청의 95번째 백분위 지연(요청이 없으면 `null`)입니다.
 
-**`GET /v1/audit/events?limit=50&offset=0&label=이메일&status=blocked`** → 최근 요청 목록(최신순, 최대 500). 각 항목: `id, ts, endpoint, provider, route, status, industries, use_case, stream, latency_ms, findings[]`. 프롬프트 내용과 값은 저장하지 않습니다.
+**`GET /v1/stats/timeseries?bucket=minute|hour|day&since=&tz_offset=`** → `[{"bucket":"2026-10-27T09:00:00Z","requests":12,"blocked":1,"redacted_requests":7,"redacted_items":9}]`
+
+`tz_offset`은 UTC보다 몇 분 빠른지입니다 (한국 `540`, 범위 -840~840). 주면 버킷이 그 시계 기준으로 나뉘고 이름에 오프셋이 붙습니다 (`"2026-10-27T00:00:00+09:00"`). 생략하면 UTC (`...Z`)입니다. 기간 전체에 같은 오프셋을 쓰므로 서머타임은 반영하지 않습니다.
+
+**`GET /v1/audit/events?limit=50&offset=0&label=이메일&status=blocked&since=&until=&site=&client=`** → 최근 요청 목록(최신순, 최대 500). 각 항목: `id, ts, endpoint, provider, route, status, industries, use_case, stream, latency_ms, site, client, findings[]`. 프롬프트 내용과 값은 저장하지 않습니다.
+
+필터에 맞는 전체 건수는 응답 헤더 `X-Total-Count`에 있습니다 (`limit`·`offset`과 무관). `since`는 포함, `until`은 미포함입니다. `site`·`client`는 정확히 같은 값만 찾고, 보내지 않은 요청은 `null`입니다.
 
 `status`는 `ok`, `blocked`(요청 차단), `response_blocked`(응답 차단), `upstream_error` 중 하나입니다.
 
+## 4-2. 회사 정책 (콘솔에서 고치고 실제로 적용됨)
+
+기본 규칙과 템플릿 위에 회사가 직접 규칙을 얹습니다. 고친 내용은 **초안**에만 쌓이고, `apply`를 해야 다음 요청부터 적용됩니다.
+`GATEWAY_ADMIN_TOKEN` 규칙은 4번과 같습니다. 오류는 `{"error":{"type","message"}}` 모양이고, 규칙 내용이 잘못되면 422입니다.
+
+| 호출 | 내용 |
+|---|---|
+| `GET /v1/rules/builtin` | 기본 규칙 목록 `{groups:[{id,name,desc,rules:[{id,name,desc,example,labels,action}]}]}`. 토큰 없이 읽힘 |
+| `GET /v1/policy` | `{version, rules[], pending[]}`. `rules`는 초안, `pending`은 적용 안 된 변경 (`{ruleId, note}`) |
+| `POST /v1/policy/rules` | 규칙 추가 → `{policy, id}` |
+| `PUT /v1/policy/rules/{id}` | 규칙 수정 → 정책 |
+| `POST /v1/policy/rules/{id}/toggle` | 켜고 끄기 → 정책 |
+| `DELETE /v1/policy/rules/{id}` | 삭제 → 정책 |
+| `POST /v1/policy/apply` | 초안을 새 버전으로 적용 → `{version, applied}`. 바뀐 게 없으면 400 |
+| `GET /v1/policy/versions` | 적용한 버전 목록 (최근 50개, 최신순) |
+| `POST /v1/policy/versions/{v}/rollback` | 그 버전의 규칙을 새 버전으로 다시 적용 |
+| `GET /v1/policy/builtin` · `PUT /v1/policy/builtin` | 기본 규칙 · 업종 항목 켜고 끄기. `PUT {enabled:{"b:이메일":false,"i:cosmetics:batch_number":false}}`는 바로 적용 |
+
+규칙 본문: `{name, kind, action, scope, enabled, builtins, words, pattern, ai, tag, options}`
+
+- `kind`: `words`(한 줄에 하나, 글자 그대로), `pattern`(정규식, 그룹이 있으면 1번 그룹이 값, 빈 글자에 맞는 패턴은 거절), `ai`(말로 설명, `LOCAL_LLM_MODEL`이 있을 때만 동작), `builtin`(기본 정보의 처리 방식만 바꿈. `builtins`에 `GET /v1/rules/builtin`의 `name`을 넣음)
+- `action`: `redact` 가림, `block` 차단, `log` 바꾸지 않고 기록만. `log`로 찾은 것은 가림 개수에 안 들어가고 감사 기록에는 `action: "log"`로 남음
+- `tag`: `[프로젝트_n]`처럼 쓰면 자리표시자 이름이 `프로젝트`가 됨. 비우면 규칙명
+- API 키·비밀번호 같은 보안 정보는 `block`보다 낮게 둘 수 없음 (422)
+- `scope`(부서)는 저장만 하고 적용은 전사로 함. 지금은 요청한 사람을 서버가 모르기 때문
+
+기본 규칙을 끄면 요청과 답변 검사 모두에서 빠집니다. 보안 정보는 4개 항목(`s:*`)이 모두 꺼져야 "시크릿" 탐지가 꺼집니다.
+`POST /v1/analyze`에 `use_draft: true`를 주면 아직 적용하지 않은 초안까지 넣고 시험해 볼 수 있습니다.
+정책은 `data/policy.db`(`POLICY_DB`)에 저장되어 서버를 다시 켜도 남습니다.
+
 ## 5. 브라우저 확장 등 직접 LLM을 부르는 클라이언트용
 
-- `POST /v1/sanitize` `{text, industries?, use_case?, flow?, vault_id?}` → `{text, vault_id, findings}`. 차단 대상이면 403. 이어서 보낼 때는 받은 `vault_id`를 같이 보내면 `[이메일_1]` 번호가 이어집니다.
+- `POST /v1/sanitize` `{text, industries?, use_case?, flow?, vault_id?, site?, client?}` → `{text, vault_id, findings}`. 차단 대상이면 403. 이어서 보낼 때는 받은 `vault_id`를 같이 보내면 `[이메일_1]` 번호가 이어집니다.
 - `POST /v1/restore` `{vault_id, text}` → `{text}`. `vault_id`가 없거나 30분이 지났으면 404.
 
 ## 6. 관리

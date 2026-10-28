@@ -10,6 +10,11 @@ function renderAt(path: string) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
+      if (url.includes('/v1/rules/builtin')) {
+        const rule = { id: 'b:이메일', name: '이메일', desc: '메일 주소', example: 'name@example.com', labels: ['이메일'], action: 'redact' };
+        return new Response(JSON.stringify({ groups: [{ id: 'basic', name: '기본 정보', desc: '', rules: [rule] }] }), { status: 200 });
+      }
+      if (url.includes('/v1/policy/builtin')) return new Response(JSON.stringify({ version: 0, applied: {} }), { status: 200 });
       const body = url.includes('/v1/audit/events') || url.includes('/timeseries') || url.includes('/v1/industries') ? [] : url.includes('/summary') ? { requests: 0, by_status: {}, by_route: {}, by_industry: {}, findings: [], redacted_items: 0, response_redacted_items: 0 } : { status: 'ok' };
       return new Response(JSON.stringify(body), { status: 200 });
     }),
