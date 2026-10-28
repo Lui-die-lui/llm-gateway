@@ -4,17 +4,36 @@
 <body>
   <!-- Mimics the parts of ChatGPT's page that content.js touches. Serve extension/ and open /dev/fake-chat.html -->
   <div id="log"></div>
+  <!-- ?textarea=1 swaps the contenteditable for a <textarea>, the other layout content.js has to handle -->
   <div id="prompt-textarea" contenteditable="true" style="border:1px solid #888;min-height:2em"></div>
   <button data-testid="send-button">send</button>
   <pre id="sent"></pre>
   <script src="shim.js"></script>
   <script>
-    const composer = document.getElementById("prompt-textarea");
+    // ?layout=odd: a layout content.js has no selector for (role=textbox, send button known only by its aria-label).
+    // ?layout=nobutton: the same, and a send button with no label at all.
+    const layout = new URLSearchParams(location.search).get("layout");
+    if (layout) {
+      document.getElementById("prompt-textarea").removeAttribute("id");
+      document.querySelector("button").removeAttribute("data-testid");
+      document.querySelector("div[contenteditable]").id = "x1";
+      document.querySelector("div[contenteditable]").setAttribute("role", "textbox");
+      if (layout === "odd") document.querySelector("button").setAttribute("aria-label", "Send message");
+    }
+    let composer = document.querySelector("div[contenteditable], textarea");
+    const useTextarea = new URLSearchParams(location.search).has("textarea");
+    if (useTextarea) {
+      const ta = document.createElement("textarea");
+      ta.id = "prompt-textarea";
+      composer.replaceWith(ta);
+      composer = ta;
+    }
     function send() {
-      const text = composer.innerText.trim();
+      const text = (useTextarea ? composer.value : composer.innerText).trim();
       if (!text) return;
       document.getElementById("sent").textContent = text; // what would leave for the external LLM
-      composer.textContent = "";
+      if (useTextarea) composer.value = "";
+      else composer.textContent = "";
       setTimeout(() => {
         const reply = document.createElement("div");
         reply.dataset.messageAuthorRole = "assistant";

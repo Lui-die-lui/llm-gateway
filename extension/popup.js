@@ -1,5 +1,5 @@
 const DEFAULT_GATEWAY = "http://localhost:8000";
-const DEFAULTS = { enabled: true, industries: [] };
+const DEFAULTS = { enabled: true, industries: [], hint: true };
 const $ = (id) => document.getElementById(id);
 
 // Called from the submit click, so Chrome lets us ask for access to the new origin.
@@ -28,10 +28,44 @@ async function saveGateway(e) {
   location.reload();
 }
 
+// Asks the content script in the active tab what it can see, so "it did nothing" can be told apart from "it does not see this page".
+async function showPage() {
+  const el = $("page");
+  let probe;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    probe = await chrome.tabs.sendMessage(tab.id, { type: "probe" });
+  } catch {
+    probe = null;
+  }
+  if (!probe) {
+    el.textContent = "이 탭에는 확장이 적용되어 있지 않아요. chatgpt.com 또는 claude.ai 탭에서 열어 주세요. 확장을 새로 로드했다면 그 탭을 새로고침해야 해요.";
+    return;
+  }
+  el.textContent = "";
+  const kind = { known: "✓ 찾았어요", guess: "△ 짐작으로 골랐어요", none: "✗ 못 찾았어요" };
+  const lines = [
+    probe.host,
+    `입력창: ${kind[probe.composer]}`,
+    `보내기 버튼: ${kind[probe.send]} (글을 쓰기 전에는 안 보일 수 있어요)`,
+    `답변 영역: ${probe.reply ? "✓ 찾았어요" : "✗ 아직 없어요 (답변이 있어야 보여요)"}`,
+    `가로챈 전송 ${probe.intercepted}번 · ${probe.last}`,
+  ];
+  if (probe.composer !== "known") lines.push(`입력창 후보: ${probe.boxes.join(" / ") || "없음"}`);
+  if (probe.send !== "known") lines.push(`보내기 후보: ${probe.buttons.join(" / ") || "없음"}`);
+  for (const line of lines) {
+    const row = document.createElement("div");
+    row.textContent = line;
+    el.append(row);
+  }
+}
+
 async function init() {
   const settings = await chrome.storage.local.get(DEFAULTS);
   $("enabled").checked = settings.enabled;
   $("enabled").addEventListener("change", (e) => chrome.storage.local.set({ enabled: e.target.checked }));
+  $("hint").checked = settings.hint;
+  $("hint").addEventListener("change", (e) => chrome.storage.local.set({ hint: e.target.checked }));
 
   const { gatewayUrl } = await chrome.storage.local.get({ gatewayUrl: DEFAULT_GATEWAY });
   $("gw-url").value = gatewayUrl;
@@ -41,6 +75,8 @@ async function init() {
   const status = $("status");
   status.textContent = health.ok ? "게이트웨이 연결됨" : `게이트웨이에 연결할 수 없음 (${gatewayUrl})`;
   status.className = health.ok ? "ok" : "bad";
+
+  showPage();
 
   const box = $("industries");
   box.textContent = "";

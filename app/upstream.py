@@ -9,6 +9,7 @@ UPSTREAM_MODE=mock answers locally without any API, for development and tests.
 import json
 import os
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 
 import anthropic
 import httpx
@@ -18,6 +19,21 @@ INTERNAL_DEFAULT_URL = "http://localhost:11434/v1"  # Ollama's OpenAI-compatible
 
 class UpstreamError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class ToolDelta:
+    """One fragment of a streamed tool call (OpenAI shape): the arguments arrive in pieces, the id and name once."""
+
+    index: int
+    id: str | None
+    name: str | None
+    arguments: str
+
+
+def supports_tools(route: str) -> bool:
+    """The Claude adapter converts text only: it would silently drop tool definitions and tool results."""
+    return mock() or route == "internal" or os.getenv("UPSTREAM_PROVIDER", "openai") != "anthropic"
 
 
 def mock() -> bool:
@@ -39,6 +55,16 @@ def _mock_text(payload: dict, route: str) -> str:
     return f"{tag} {_text(payload['messages'][-1].get('content'))}"
 
 
+def _mock_tool_call(payload: dict) -> tuple[str, str] | None:
+    """Mock "agent": when tools are offered and the last message is not a tool result, call the first tool with the
+    user's instruction as its argument (so what the model saw, placeholders included, is what comes back)."""
+    tools = payload.get("tools") or []
+    last = payload["messages"][-1]
+    if not tools or last.get("role") == "tool" or not isinstance(tools[0].get("function"), dict):
+        return None
+    return tools[0]["function"]["name"], json.dumps({"instruction": _text(last.get("content"))}, ensure_ascii=False)
+
+
 def _openai_target(payload: dict, incoming_auth: str | None, route: str) -> tuple[str, dict, dict]:
     if route == "internal":
         base = os.getenv("INTERNAL_BASE_URL", INTERNAL_DEFAULT_URL).rstrip("/")
@@ -58,6 +84,14 @@ async def forward(payload: dict, incoming_auth: str | None, route: str = "extern
     payload = {k: v for k, v in payload.items() if k != "stream"}
     if mock():
         # Offline dev mode: echo the last message so redact/restore can be seen without an API key.
+        call = _mock_tool_call(payload)
+        if call:
+            message = {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{"id": "call_mock_1", "type": "function", "function": {"name": call[0], "arguments": call[1]}}],
+            }
+            return {"choices": [{"index": 0, "message": message, "finish_reason": "tool_calls"}]}
         return {"choices": [{"index": 0, "message": {"role": "assistant", "content": _mock_text(payload, route)}}]}
     if route == "external" and os.getenv("UPSTREAM_PROVIDER", "openai") == "anthropic":
         return await _forward_anthropic(payload)
@@ -71,10 +105,17 @@ async def forward(payload: dict, incoming_auth: str | None, route: str = "extern
     return resp.json()
 
 
-async def stream(payload: dict, incoming_auth: str | None, route: str = "external") -> AsyncIterator[str]:
-    """Yield the answer's text deltas."""
+async def stream(payload: dict, incoming_auth: str | None, route: str = "external") -> AsyncIterator[str | ToolDelta]:
+    """Yield the answer's text deltas, and ToolDelta fragments when the model calls a tool."""
     payload = {k: v for k, v in payload.items() if k != "stream"}
     if mock():
+        call = _mock_tool_call(payload)
+        if call:
+            name, args = call
+            yield ToolDelta(0, "call_mock_1", name, "")
+            for i in range(0, len(args), 5):  # small pieces on purpose: a placeholder can be cut anywhere
+                yield ToolDelta(0, None, None, args[i : i + 5])
+            return
         text = _mock_text(payload, route)
         for i in range(0, len(text), 4):  # small pieces on purpose: exercises boundary handling
             yield text[i : i + 4]
@@ -95,9 +136,12 @@ async def stream(payload: dict, incoming_auth: str | None, route: str = "externa
                     if data == "[DONE]":
                         return
                     choices = json.loads(data).get("choices") or []
-                    delta = choices[0].get("delta", {}).get("content") if choices else None
-                    if delta:
-                        yield delta
+                    delta = choices[0].get("delta", {}) if choices else {}
+                    if delta.get("content"):
+                        yield delta["content"]
+                    for tc in delta.get("tool_calls") or []:
+                        fn = tc.get("function") or {}
+                        yield ToolDelta(tc.get("index", 0), tc.get("id"), fn.get("name"), fn.get("arguments") or "")
     except (httpx.HTTPError, ValueError) as e:
         raise UpstreamError(str(e)) from e
 
