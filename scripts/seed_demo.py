@@ -25,6 +25,7 @@ DEMO = [
     ("서버 db01.fake.internal 접속 확인", ["it_dev"], "chatgpt.com"),
     ("3월 라인 수율 92.4%, 불량률 1.8% 보고", ["manufacturing"], "claude.ai"),
     ("환자번호 20240115 내원 기록 요약해줘", ["medical"], "chatgpt.com"),
+    ("선하증권번호: KOSL20240315A001 조회 요청", ["logistics"], "claude.ai"),
     ("API 키 sk-abcdefghijklmnopqrstuvwxyz123456 이거 맞아?", [], "chatgpt.com"),
     ("AWS 키 AKIAIOSFODNN7EXAMPLE 점검해줘", ["it_dev"], "claude.ai"),
 ]

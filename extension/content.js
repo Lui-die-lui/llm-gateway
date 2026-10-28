@@ -6,8 +6,9 @@
   "use strict";
   const SITES = {
     "chatgpt.com": {
-      composer: ["#prompt-textarea"],
-      send: ['button[data-testid="send-button"]'],
+      // #prompt-textarea is a contenteditable on the logged-in page; other layouts use a <textarea> or a bare ProseMirror.
+      composer: ["#prompt-textarea", 'textarea[name="prompt-textarea"]', 'div.ProseMirror[contenteditable="true"]'],
+      send: ['button[data-testid="send-button"]', 'button[aria-label="Send prompt"]', 'button[aria-label="프롬프트 보내기"]', 'button[aria-label="Send message"]'],
       reply: ['[data-message-author-role="assistant"]'],
       mine: ['[data-message-author-role="user"]'], // my own bubbles: shown with the original values again
       // Cards the site draws next to an answer (mail drafts, canvas, tool results) sit outside the assistant element but
@@ -33,6 +34,7 @@
   const HINT_SHOWN = /\s*\(안내: 이 글의 \[종류_번호\][^)]*\)/;
   const LONG_TEXT = 4000; // characters; beyond this the live check waits for the send
   let bypass = false; // lets our own re-send through the interceptor
+  let armed = null; // text already checked and left in the box because there was no button to click: the next Enter passes untouched
   let busy = false;
   let cfg = { enabled: true, gatewayUrl: "", portalUrl: "", requestUrl: "" };
 
@@ -125,7 +127,12 @@
       bypass = true;
       const button = find(site.send) || (safeMode() ? document.querySelector(GUESS_SEND) : null);
       if (button) button.click();
-      else findComposer()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      else {
+        // A script-made Enter is ignored by real sites. Leave the checked text in the box and let the person's own Enter send it.
+        const box = findComposer();
+        armed = box ? readText(box) : null;
+        toast("보내기 버튼을 못 찾았어요 · 확인한 글을 넣어 뒀으니 Enter를 한 번 더 눌러 주세요");
+      }
       bypass = false;
     }, 100);
   }
@@ -220,10 +227,16 @@
     const box = findComposer();
     const text = box && readText(box);
     if (!text) return;
+    if (armed !== null && text === armed) {
+      armed = null;
+      return; // checked a moment ago
+    }
+    armed = null;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (busy) return;
     busy = true;
+    seen.intercepted++;
     try {
       await runSend(box, text);
     } catch (e) {
@@ -498,6 +511,24 @@
       },
     });
   }
+
+  // The popup asks "does the extension see this tab?" (no page content is returned).
+  const seen = { intercepted: 0 };
+  chrome.runtime.onMessage?.addListener((msg, _s, reply) => {
+    if (msg?.type !== "probe") return false;
+    const visible = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+    const describe = (el) => `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""} ${el.getAttribute("aria-label") ?? el.getAttribute("placeholder") ?? el.getAttribute("data-testid") ?? ""}`.trim();
+    reply({
+      host: location.hostname,
+      composer: find(site.composer) ? "known" : "none",
+      send: find(site.send) ? "known" : "none",
+      reply: !!find(site.reply),
+      intercepted: seen.intercepted,
+      boxes: [...document.querySelectorAll('textarea,div[role="textbox"],[contenteditable="true"]')].filter(visible).slice(0, 4).map(describe),
+      buttons: [...document.querySelectorAll("button")].filter((b) => visible(b) && /send|submit|보내기|전송/i.test(`${b.getAttribute("aria-label") ?? ""} ${b.getAttribute("data-testid") ?? ""}`)).slice(0, 4).map(describe),
+    });
+    return false;
+  });
 
   let timer;
   new MutationObserver(() => {

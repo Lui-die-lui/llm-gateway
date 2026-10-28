@@ -5,6 +5,25 @@ const DEFAULTS = { enabled: true, industries: [], portalUrl: "", demoFiles: fals
 const INDUSTRY_KO = { cosmetics: "화장품", medical: "의료", manufacturing: "제조", finance: "금융", hr: "인사", legal: "법무", it_dev: "IT 개발", ecommerce: "이커머스", logistics: "물류" };
 const $ = (id) => document.getElementById(id);
 
+// Asks the content script in the active tab what it can see, so "nothing happened" can be told apart from "the page is not recognised".
+async function showPage() {
+  const el = $("page");
+  let probe = null;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    probe = await chrome.tabs.sendMessage(tab.id, { type: "probe" });
+  } catch {}
+  if (!probe) {
+    el.textContent = "이 탭에는 확장이 적용되어 있지 않아요. chatgpt.com 또는 claude.ai 탭에서 열어 주세요. 확장을 새로 로드했다면 탭을 새로고침해야 해요.";
+    return;
+  }
+  const kind = { known: "✓ 찾았어요", none: "✗ 못 찾았어요" };
+  const lines = [probe.host, `입력창: ${kind[probe.composer]}`, `보내기 버튼: ${kind[probe.send]} (글을 쓰기 전에는 안 보일 수 있어요)`, `답변 영역: ${probe.reply ? "✓ 찾았어요" : "✗ 아직 없어요 (답변이 있어야 보여요)"}`, `가로챈 전송 ${probe.intercepted}번`];
+  if (probe.composer !== "known") lines.push(`입력창 후보: ${probe.boxes.join(" / ") || "없음"}`);
+  if (probe.send !== "known") lines.push(`보내기 후보: ${probe.buttons.join(" / ") || "없음"}`);
+  el.replaceChildren(...lines.map((t) => Object.assign(document.createElement("div"), { textContent: t })));
+}
+
 // Called from the submit click, so Chrome lets us ask for access to the new origin.
 async function saveGateway(e) {
   e.preventDefault();
@@ -57,6 +76,7 @@ async function init() {
   $("portal-url").value = settings.portalUrl || "";
   $("gw").addEventListener("submit", saveGateway);
   if (chrome.runtime.getURL) $("open-auth").href = chrome.runtime.getURL("auth.html");
+  showPage();
   $("hint").checked = settings.hint !== false;
   $("hint").addEventListener("change", (e) => chrome.storage.local.set({ hint: e.target.checked }));
   $("demo-files").checked = !!settings.demoFiles;
