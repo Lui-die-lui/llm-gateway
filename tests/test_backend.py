@@ -383,3 +383,27 @@ def test_old_audit_database_gets_the_new_columns(tmp_path):
     rows, total = audit.events()
     assert total == 1 and rows[0]["site"] is None and rows[0]["latency_ms"] == 5
     audit.configure(":memory:")
+
+
+# ---- console served from the gateway -----------------------------------------------
+
+def test_console_is_served_after_the_api_and_cannot_read_outside_its_folder(tmp_path):
+    from fastapi import FastAPI
+
+    site = tmp_path / "site"
+    (site / "assets").mkdir(parents=True)
+    (site / "index.html").write_text("<html>console</html>")
+    (site / "assets" / "a.js").write_text("console.log(1)")
+    (tmp_path / "secret.txt").write_text("secret")
+
+    app = FastAPI()
+    app.get("/health")(lambda: {"status": "ok"})
+    main.mount_console(app, site)
+    c = TestClient(app)
+
+    assert c.get("/health").json() == {"status": "ok"}  # API routes registered first still win
+    assert c.get("/console/policy").text == "<html>console</html>"  # browser routing: any page gets index.html
+    assert c.get("/assets/a.js").text == "console.log(1)"
+    r = c.get("/v1/nope")
+    assert r.status_code == 404 and r.json()["error"]["type"] == "not_found"  # unknown API paths are not the console
+    assert "secret" not in c.get("/..%2fsecret.txt").text
