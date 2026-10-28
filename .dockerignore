@@ -7,4 +7,5 @@ extension
 docs
 __pycache__
 .pytest_cache
-frontend
+frontend/node_modules
+frontend/dist
