@@ -1,3 +1,5 @@
+(() => {
+"use strict";
 const DEFAULT_GATEWAY = "http://localhost:8000";
 const DEFAULTS = { enabled: true, industries: [], portalUrl: "" };
 const INDUSTRY_KO = { cosmetics: "화장품", medical: "의료", manufacturing: "제조", finance: "금융", hr: "인사", legal: "법무", it_dev: "IT 개발", ecommerce: "이커머스", logistics: "물류" };
@@ -79,7 +81,8 @@ async function init() {
   box.textContent = "";
   const list = await chrome.runtime.sendMessage({ type: "industries" });
   if (!list.ok) {
-    box.textContent = "목록을 불러오지 못했습니다";
+    box.textContent = "서버에 연결되면 산업 목록이 보여요";
+    if (!ok) document.querySelector(".adv").open = true; // the address is the thing to check when the gateway is down
     return;
   }
   for (const { industry } of list.data) {
@@ -97,9 +100,11 @@ async function init() {
     name.textContent = INDUSTRY_KO[industry] ?? industry; // textContent: names from the gateway are never parsed as HTML
     const code = document.createElement("code");
     code.textContent = industry;
+    label.title = industry; // the code name stays available as a tooltip
     label.append(input, name, code);
     box.append(label);
   }
 }
 
 init();
+})();
