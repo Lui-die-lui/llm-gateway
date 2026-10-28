@@ -1,30 +1,71 @@
 <!doctype html>
 <html lang="ko">
-<head><meta charset="utf-8"><title>fake chat (extension dev page)</title></head>
+<head>
+  <meta charset="utf-8">
+  <title>fake chat (extension dev page)</title>
+  <style>
+    body{margin:0;font:15px/1.7 system-ui,sans-serif;background:#fff;color:#18181B}
+    #app{max-width:760px;margin:0 auto;padding:24px 20px 140px}
+    #log{display:flex;flex-direction:column;gap:14px}
+    .me{align-self:flex-end;max-width:76%;background:#F4F4F5;border-radius:18px;padding:10px 16px}
+    .bot{max-width:680px}
+    #composer-wrap{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;width:min(720px,calc(100% - 40px));border:1px solid #E4E4E7;border-radius:24px;padding:12px;background:#fff;box-shadow:0 6px 24px -12px rgba(0,0,0,.15)}
+    #prompt-textarea,#box{min-height:34px;padding:4px 8px;outline:none}
+    #prompt-textarea:empty::before,#box:empty::before{content:"메시지를 입력하세요";color:#A1A1AA}
+    .bar{display:flex;justify-content:flex-end}
+    button[data-testid=send-button]{width:36px;height:36px;border-radius:50%;border:0;background:#18181B;color:#fff;cursor:pointer}
+    pre{background:#F4F4F5;padding:10px;border-radius:10px;font-size:12px;white-space:pre-wrap}
+  </style>
+</head>
 <body>
-  <!-- Mimics the parts of ChatGPT's page that content.js touches. Serve extension/ and open /dev/fake-chat.html -->
-  <div id="log"></div>
-  <div id="prompt-textarea" contenteditable="true" style="border:1px solid #888;min-height:2em"></div>
-  <button data-testid="send-button">send</button>
-  <pre id="sent"></pre>
-  <script src="shim.js"></script>
+  <!-- Mimics the parts of ChatGPT's page that content.js touches. Serve extension/ and open /dev/fake-chat.html
+       ?industries=cosmetics  &enabled=0  &reply=echo|plain|fuzzy|newpii  &layout=changed (composer selector no longer matches) -->
+  <div id="app">
+    <div id="log"></div>
+    <pre id="sent" aria-label="외부로 나가는 문장"></pre>
+  </div>
+  <div id="composer-wrap">
+    <div id="composer" contenteditable="true" role="textbox" aria-label="메시지"></div>
+    <div class="bar"><button data-testid="send-button" aria-label="보내기">↑</button></div>
+  </div>
   <script>
-    const composer = document.getElementById("prompt-textarea");
+    // layout=changed: the site renamed its composer, so the selector table no longer matches (safe mode).
+    const mode = new URLSearchParams(location.search).get("layout");
+    const composer = document.getElementById("composer");
+    composer.id = mode === "changed" ? "box" : "prompt-textarea";
+  </script>
+  <script src="shim.js"></script>
+  <script src="../lib.js"></script>
+  <script src="../background.js"></script>
+  <script src="../ui.js"></script>
+  <script>
+    const reply = new URLSearchParams(location.search).get("reply") || "echo";
+    const composer = document.querySelector("[contenteditable]");
     function send() {
       const text = composer.innerText.trim();
       if (!text) return;
       document.getElementById("sent").textContent = text; // what would leave for the external LLM
+      const me = document.createElement("div");
+      me.className = "me";
+      me.dataset.messageAuthorRole = "user";
+      me.textContent = text;
+      document.getElementById("log").append(me);
       composer.textContent = "";
       setTimeout(() => {
-        const reply = document.createElement("div");
-        reply.dataset.messageAuthorRole = "assistant";
-        reply.textContent = "답변: " + text; // a model that echoes what it was sent
-        document.getElementById("log").append(reply);
+        const bot = document.createElement("div");
+        bot.className = "bot";
+        bot.dataset.messageAuthorRole = "assistant";
+        bot.textContent =
+          reply === "plain" ? "고객님께 보낼 안내 요약입니다. 회신 주소와 배합 비율은 기존 문서를 참고해 주세요. 추가로 필요한 내용이 있으면 말씀해 주세요."
+          : reply === "fuzzy" ? "답변: " + text.replace(/\[([^\[\]\s_]+)_(\d+)\]/g, "[$1 $2]")
+          : reply === "newpii" ? "예시 고객 정보로 테스트하세요: 이름 김철수, 주민번호 850101-1234567 입니다."
+          : "답변: " + text; // a model that echoes what it was sent
+        document.getElementById("log").append(bot);
       }, 200);
     }
-    document.querySelector("button").addEventListener("click", send);
+    document.querySelector("[data-testid=send-button]").addEventListener("click", send);
     composer.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
     });
   </script>
   <script src="../content.js"></script>

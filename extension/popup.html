@@ -2,29 +2,57 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <style>
-    body { width: 260px; margin: 0; padding: 14px; font: 14px system-ui, sans-serif; }
-    h1 { font-size: 15px; margin: 0 0 10px; }
-    label { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
-    #status { margin-top: 12px; font-size: 12px; }
-    .ok { color: #1a7f4b; } .bad { color: #c0392b; }
-    #gw { display: flex; gap: 6px; } #gw input { flex: 1; min-width: 0; padding: 4px 6px; font: inherit; font-size: 12px; }
-    #gw-msg { font-size: 11px; margin-top: 4px; color: #666; }
-    h2 { font-size: 12px; margin: 14px 0 4px; color: #666; font-weight: 600; }
-  </style>
+  <meta name="viewport" content="width=340">
+  <title>Gateway</title>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <h1>LLM Gateway Guard</h1>
-  <label><input type="checkbox" id="enabled"> 가림막 켜기</label>
-  <h2>적용할 산업 템플릿</h2>
-  <div id="industries">불러오는 중…</div>
-  <h2>게이트웨이 주소</h2>
-  <form id="gw">
-    <input id="gw-url" type="url" placeholder="http://localhost:8000" aria-label="게이트웨이 주소" spellcheck="false">
-    <button type="submit">저장</button>
-  </form>
-  <div id="gw-msg"></div>
-  <div id="status"></div>
+  <main class="pop">
+    <header class="top">
+      <span class="brand">
+        <span class="logo" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6zM9 12l2 2 4-4"/></svg></span>
+        <span><b>Gateway</b><small id="ver"></small></span>
+      </span>
+      <button type="button" id="enabled" class="tog" role="switch" aria-checked="true" aria-label="보호 켜기"></button>
+    </header>
+
+    <div id="status" class="status" role="status" aria-live="polite">
+      <i class="dot" id="dot"></i>
+      <span><b id="status-title">확인 중…</b><small id="status-sub"></small></span>
+    </div>
+
+    <section class="sec" aria-labelledby="ind-h">
+      <h2 id="ind-h">산업 템플릿</h2>
+      <div id="industries" class="inds">불러오는 중…</div>
+      <p class="hint">공통 개인정보 · 시크릿은 항상 켜져 있어요</p>
+    </section>
+
+    <section class="sec nums" aria-label="오늘 현황">
+      <div><b id="n-checked" class="mono">0</b><small>오늘 검사</small></div>
+      <div><b id="n-redacted" class="mono warn">0</b><small>가림</small></div>
+      <div><b id="n-blocked" class="mono bad">0</b><small>차단</small></div>
+    </section>
+
+    <section class="sec links">
+      <a class="btn" id="open-portal" href="#" target="_blank" rel="noopener">전체 보기</a>
+      <a class="btn dark" id="open-console" href="#" target="_blank" rel="noopener">관리자 콘솔 ↗</a>
+    </section>
+
+    <details class="sec adv">
+      <summary>연결 설정</summary>
+      <form id="gw">
+        <label for="gw-url">게이트웨이 주소</label>
+        <div class="row">
+          <input id="gw-url" type="url" placeholder="http://localhost:8000" spellcheck="false">
+          <button type="submit" class="btn small">저장</button>
+        </div>
+        <label for="portal-url">전체 보기 화면 주소 (비우면 자동)</label>
+        <input id="portal-url" type="url" placeholder="http://localhost:3000" spellcheck="false">
+        <div id="gw-msg" class="hint" role="status"></div>
+      </form>
+    </details>
+  </main>
+  <script src="lib.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
