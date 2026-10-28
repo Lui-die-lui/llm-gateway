@@ -1,6 +1,28 @@
+(() => {
+"use strict";
 const DEFAULT_GATEWAY = "http://localhost:8000";
-const DEFAULTS = { enabled: true, industries: [], hint: true };
+const DEFAULTS = { enabled: true, industries: [], portalUrl: "", demoFiles: false, hint: true };
+const INDUSTRY_KO = { cosmetics: "화장품", medical: "의료", manufacturing: "제조", finance: "금융", hr: "인사", legal: "법무", it_dev: "IT 개발", ecommerce: "이커머스", logistics: "물류" };
 const $ = (id) => document.getElementById(id);
+
+// Asks the content script in the active tab what it can see, so "nothing happened" can be told apart from "the page is not recognised".
+async function showPage() {
+  const el = $("page");
+  let probe = null;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    probe = await chrome.tabs.sendMessage(tab.id, { type: "probe" });
+  } catch {}
+  if (!probe) {
+    el.textContent = "이 탭에는 확장이 적용되어 있지 않아요. chatgpt.com 또는 claude.ai 탭에서 열어 주세요. 확장을 새로 로드했다면 탭을 새로고침해야 해요.";
+    return;
+  }
+  const kind = { known: "✓ 찾았어요", none: "✗ 못 찾았어요" };
+  const lines = [probe.host, `입력창: ${kind[probe.composer]}`, `보내기 버튼: ${kind[probe.send]} (글을 쓰기 전에는 안 보일 수 있어요)`, `답변 영역: ${probe.reply ? "✓ 찾았어요" : "✗ 아직 없어요 (답변이 있어야 보여요)"}`, `가로챈 전송 ${probe.intercepted}번`];
+  if (probe.composer !== "known") lines.push(`입력창 후보: ${probe.boxes.join(" / ") || "없음"}`);
+  if (probe.send !== "known") lines.push(`보내기 후보: ${probe.buttons.join(" / ") || "없음"}`);
+  el.replaceChildren(...lines.map((t) => Object.assign(document.createElement("div"), { textContent: t })));
+}
 
 // Called from the submit click, so Chrome lets us ask for access to the new origin.
 async function saveGateway(e) {
@@ -23,70 +45,74 @@ async function saveGateway(e) {
     msg.textContent = "이 주소로 연결하는 권한을 허용해야 저장돼요";
     return;
   }
-  await chrome.storage.local.set({ gatewayUrl: url.origin });
+  const portal = $("portal-url").value.trim();
+  await chrome.storage.local.set({ gatewayUrl: url.origin, portalUrl: portal ? new URL(portal).origin : "" });
   msg.textContent = "저장했어요";
   location.reload();
 }
 
-// Asks the content script in the active tab what it can see, so "it did nothing" can be told apart from "it does not see this page".
-async function showPage() {
-  const el = $("page");
-  let probe;
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    probe = await chrome.tabs.sendMessage(tab.id, { type: "probe" });
-  } catch {
-    probe = null;
-  }
-  if (!probe) {
-    el.textContent = "이 탭에는 확장이 적용되어 있지 않아요. chatgpt.com 또는 claude.ai 탭에서 열어 주세요. 확장을 새로 로드했다면 그 탭을 새로고침해야 해요.";
-    return;
-  }
-  el.textContent = "";
-  const kind = { known: "✓ 찾았어요", guess: "△ 짐작으로 골랐어요", none: "✗ 못 찾았어요" };
-  const lines = [
-    probe.host,
-    `입력창: ${kind[probe.composer]}`,
-    `보내기 버튼: ${kind[probe.send]} (글을 쓰기 전에는 안 보일 수 있어요)`,
-    `답변 영역: ${probe.reply ? "✓ 찾았어요" : "✗ 아직 없어요 (답변이 있어야 보여요)"}`,
-    `가로챈 전송 ${probe.intercepted}번 · ${probe.last}`,
-  ];
-  if (probe.composer !== "known") lines.push(`입력창 후보: ${probe.boxes.join(" / ") || "없음"}`);
-  if (probe.send !== "known") lines.push(`보내기 후보: ${probe.buttons.join(" / ") || "없음"}`);
-  for (const line of lines) {
-    const row = document.createElement("div");
-    row.textContent = line;
-    el.append(row);
-  }
+/** One of three states, as designed: connected, gateway unreachable, protection switched off. */
+function paintStatus(enabled, ok, gatewayUrl) {
+  const box = $("status");
+  const [cls, title, sub] = !enabled
+    ? ["off", "보호 꺼짐", "지금 보내는 글은 검사되지 않아요"]
+    : !ok
+      ? ["down", "게이트웨이에 연결할 수 없음", `전송은 보류돼요 · ${gatewayUrl} 응답 없음`]
+      : ["ok", "게이트웨이 연결됨", `${gatewayUrl} · 입력창 감시 중`];
+  box.className = `status ${cls}`;
+  $("status-title").textContent = title;
+  $("status-sub").textContent = sub;
 }
 
 async function init() {
   const settings = await chrome.storage.local.get(DEFAULTS);
-  $("enabled").checked = settings.enabled;
-  $("enabled").addEventListener("change", (e) => chrome.storage.local.set({ enabled: e.target.checked }));
-  $("hint").checked = settings.hint;
-  $("hint").addEventListener("change", (e) => chrome.storage.local.set({ hint: e.target.checked }));
-
   const { gatewayUrl } = await chrome.storage.local.get({ gatewayUrl: DEFAULT_GATEWAY });
+  $("ver").textContent = `v${chrome.runtime.getManifest().version}`;
+
+  const tog = $("enabled");
+  const setTog = (on) => tog.setAttribute("aria-checked", String(on));
+  setTog(settings.enabled);
   $("gw-url").value = gatewayUrl;
+  $("portal-url").value = settings.portalUrl || "";
   $("gw").addEventListener("submit", saveGateway);
-
-  const health = await chrome.runtime.sendMessage({ type: "status" });
-  const status = $("status");
-  status.textContent = health.ok ? "게이트웨이 연결됨" : `게이트웨이에 연결할 수 없음 (${gatewayUrl})`;
-  status.className = health.ok ? "ok" : "bad";
-
+  if (chrome.runtime.getURL) $("open-auth").href = chrome.runtime.getURL("auth.html");
   showPage();
+  $("hint").checked = settings.hint !== false;
+  $("hint").addEventListener("change", (e) => chrome.storage.local.set({ hint: e.target.checked }));
+  $("demo-files").checked = !!settings.demoFiles;
+  $("demo-files").addEventListener("change", (e) => chrome.storage.local.set({ demoFiles: e.target.checked }));
+
+  const base = Gw.portalBase(gatewayUrl, settings.portalUrl);
+  $("open-portal").href = `${base}/me`;
+  $("open-console").href = `${base}/login`;
+
+  let ok = false;
+  const repaint = () => paintStatus(tog.getAttribute("aria-checked") === "true", ok, gatewayUrl);
+  tog.addEventListener("click", async () => {
+    const on = tog.getAttribute("aria-checked") !== "true";
+    setTog(on);
+    await chrome.storage.local.set({ enabled: on });
+    repaint();
+  });
+
+  const [health, stats] = await Promise.all([chrome.runtime.sendMessage({ type: "status" }), chrome.runtime.sendMessage({ type: "stats" })]);
+  ok = !!health.ok;
+  repaint();
+  $("n-checked").textContent = stats.checked;
+  $("n-redacted").textContent = stats.redacted;
+  $("n-blocked").textContent = stats.blocked;
 
   const box = $("industries");
   box.textContent = "";
   const list = await chrome.runtime.sendMessage({ type: "industries" });
   if (!list.ok) {
-    box.textContent = "목록을 불러오지 못했습니다";
+    box.textContent = "서버에 연결되면 산업 목록이 보여요";
+    if (!ok) document.querySelector(".adv").open = true; // the address is the thing to check when the gateway is down
     return;
   }
   for (const { industry } of list.data) {
     const label = document.createElement("label");
+    label.className = "chk";
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = settings.industries.includes(industry);
@@ -95,9 +121,15 @@ async function init() {
       const next = input.checked ? [...new Set([...current, industry])] : current.filter((n) => n !== industry);
       chrome.storage.local.set({ industries: next });
     });
-    label.append(input, industry); // textContent semantics: names from the gateway are never parsed as HTML
+    const name = document.createElement("span");
+    name.textContent = INDUSTRY_KO[industry] ?? industry; // textContent: names from the gateway are never parsed as HTML
+    const code = document.createElement("code");
+    code.textContent = industry;
+    label.title = industry; // the code name stays available as a tooltip
+    label.append(input, name, code);
     box.append(label);
   }
 }
 
 init();
+})();
