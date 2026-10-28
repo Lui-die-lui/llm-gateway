@@ -8,7 +8,7 @@
     "chatgpt.com": {
       // #prompt-textarea is a contenteditable on the logged-in page; other layouts use a <textarea> or a bare ProseMirror.
       composer: ["#prompt-textarea", 'textarea[name="prompt-textarea"]', 'div.ProseMirror[contenteditable="true"]'],
-      send: ['button[data-testid="send-button"]', 'button[aria-label="Send prompt"]', 'button[aria-label="프롬프트 보내기"]', 'button[aria-label="Send message"]'],
+      send: ['button[data-testid="send-button"]', 'button[data-testid="composer-submit-button"]', 'button[aria-label="Send prompt"]', 'button[aria-label="프롬프트 보내기"]', 'button[aria-label="Send message"]'],
       reply: ['[data-message-author-role="assistant"]', '[data-dil-message-id]'],
       mine: ['[data-message-author-role="user"]'], // my own bubbles: shown with the original values again
       // Cards the site draws next to an answer (mail drafts, canvas, tool results) sit outside the assistant element but
@@ -26,6 +26,7 @@
   SITES["chat.openai.com"] = SITES["chatgpt.com"];
   const site = SITES[location.hostname] ?? SITES["chatgpt.com"];
   const GUESS_SEND = 'button[type="submit"],button[aria-label*="Send" i],button[aria-label*="보내"]';
+  const SEND_WORDS = /send|submit|보내기|전송/i;
 
   const PLACEHOLDER = Gw.PLACEHOLDER;
   // Without this note the model reads "[사람_1]" as a blank nobody filled in and asks "who is the recipient?".
@@ -35,6 +36,7 @@
   const LONG_TEXT = 4000; // characters; beyond this the live check waits for the send
   let bypass = false; // lets our own re-send through the interceptor
   let armed = null; // text already checked and left in the box because there was no button to click: the next Enter passes untouched
+  let armedAt = 0; // ...but only for 20 seconds and only while that exact text is still in the box
   let busy = false;
   let cfg = { enabled: true, gatewayUrl: "", portalUrl: "", requestUrl: "" };
 
@@ -126,16 +128,38 @@
     }
   }
 
+  // The send arrow is found by the site table first, then by what it looks like: a button next to the composer that is a
+  // submit button or is named send / submit / 보내기 / 전송. A button we do not recognise would let text out unchecked.
+  const composerArea = () => {
+    const c = findComposer();
+    return c ? c.closest("form") || c.parentElement?.parentElement?.parentElement || null : null;
+  };
+  const sendish = (b) => {
+    if (!b || b.disabled === undefined || inOurUi(b)) return false;
+    if (b.matches(site.send.join(","))) return true;
+    const label = `${b.getAttribute("aria-label") ?? ""} ${b.getAttribute("data-testid") ?? ""}`;
+    const area = composerArea();
+    return !!area && area.contains(b) && (b.type === "submit" || SEND_WORDS.test(label));
+  };
+  const findSendButton = () => {
+    const known = find(site.send);
+    if (known) return known;
+    const area = composerArea();
+    const near = area && [...area.querySelectorAll("button")].find((b) => !b.disabled && sendish(b));
+    return near || (safeMode() ? document.querySelector(GUESS_SEND) : null);
+  };
+
   function resend() {
     ui.chip(null);
     setTimeout(() => {
       bypass = true;
-      const button = find(site.send) || (safeMode() ? document.querySelector(GUESS_SEND) : null);
+      const button = findSendButton();
       if (button) button.click();
       else {
         // A script-made Enter is ignored by real sites. Leave the checked text in the box and let the person's own Enter send it.
         const box = findComposer();
         armed = box ? readText(box) : null;
+        armedAt = Date.now();
         toast("보내기 버튼을 못 찾았어요 · 확인한 글을 넣어 뒀으니 Enter를 한 번 더 눌러 주세요");
       }
       bypass = false;
@@ -144,6 +168,29 @@
 
   const kindOf = (label, keepable) => (keepable.has(label) ? "공통 개인정보" : Gw.CRITICAL.has(label) ? "보안 정보" : "영업기밀");
   const HOW_KO = { ph: "자리표시자", alias: "등록 대체어", keep: "그대로 둠" };
+
+  const failText = (r) => `검사에 실패해서 전송을 보류했어요 (${r.status}${r.data?.error?.message ? ` · ${String(r.data.error.message).slice(0, 80)}` : ""})`;
+
+  async function sendFullyMasked(box, text, failed) {
+    const s = await checked("sanitize", { text });
+    if (!s) return;
+    if (s.status === 403) {
+      const labels = Object.keys(s.data?.error?.findings || {});
+      const choice = await ui.blocked({ labels, requestUrl: cfg.requestUrl, canSelect: false });
+      return choice === "close" ? box.focus() : undefined;
+    }
+    if (!s.ok) return toast(failText(s));
+    let out = s.data.text;
+    if (out !== text && cfg.hint !== false && PLACEHOLDER.test(out)) out += HINT;
+    if (out !== text) {
+      (sent.push(out), sent.length > 20 && sent.shift());
+      writeText(box, out);
+    }
+    const n = Object.values(s.data.findings || {}).reduce((x, y) => x + y, 0);
+    if (n) await bg("statsAdd", { delta: { redacted: n } });
+    ui.strip("fallback", { tone: "warn", text: `미리보기를 받지 못해서(${failed.status}) 찾은 것을 모두 자리표시자로 바꿔 보냈어요` }, 6000);
+    resend();
+  }
 
   async function runSend(box, text) {
     cfg = await bg("settings");
@@ -154,7 +201,12 @@
     ui.chip(null);
     if (!a) return;
     if (a.passthrough) return resend();
-    if (!a.ok) return toast(`검사에 실패해서 전송을 보류했어요 (${a.status})`);
+    if (!a.ok) {
+      // The preview endpoint failed (not unreachable). Protection must not depend on it: replace everything the gateway finds,
+      // as before the review window existed, and say so. If that fails too, nothing is sent.
+      if (a.status >= 400) return sendFullyMasked(box, text, a);
+      return toast(failText(a));
+    }
 
     const spans = a.data.spans;
     const stop = spans.filter((s) => s.action === "block" || s.action === "internal_only");
@@ -171,7 +223,7 @@
     if (!redact.length) {
       const s = await checked("sanitize", { text }); // nothing to replace: still counted and audited
       if (!s) return;
-      if (!s.ok) return toast(`검사에 실패해서 전송을 보류했어요 (${s.status})`);
+      if (!s.ok) return toast(failText(s));
       return resend();
     }
 
@@ -193,7 +245,7 @@
 
     const s = await checked("sanitize", { text });
     if (!s) return;
-    if (!s.ok) return toast(s.status === 403 ? "검사 결과가 달라져 전송을 막았어요. 다시 확인해 주세요" : `검사에 실패해서 전송을 보류했어요 (${s.status})`);
+    if (!s.ok) return toast(s.status === 403 ? "검사 결과가 달라져 전송을 막았어요. 다시 확인해 주세요" : failText(s));
 
     const paired = Gw.pairSpans(text, spans, s.data.text);
     let outText = s.data.text; // fallback: replace everything
@@ -233,7 +285,7 @@
     const box = findComposer();
     const text = box && readText(box);
     if (!text) return;
-    if (armed !== null && text === armed) {
+    if (armed !== null && text === armed && Date.now() - armedAt < 20_000) {
       armed = null;
       return; // checked a moment ago
     }
@@ -269,7 +321,17 @@
     "click",
     (e) => {
       if (inOurUi(e.target)) return;
-      if (e.target.closest?.(site.send.join(",")) || (safeMode() && e.target.closest?.(GUESS_SEND))) guardedSend(e);
+      const b = e.target.closest?.("button");
+      if (b && (sendish(b) || (safeMode() && b.matches(GUESS_SEND)))) guardedSend(e);
+    },
+    true,
+  );
+  // Sites that send through a form do not always go through the button's click.
+  document.addEventListener(
+    "submit",
+    (e) => {
+      const c = findComposer();
+      if (!bypass && c && e.target instanceof HTMLFormElement && e.target.contains(c) && !inOurUi(e.target)) guardedSend(e);
     },
     true,
   );
@@ -288,22 +350,32 @@
     const a = await bg("analyze", { text });
     if (seq !== scanSeq) return;
     if (a.status === 0) return ui.chip({ text: "검사 서버에 연결할 수 없어요 · 보내기는 보류돼요", tone: "danger" });
-    if (!a.ok || a.passthrough) return ui.chip(null);
+    if (a.passthrough) return ui.chip(null);
+    if (!a.ok) return ui.chip({ text: `미리 검사하지 못했어요 (${a.status}) · 보낼 때 다시 검사해요`, tone: "info" });
     const spans = a.data.spans;
     const n = spans.filter((s) => s.action === "redact").length;
     if (spans.some((s) => s.action === "block" || s.action === "internal_only") || a.data.route === "block") return ui.chip({ text: "보낼 수 없는 정보가 있어요 · 보내면 막혀요", tone: "danger" });
     if (n) return ui.chip({ text: `보내기 전에 확인할 단어 ${n}개가 있어요`, tone: "warn" });
     ui.chip({ text: "확인할 것 없음 · 보내면 바로 전송돼요", tone: "ok" });
   }
-  document.addEventListener(
-    "input",
-    (e) => {
-      if (inOurUi(e.target) || !e.target.closest?.(site.composer.join(","))) return;
-      clearTimeout(scanTimer);
-      scanTimer = setTimeout(liveScan, 600);
-    },
-    true,
-  );
+  // Typing, pasting, dropping and script edits all reach the composer differently on different sites, so every one of them
+  // schedules a check (paste straight away, typing after a short pause), and the page observer below catches the rest.
+  const scanSoon = (ms) => {
+    clearTimeout(scanTimer);
+    scanTimer = setTimeout(liveScan, ms);
+  };
+  const inComposer = (t) => !!t?.closest && !inOurUi(t) && !!t.closest(site.composer.join(","));
+  for (const ev of ["input", "keyup", "compositionend", "cut"]) document.addEventListener(ev, (e) => inComposer(e.target) && scanSoon(250), true);
+  for (const ev of ["paste", "drop"]) document.addEventListener(ev, (e) => inComposer(e.target) && scanSoon(60), true);
+  let lastSeenText = "";
+  function composerChanged() {
+    const box = find(site.composer);
+    const t = box ? (box.value ?? box.textContent ?? "") : "";
+    if (t === lastSeenText) return;
+    lastSeenText = t;
+    if (armed !== null && box && readText(box) !== armed) armed = null; // the person edited or sent it: the one free pass is gone
+    scanSoon(250);
+  }
 
   /* ---------- protection switched off / safe mode notes ---------- */
   function offStrip(enabled) {
@@ -561,5 +633,6 @@
     timer = setTimeout(restoreReplies, 300);
     clearTimeout(noteTimer);
     noteTimer = setTimeout(noteNoPlaceholder, 1800);
+    composerChanged();
   }).observe(document.body, { childList: true, subtree: true, characterData: true });
 })();

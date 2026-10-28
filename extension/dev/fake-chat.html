@@ -19,7 +19,7 @@
 </head>
 <body>
   <!-- Mimics the parts of ChatGPT's page that content.js touches. Serve extension/ and open /dev/fake-chat.html
-       ?industries=cosmetics  &enabled=0  &reply=echo|plain|fuzzy|newpii  &layout=changed (composer selector no longer matches) -->
+       ?industries=cosmetics  &enabled=0  &reply=echo|plain|fuzzy|newpii  &layout=changed (composer selector no longer matches) | arrow (send arrow selector no longer matches) -->
   <div id="app">
     <div id="log"></div>
     <pre id="sent" data-gw-skip aria-label="외부로 나가는 문장"></pre>
@@ -110,7 +110,15 @@
         if (i >= full.length) clearInterval(timer);
       }, 25);
     }
-    document.querySelector("[data-testid=send-button]").addEventListener("click", send);
+    const sendBtn = document.querySelector("[data-testid=send-button]");
+    sendBtn.addEventListener("click", send);
+    // layout=arrow: the site renamed its send arrow, so the selector table no longer matches it (a plain submit button, no label).
+    if (new URLSearchParams(location.search).get("layout") === "arrow") {
+      sendBtn.removeAttribute("data-testid");
+      sendBtn.removeAttribute("aria-label");
+      sendBtn.type = "submit";
+      sendBtn.style.cssText = "width:36px;height:36px;border-radius:50%;border:0;background:#18181B;color:#fff;cursor:pointer";
+    }
     composer.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
     });
