@@ -45,6 +45,7 @@ export interface AuditEvent {
   latency_ms: number | null;
   site: string | null;
   client: string | null;
+  caller: string | null; // the API key's name (the app), decided by the gateway
   findings: Finding[];
 }
 
@@ -116,6 +117,7 @@ export interface GatewayConfig {
   local_llm_detector: boolean;
   streaming: boolean;
   admin_protected: boolean;
+  caller_auth: boolean; // apps must send a gateway key
 }
 
 export interface BuiltinRule {

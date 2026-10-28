@@ -16,6 +16,8 @@ import httpx
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else os.getenv("GATEWAY_URL", "http://localhost:8000")).rstrip("/")
 sys.stdout.reconfigure(encoding="utf-8")
+# Needed only when the gateway has GATEWAY_API_KEYS set: GATEWAY_KEY=gw_...
+KEY_HEADERS = {"Authorization": f"Bearer {os.environ['GATEWAY_KEY']}"} if os.getenv("GATEWAY_KEY") else {}
 
 # The company's "database". The tool below runs here, inside the company, on the real rows.
 DB = {"C-1001": {"name": "홍길동", "email": "kim@corp.co.kr", "phone": "01012345678", "salary": 5000000}}
@@ -46,7 +48,7 @@ def step(title: str) -> None:
 
 
 def ask(messages: list[dict]) -> dict:
-    r = httpx.post(f"{BASE}/v1/chat/completions", json={"model": "demo", "messages": messages, "tools": TOOLS}, timeout=30)
+    r = httpx.post(f"{BASE}/v1/chat/completions", json={"model": "demo", "messages": messages, "tools": TOOLS}, headers=KEY_HEADERS, timeout=30)
     if r.status_code != 200:
         sys.exit(f"gateway answered {r.status_code}: {r.text}")
     print(f"   가려서 보낸 항목 {r.headers.get('x-gateway-redacted')}개 · 경로 {r.headers.get('x-gateway-route')}")

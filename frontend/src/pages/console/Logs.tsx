@@ -254,8 +254,8 @@ export function LogsPage() {
                                 </span>
                               )}
                             </td>
-                            <td className="t3" title="감사 로그에 사용자가 아직 없어요">
-                              —
+                            <td className="t3" title={e.caller ? '호출한 앱 (API 키 이름)' : '키를 쓰지 않았거나 사용자가 아직 없어요'}>
+                              {e.caller ?? '—'}
                             </td>
                             <td className="t2">{providerName(e.provider)}</td>
                             <td className="t2">{findingsText(e)}</td>
@@ -312,8 +312,8 @@ export function LogsPage() {
                   <dl className="kv" style={{ gridTemplateColumns: '110px minmax(0,1fr)' }}>
                     <dt>시각</dt>
                     <dd className="mono">{ymdhms(sel.ts)}</dd>
-                    <dt>사용자</dt>
-                    <dd className="t3">감사 로그에 아직 없음</dd>
+                    <dt>호출한 앱</dt>
+                    <dd className="t3">{sel.caller ?? '키를 쓰지 않음'}</dd>
                     <dt>경로</dt>
                     <dd className="mono">{sel.endpoint}</dd>
                     <dt>대상</dt>

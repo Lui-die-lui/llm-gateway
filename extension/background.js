@@ -14,11 +14,17 @@ async function gatewayUrl() {
 
 let gatewayDown = false; // last call could not reach the gateway (drives the toolbar badge)
 
+// The access key the company gave out for the extension (popup setting). Only ever sent to the gateway address, never to the sites.
+async function keyHeaders() {
+  const { gatewayKey } = await chrome.storage.local.get({ gatewayKey: "" });
+  return gatewayKey ? { "X-Gateway-Key": gatewayKey } : {};
+}
+
 async function call(path, body) {
   try {
     const r = await fetch((await gatewayUrl()) + path, {
       method: body ? "POST" : "GET",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await keyHeaders()) },
       body: body ? JSON.stringify(body) : undefined,
     });
     const res = { ok: r.ok, status: r.status, data: await r.json() };
@@ -135,6 +141,16 @@ async function rememberAliases(map, tabId) {
   return { ok: true };
 }
 
+// Reachable? Does it want a key, and is ours accepted? (/v1/restore with an unknown vault answers 404 once the key is fine.)
+async function status() {
+  const health = await call("/health");
+  if (!health.ok) return health;
+  const cfg = await call("/v1/config");
+  if (!cfg.ok || !cfg.data.caller_auth) return { ...health, keyRequired: false };
+  const probe = await call("/v1/restore", { vault_id: "probe", text: "" });
+  return { ...health, keyRequired: true, keyOk: probe.status !== 401 };
+}
+
 async function handle(msg, tabId, site) {
   switch (msg.type) {
     case "settings": return settings(tabId);
@@ -144,7 +160,7 @@ async function handle(msg, tabId, site) {
     case "rememberAliases": return rememberAliases(msg.map || {}, tabId);
     case "industries": return call("/v1/industries");
     case "rules": return call("/v1/rules/builtin");
-    case "status": return call("/health");
+    case "status": return status();
     case "stats": return getStats();
     case "statsAdd": await bumpStats(msg.delta || {}); return { ok: true };
     case "historyAdd": await addHistory({ site, ...msg.entry }); return { ok: true };

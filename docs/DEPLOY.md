@@ -28,6 +28,7 @@ Railway, Render, Fly.io처럼 Docker 이미지를 올리고 디스크(볼륨)를
 |---|---|
 | `UPSTREAM_MODE` | `mock` (API 키 없이 동작) |
 | `GATEWAY_ADMIN_TOKEN` | 길고 아무도 모르는 문자열. 콘솔에서 입력할 비밀번호가 됩니다 |
+| `GATEWAY_API_KEYS` | 앱·확장이 쓸 접속 키. `python -m app.keys 앱이름`으로 만든 줄을 쉼표로 이어 붙입니다 (아래 "실제 LLM을 연결할 때") |
 
 7. Settings → Networking → **Generate Domain**을 눌러 `https://○○.up.railway.app` 주소를 받습니다.
 8. 그 주소 뒤에 `/health`를 붙여 열어서 `{"status":"ok"}`가 나오면 서버는 성공입니다. 주소 뒤에 아무것도 안 붙여 열면 콘솔 로그인 화면이 나옵니다.
@@ -35,6 +36,24 @@ Railway, Render, Fly.io처럼 Docker 이미지를 올리고 디스크(볼륨)를
 콘솔이 처음 데이터를 불러올 때 관리자 토큰 입력 화면이 나옵니다. 6번에서 정한 `GATEWAY_ADMIN_TOKEN` 값을 넣으세요. 탭을 닫으면 지워집니다.
 콘솔 로그인(`admin@example.com`)은 연습용 가짜라서 보호 장치가 아닙니다. 실제로 막아주는 건 관리자 토큰뿐입니다.
 `GATEWAY_ADMIN_TOKEN`을 비워 두면 서버 로그에 경고가 뜹니다. 그 상태로 공개하면 누구나 정책을 바꾸고 기록을 볼 수 있습니다.
+
+### 실제 LLM을 연결할 때 (키 필수)
+
+가짜 모델(`UPSTREAM_MODE=mock`)에서는 접속 키 없이도 위험이 없지만, 실제 모델을 붙이면 주소를 아는 누구나 내 키로 LLM을 쓸 수 있습니다. 순서대로 하세요.
+
+1. 내 PC에서 접속 키를 만듭니다. 앱마다, 확장은 따로 만드세요.
+
+```bash
+python -m app.keys hr-app
+python -m app.keys extension
+```
+
+2. 나온 줄들을 쉼표로 이어서 Railway의 `GATEWAY_API_KEYS`에 넣습니다 (`hr-app:gw_...,extension:gw_...`).
+3. 모델 제공자의 키를 `UPSTREAM_API_KEY`에, 모델 이름을 `UPSTREAM_MODEL`에 넣고, `UPSTREAM_MODE=mock`을 지웁니다.
+4. 앱에는 `gw_...` 부분을 `api_key`로 줍니다. 확장 팝업의 "접속 키" 칸과 `/demo` 화면의 키 칸에도 같은 방식으로 넣습니다.
+5. 키 없이 `/v1/chat/completions`를 불러서 401이 나오는지 확인합니다.
+
+모델 제공자 쪽에서도 사용 한도를 걸어 두세요. 게이트웨이에는 아직 키별 한도가 없습니다.
 
 ## 2. 확장을 배포한 서버에 연결하기
 

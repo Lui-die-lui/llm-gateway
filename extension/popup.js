@@ -46,19 +46,21 @@ async function saveGateway(e) {
     return;
   }
   const portal = $("portal-url").value.trim();
-  await chrome.storage.local.set({ gatewayUrl: url.origin, portalUrl: portal ? new URL(portal).origin : "" });
+  await chrome.storage.local.set({ gatewayUrl: url.origin, portalUrl: portal ? new URL(portal).origin : "", gatewayKey: $("gw-key").value.trim() });
   msg.textContent = "저장했어요";
   location.reload();
 }
 
 /** One of three states, as designed: connected, gateway unreachable, protection switched off. */
-function paintStatus(enabled, ok, gatewayUrl) {
+function paintStatus(enabled, ok, gatewayUrl, keyBad = false) {
   const box = $("status");
   const [cls, title, sub] = !enabled
     ? ["off", "보호 꺼짐", "지금 보내는 글은 검사되지 않아요"]
     : !ok
       ? ["down", "게이트웨이에 연결할 수 없음", `전송은 보류돼요 · ${gatewayUrl} 응답 없음`]
-      : ["ok", "게이트웨이 연결됨", `${gatewayUrl} · 입력창 감시 중`];
+      : keyBad
+        ? ["down", "접속 키가 없거나 맞지 않아요", "연결은 되지만 전송이 막혀요 · 연결 설정에서 키를 넣어 주세요"]
+        : ["ok", "게이트웨이 연결됨", `${gatewayUrl} · 입력창 감시 중`];
   box.className = `status ${cls}`;
   $("status-title").textContent = title;
   $("status-sub").textContent = sub;
@@ -74,6 +76,7 @@ async function init() {
   setTog(settings.enabled);
   $("gw-url").value = gatewayUrl;
   $("portal-url").value = settings.portalUrl || "";
+  $("gw-key").value = (await chrome.storage.local.get({ gatewayKey: "" })).gatewayKey;
   $("gw").addEventListener("submit", saveGateway);
   if (chrome.runtime.getURL) $("open-auth").href = chrome.runtime.getURL("auth.html");
   showPage();
@@ -87,7 +90,8 @@ async function init() {
   $("open-console").href = `${base}/login`;
 
   let ok = false;
-  const repaint = () => paintStatus(tog.getAttribute("aria-checked") === "true", ok, gatewayUrl);
+  let keyBad = false;
+  const repaint = () => paintStatus(tog.getAttribute("aria-checked") === "true", ok, gatewayUrl, keyBad);
   tog.addEventListener("click", async () => {
     const on = tog.getAttribute("aria-checked") !== "true";
     setTog(on);
@@ -97,6 +101,8 @@ async function init() {
 
   const [health, stats] = await Promise.all([chrome.runtime.sendMessage({ type: "status" }), chrome.runtime.sendMessage({ type: "stats" })]);
   ok = !!health.ok;
+  keyBad = ok && !!health.keyRequired && !health.keyOk;
+  if (keyBad) document.querySelector(".adv").open = true; // the key field is the thing to fix
   repaint();
   $("n-checked").textContent = stats.checked;
   $("n-redacted").textContent = stats.redacted;

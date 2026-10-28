@@ -283,8 +283,8 @@ export function OverviewPage() {
                       <td className="mono t3" style={{ fontSize: 12 }}>
                         {hms(e.ts)}
                       </td>
-                      <td className="t3" title="감사 로그에 사용자가 아직 없어요">
-                        —
+                      <td className="t3" title={e.caller ? '호출한 앱 (API 키 이름)' : '키를 쓰지 않았거나 사용자가 아직 없어요'}>
+                        {e.caller ?? '—'}
                       </td>
                       <td>
                         <span className="chip mono">{providerName(e.provider)}</span>

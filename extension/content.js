@@ -115,6 +115,11 @@
   async function checked(type, fields) {
     for (;;) {
       const r = await bg(type, fields);
+      if (r.status === 401) {
+        // The gateway wants an access key and ours is missing or wrong: nothing is sent, and the person is told why.
+        toast("접속 키가 없거나 맞지 않아 전송을 막았어요 · 확장 팝업의 연결 설정에서 키를 확인해 주세요");
+        return null;
+      }
       if (r.status !== 0) return r;
       const a = await ui.connection({ detail: `${cfg.gatewayUrl}/health · 응답 없음` });
       if (a !== "retry") return null;
