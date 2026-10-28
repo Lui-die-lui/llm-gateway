@@ -179,7 +179,9 @@ export function DemoPage() {
               </p>
             )}
             {ex.outcome === 'blocked' && (
-              <p className="demo-warn">차단됐어요: {Object.keys(ex.findings ?? {}).join(', ') || '보내면 안 되는 정보'}가 들어 있어서 아무것도 나가지 않았어요.</p>
+              <p className="demo-warn">
+                차단됐어요. 보내면 안 되는 정보({Object.keys(ex.findings ?? {}).join(', ') || '종류 미상'})가 들어 있어서 아무것도 나가지 않았어요.
+              </p>
             )}
           </div>
           <div className="demo-col">

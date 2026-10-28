@@ -51,7 +51,7 @@ describe('사내 앱 시연', () => {
     renderDemo(() => new Response(JSON.stringify({ error: { type: 'gateway_blocked', findings: { 시크릿: 1 } } }), { status: 403 }));
     await user.type(await screen.findByLabelText('LLM에게 시킬 일'), 'sk-abcdefghijklmnopqrstuvwxyz123456');
     await user.click(screen.getByRole('button', { name: '보내기' }));
-    expect(await screen.findByText(/차단됐어요: 시크릿/)).toBeInTheDocument();
+    expect(await screen.findByText(/차단됐어요\. 보내면 안 되는 정보\(시크릿\)/)).toBeInTheDocument();
     expect(screen.getByText('전송 안 됨')).toBeInTheDocument();
     expect(screen.getByText('받은 답이 없어요.')).toBeInTheDocument();
   });
