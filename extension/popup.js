@@ -1,7 +1,7 @@
 (() => {
 "use strict";
 const DEFAULT_GATEWAY = "http://localhost:8000";
-const DEFAULTS = { enabled: true, industries: [], portalUrl: "", demoFiles: false };
+const DEFAULTS = { enabled: true, industries: [], portalUrl: "", demoFiles: false, hint: true };
 const INDUSTRY_KO = { cosmetics: "화장품", medical: "의료", manufacturing: "제조", finance: "금융", hr: "인사", legal: "법무", it_dev: "IT 개발", ecommerce: "이커머스", logistics: "물류" };
 const $ = (id) => document.getElementById(id);
 
@@ -57,6 +57,8 @@ async function init() {
   $("portal-url").value = settings.portalUrl || "";
   $("gw").addEventListener("submit", saveGateway);
   if (chrome.runtime.getURL) $("open-auth").href = chrome.runtime.getURL("auth.html");
+  $("hint").checked = settings.hint !== false;
+  $("hint").addEventListener("change", (e) => chrome.storage.local.set({ hint: e.target.checked }));
   $("demo-files").checked = !!settings.demoFiles;
   $("demo-files").addEventListener("change", (e) => chrome.storage.local.set({ demoFiles: e.target.checked }));
 

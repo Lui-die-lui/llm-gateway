@@ -52,8 +52,11 @@
       me.className = "me";
       me.dataset.messageAuthorRole = "user";
       me.textContent = text;
-      document.getElementById("log").append(me);
+      const turn = reply === "chatgpt" ? document.createElement("article") : null; // ChatGPT wraps each side in an <article>
+      if (turn) (turn.dataset.testid = "conversation-turn-1"), turn.append(me);
+      document.getElementById("log").append(turn || me);
       composer.textContent = "";
+      if (reply === "chatgpt") return chatgptReply(text);
       setTimeout(() => {
         const bot = document.createElement("div");
         bot.className = "bot";
@@ -65,6 +68,31 @@
           : "답변: " + text; // a model that echoes what it was sent
         document.getElementById("log").append(bot);
       }, 200);
+    }
+    // ChatGPT-like answer: streamed text in the assistant element, plus a mail card drawn outside it but inside the turn.
+    function chatgptReply(text) {
+      const ph = text.match(/\[[^\[\]\s]+_\d+\]/g) || [];
+      const turn = document.createElement("article");
+      turn.dataset.testid = "conversation-turn-2";
+      const bot = document.createElement("div");
+      bot.dataset.messageAuthorRole = "assistant";
+      const p = document.createElement("p");
+      const t1 = document.createTextNode("");
+      const strong = document.createElement("strong");
+      strong.textContent = "배송 지연 사과 메일";
+      p.append(t1, strong, document.createTextNode("을 준비했습니다."));
+      bot.append(p);
+      const card = document.createElement("div");
+      card.className = "mailcard";
+      card.textContent = "받는 사람: " + (ph[1] || "") + " / 안녕하세요, " + (ph[0] || "") + " 고객님.";
+      turn.append(bot, card);
+      document.getElementById("log").append(turn);
+      const full = "고객 " + (ph[0] || "") + "에게 보낼 ";
+      let i = 0;
+      const timer = setInterval(() => {  // like a streaming renderer: the same text node is rewritten with longer text
+        t1.nodeValue = full.slice(0, ++i);
+        if (i >= full.length) clearInterval(timer);
+      }, 25);
     }
     document.querySelector("[data-testid=send-button]").addEventListener("click", send);
     composer.addEventListener("keydown", (e) => {

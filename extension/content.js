@@ -10,12 +10,16 @@
       send: ['button[data-testid="send-button"]'],
       reply: ['[data-message-author-role="assistant"]'],
       mine: ['[data-message-author-role="user"]'], // my own bubbles: shown with the original values again
+      // Cards the site draws next to an answer (mail drafts, canvas, tool results) sit outside the assistant element but
+      // inside the turn; scanned too so a placeholder there is not left behind.
+      around: ['article', '[data-testid^="conversation-turn"]'],
     },
     "claude.ai": {
       composer: ['div[contenteditable="true"].ProseMirror', 'div[contenteditable="true"]'],
       send: ['button[aria-label="Send message"]', 'button[aria-label="메시지 보내기"]'],
       reply: [".font-claude-message", "[data-is-streaming]"],
       mine: [], // no verified selector for claude.ai yet (see extension/README.md)
+      around: [],
     },
   };
   SITES["chat.openai.com"] = SITES["chatgpt.com"];
@@ -23,6 +27,10 @@
   const GUESS_SEND = 'button[type="submit"],button[aria-label*="Send" i],button[aria-label*="보내"]';
 
   const PLACEHOLDER = Gw.PLACEHOLDER;
+  // Without this note the model reads "[사람_1]" as a blank nobody filled in and asks "who is the recipient?".
+  // Added only when a placeholder really goes out (popup setting). My own bubble hides it again; it is an instruction, not my text.
+  const HINT = "\n\n(안내: 이 글의 [종류_번호] 모양 표시는 개인정보를 가려 둔 자리표시자입니다. 실제 값을 묻거나 추측하지 말고, 그대로 사용해서 답해 주세요.)";
+  const HINT_SHOWN = /\s*\(안내: 이 글의 \[종류_번호\][^)]*\)/;
   const LONG_TEXT = 4000; // characters; beyond this the live check waits for the send
   let bypass = false; // lets our own re-send through the interceptor
   let busy = false;
@@ -196,6 +204,7 @@
       entries = paired.map((it) => ({ masked: Gw.maskValue(it.original, it.label), to: it.placeholder, how: "ph", meta: `${it.label} · 자리표시자`, st: "전송됨" }));
     }
 
+    if (outText !== text && cfg.hint !== false && PLACEHOLDER.test(outText)) outText += HINT;
     if (outText !== text) writeText(box, outText);
     if (entries.length) {
       await bg("historyAdd", { entry: { kind: "텍스트", entries } });
@@ -346,14 +355,17 @@
     let restored = 0;
     let expired = false;
     const fuzzy = [];
-    const replySel = site.reply.join(",");
-    for (const root of document.querySelectorAll([...site.reply, ...(site.mine || [])].join(","))) {
-      const isReply = root.matches(replySel);
+    const mineSel = (site.mine || []).join(",");
+    for (const root of document.querySelectorAll([...site.reply, ...(site.mine || []), ...(site.around || [])].join(","))) {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       const nodes = [];
       while (walker.nextNode()) nodes.push(walker.currentNode);
       for (const node of nodes) {
-        const value = node.nodeValue;
+        let value = node.nodeValue;
+        const el = node.parentElement;
+        if (!el || inOurUi(el) || el.closest("textarea,[contenteditable=true],script,style")) continue; // never touch what is being typed
+        const isReply = !(mineSel && el.closest(mineSel));
+        if (!isReply && HINT_SHOWN.test(value)) node.nodeValue = value = value.replace(HINT_SHOWN, "");
         if (PLACEHOLDER.test(value) && asked.get(node) !== value) {
           asked.set(node, value);
           const res = await bg("restore", { text: value });
@@ -401,10 +413,12 @@
   const LOOKS_SENSITIVE = /\d{6}[- ]?\d|@\w|sk-|\d{2,4}-\d{3,4}-\d{4}/;
   async function reverseScan() {
     const found = [];
-    for (const root of document.querySelectorAll(site.reply.join(","))) {
+    for (const root of document.querySelectorAll([...site.reply, ...(site.around || [])].join(","))) {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       for (let n = walker.nextNode(); n; n = walker.nextNode()) {
         const v = n.nodeValue;
+        const el = n.parentElement;
+        if (!el || inOurUi(el) || el.closest("textarea,[contenteditable=true],script,style") || (site.mine?.length && el.closest(site.mine.join(",")))) continue;
         if (wrote.has(n) || masked.has(n) || v.includes("▇") || !LOOKS_SENSITIVE.test(v) || scanned.get(v)) continue;
         scanned.set(v, true);
         const a = await bg("analyze", { text: v });

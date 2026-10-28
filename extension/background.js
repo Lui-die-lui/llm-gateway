@@ -5,7 +5,7 @@
 if (typeof importScripts === "function") importScripts("lib.js"); // the dev page loads lib.js with a <script> tag instead
 
 const DEFAULT_GATEWAY = "http://localhost:8000";
-const DEFAULTS = { enabled: true, industries: [], portalUrl: "", demoFiles: false };
+const DEFAULTS = { enabled: true, industries: [], portalUrl: "", demoFiles: false, hint: true };
 
 async function gatewayUrl() {
   const { gatewayUrl: url } = await chrome.storage.local.get({ gatewayUrl: DEFAULT_GATEWAY });
@@ -87,7 +87,7 @@ async function settings(tabId) {
   const s = await chrome.storage.local.get(DEFAULTS);
   const gw = await gatewayUrl();
   const base = Gw.portalBase(gw, s.portalUrl);
-  return { enabled: s.enabled, industries: s.industries, gatewayUrl: gw, portalUrl: `${base}/me`, requestUrl: `${base}/me/request`, demoFiles: !!s.demoFiles, tabId };
+  return { enabled: s.enabled, industries: s.industries, gatewayUrl: gw, portalUrl: `${base}/me`, requestUrl: `${base}/me/request`, demoFiles: !!s.demoFiles, hint: s.hint !== false, tabId };
 }
 
 async function analyze(text) {
