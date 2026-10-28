@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>popup preview (extension dev page)</title>
+  <!-- Shows the real popup.html with the chrome.* shim and the real background.js behind it.
+       ?enabled=0  (protection off)   ?gateway=http://localhost:9  (gateway unreachable)   ?industries=cosmetics -->
+  <link rel="stylesheet" href="../popup.css">
+  <style>html{background:#d8cdbf}body{margin:0 auto}</style>
+  <script src="shim.js"></script>
+  <script src="../lib.js"></script>
+  <script src="../background.js"></script>
+</head>
+<body>
+  <script>
+    // Same markup as the real popup: take popup.html's <body>, then run popup.js against the shim.
+    fetch("../popup.html").then((r) => r.text()).then((html) => {
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      for (const s of doc.querySelectorAll("script")) s.remove();
+      document.body.append(...doc.body.childNodes);
+      const s = document.createElement("script");
+      s.src = "../popup.js";
+      document.body.append(s);
+    });
+  </script>
+</body>
+</html>

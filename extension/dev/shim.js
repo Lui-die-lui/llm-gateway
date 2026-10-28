@@ -1,38 +1,54 @@
-// Stands in for the extension's background worker on the dev page: same message protocol, same gateway calls.
-// Query: ?industries=cosmetics,medical  &enabled=0
+// Stands in for the Chrome extension APIs on the dev page so the REAL background.js and content scripts run unchanged.
+// Query: ?industries=cosmetics,medical  &enabled=0  &gateway=http://localhost:8000
 (() => {
   const q = new URLSearchParams(location.search);
-  const industries = (q.get("industries") || "").split(",").filter(Boolean);
-  const enabled = q.get("enabled") !== "0";
-  let vaultId = sessionStorage.getItem("dev-vault");
-  const post = (path, body) =>
-    fetch("http://localhost:8000" + path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })
-      .then(async (r) => ({ ok: r.ok, status: r.status, data: await r.json() }))
-      .catch((e) => ({ ok: false, status: 0, data: { error: String(e) } }));
+  const mem = (initial) => {
+    const data = { ...initial };
+    return {
+      async get(keys) {
+        if (keys == null) return { ...data };
+        if (typeof keys === "string") return keys in data ? { [keys]: data[keys] } : {};
+        if (Array.isArray(keys)) return Object.fromEntries(keys.filter((k) => k in data).map((k) => [k, data[k]]));
+        return Object.fromEntries(Object.entries(keys).map(([k, d]) => [k, k in data ? data[k] : d]));
+      },
+      async set(obj) {
+        const changes = {};
+        for (const [k, v] of Object.entries(obj)) {
+          changes[k] = { oldValue: data[k], newValue: v };
+          data[k] = v;
+        }
+        listeners.forEach((fn) => fn(changes, this.area));
+      },
+      async remove(keys) {
+        for (const k of [].concat(keys)) delete data[k];
+      },
+    };
+  };
+  const listeners = [];
+  const local = mem({
+    enabled: q.get("enabled") !== "0",
+    industries: (q.get("industries") || "").split(",").filter(Boolean),
+    gatewayUrl: q.get("gateway") || "http://localhost:8000",
+    demoFiles: q.get("demoFiles") === "1",
+  });
+  local.area = "local";
+  const session = mem({});
+  session.area = "session";
+  const onMessage = [];
 
   window.chrome = {
     runtime: {
-      onMessage: { addListener() {} }, // the popup probe does not exist on this page
-      async sendMessage(msg) {
-        if (msg.type === "sanitize") {
-          if (!enabled) return { ok: true, passthrough: true };
-          let res = await post("/v1/sanitize", { text: msg.text, industries, vault_id: vaultId });
-          // Same as background.js: the gateway forgot this vault (restart / 30 min idle), start a new one.
-          if (res.status === 404 && vaultId) res = await post("/v1/sanitize", { text: msg.text, industries });
-          if (res.ok) {
-            sessionStorage.setItem("dev-vault", (vaultId = res.data.vault_id));
-            res.hint = q.get("hint") !== "0";
-          }
-          return res;
-        }
-        if (msg.type === "restore") {
-          return vaultId ? post("/v1/restore", { vault_id: vaultId, text: msg.text }) : { ok: false, status: 404, data: {} };
-        }
+      getManifest: () => ({ version: "dev" }),
+      onMessage: { addListener: (fn) => onMessage.push(fn) },
+      sendMessage(msg) {
+        return new Promise((resolve) => {
+          const sender = { tab: { id: 1, url: location.href } };
+          for (const fn of onMessage) if (fn(msg, sender, resolve)) return;
+        });
       },
     },
+    storage: { local, session, onChanged: { addListener: (fn) => listeners.push(fn) } },
+    action: { setBadgeText: ({ text }) => (window.__badge = text), setBadgeBackgroundColor: () => {} },
+    tabs: { onRemoved: { addListener: () => {} } },
   };
 })();
