@@ -5,6 +5,7 @@
   "description": "Masks sensitive data through the local LLM gateway before a prompt is sent to ChatGPT or Claude, and restores it in the reply.",
   "permissions": ["storage"],
   "host_permissions": ["http://localhost:8000/*"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
   "background": { "service_worker": "background.js" },
   "action": { "default_popup": "popup.html", "default_title": "LLM Gateway Guard" },
   "content_scripts": [

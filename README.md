@@ -5,7 +5,7 @@
 
 ## 실행
 
-게이트웨이와 관리자 콘솔을 한 번에 켜려면 `.\dev.bat seed`를 실행하세요 (자세한 사용법은 [docs/TEST_GUIDE.md](docs/TEST_GUIDE.md), 점검 결과와 남은 일은 [docs/REVIEW.md](docs/REVIEW.md)). 아래는 서버만 직접 켜는 방법입니다.
+게이트웨이와 관리자 콘솔을 한 번에 켜려면 `.\dev.bat seed`를 실행하세요 (자세한 사용법은 [docs/TEST_GUIDE.md](docs/TEST_GUIDE.md), 점검 결과와 남은 일은 [docs/REVIEW.md](docs/REVIEW.md), 인터넷에 올리는 방법은 [docs/DEPLOY.md](docs/DEPLOY.md)). 아래는 서버만 직접 켜는 방법입니다.
 
 Python 3.11 이상이 필요합니다.
 

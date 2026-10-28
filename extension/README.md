@@ -50,4 +50,4 @@ python -m http.server 5173 --directory extension
 - 확장은 사용자가 끌 수 있으므로 **강제 수단이 아닙니다.** 강제는 네트워크/기기 정책으로 합니다 (루트 README의 "차단 방향" 참고).
 - 데스크톱 앱(ChatGPT/Claude 앱)은 브라우저 밖이라 이 확장으로 다룰 수 없습니다.
 - 이미지/파일 첨부는 가리지 않습니다. 텍스트 입력만 처리합니다.
-- 게이트웨이 주소(`localhost:8000`)는 `manifest.json`과 `background.js`에 고정입니다.
+- 게이트웨이 주소는 팝업의 "게이트웨이 주소"에서 바꿉니다 (기본 `http://localhost:8000`). 내 PC 밖의 서버는 `https`만 받고, 저장할 때 Chrome이 그 주소에 대한 권한을 묻습니다. 배포 방법은 `docs/DEPLOY.md`.

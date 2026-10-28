@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import secrets
 import time
@@ -31,6 +32,10 @@ audit.configure(os.getenv("AUDIT_DB", str(Path(__file__).resolve().parent.parent
 company_policy.configure(os.getenv("POLICY_DB", str(Path(__file__).resolve().parent.parent / "data" / "policy.db")))
 
 app = FastAPI(title="LLM Gateway")
+if not os.getenv("GATEWAY_ADMIN_TOKEN"):
+    logging.getLogger("uvicorn.error").warning(
+        "GATEWAY_ADMIN_TOKEN is not set: stats, audit log and policy endpoints are open to anyone who can reach this server."
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("GATEWAY_CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(","),

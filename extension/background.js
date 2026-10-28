@@ -1,12 +1,18 @@
 // Content scripts are bound by the page's CORS rules, so every gateway call goes through here.
 // The vault id (the key to the original values) lives only in this worker's session storage, per tab:
 // it survives page reloads but is never handed to the web page.
-const GATEWAY = "http://localhost:8000";
+// The gateway address is a popup setting (storage.local.gatewayUrl); the popup asks Chrome for permission to that origin.
+const DEFAULT_GATEWAY = "http://localhost:8000";
 const DEFAULTS = { enabled: true, industries: [] };
+
+async function gatewayUrl() {
+  const { gatewayUrl: url } = await chrome.storage.local.get({ gatewayUrl: DEFAULT_GATEWAY });
+  return String(url).replace(/\/+$/, "");
+}
 
 async function call(path, body) {
   try {
-    const r = await fetch(GATEWAY + path, {
+    const r = await fetch((await gatewayUrl()) + path, {
       method: body ? "POST" : "GET",
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
