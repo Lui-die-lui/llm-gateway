@@ -56,6 +56,7 @@ async function init() {
   $("gw-url").value = gatewayUrl;
   $("portal-url").value = settings.portalUrl || "";
   $("gw").addEventListener("submit", saveGateway);
+  if (chrome.runtime.getURL) $("open-auth").href = chrome.runtime.getURL("auth.html");
   $("demo-files").checked = !!settings.demoFiles;
   $("demo-files").addEventListener("change", (e) => chrome.storage.local.set({ demoFiles: e.target.checked }));
 
