@@ -22,7 +22,7 @@
        ?industries=cosmetics  &enabled=0  &reply=echo|plain|fuzzy|newpii  &layout=changed (composer selector no longer matches) -->
   <div id="app">
     <div id="log"></div>
-    <pre id="sent" aria-label="외부로 나가는 문장"></pre>
+    <pre id="sent" data-gw-skip aria-label="외부로 나가는 문장"></pre>
   </div>
   <div id="composer-wrap">
     <div id="composer" contenteditable="true" role="textbox" aria-label="메시지"></div>
@@ -50,13 +50,14 @@
       document.getElementById("sent").textContent = text; // what would leave for the external LLM
       const me = document.createElement("div");
       me.className = "me";
-      me.dataset.messageAuthorRole = "user";
+      if (reply !== "dil") me.dataset.messageAuthorRole = "user"; // ChatGPT's newer markup carries no role attribute
       me.textContent = text;
       const turn = reply === "chatgpt" ? document.createElement("article") : null; // ChatGPT wraps each side in an <article>
       if (turn) (turn.dataset.testid = "conversation-turn-1"), turn.append(me);
       document.getElementById("log").append(turn || me);
       composer.textContent = "";
       if (reply === "chatgpt") return chatgptReply(text);
+      if (reply === "dil") return dilReply(text);
       setTimeout(() => {
         const bot = document.createElement("div");
         bot.className = "bot";
@@ -68,6 +69,21 @@
           : "답변: " + text; // a model that echoes what it was sent
         document.getElementById("log").append(bot);
       }, 200);
+    }
+    // Newer ChatGPT markup: the answer sits in a separate renderer root (no author-role attribute) and placeholders are in <code>.
+    function dilReply(text) {
+      const ph = text.match(/\[[^\[\]\s]+_\d+\]/g) || [];
+      const root = document.createElement("div");
+      root.dataset.dilMessageId = "x";
+      for (const [label, v] of [["받는 사람: ", ph[1]], ["수신 고객: ", ph[0]]]) {
+        const p = document.createElement("p");
+        const code = document.createElement("code");
+        code.textContent = v || "";
+        p.append(label, code);
+        root.append(p);
+      }
+      root.append(Object.assign(document.createElement("p"), { textContent: "현재 메일 발송 기능이 연결되어 있지 않아 직접 전송할 수는 없어." }));
+      document.getElementById("log").append(root);
     }
     // ChatGPT-like answer: streamed text in the assistant element, plus a mail card drawn outside it but inside the turn.
     function chatgptReply(text) {
