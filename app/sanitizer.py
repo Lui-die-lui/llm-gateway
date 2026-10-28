@@ -1,5 +1,8 @@
 """Request-side pipeline (detect -> mask) and response-side pipeline (scan -> restore)."""
+import json
+import os
 from collections import Counter
+from collections.abc import Callable
 
 from . import company_policy, policy
 from .detector import RESPONSE_LABELS, Match, detect
@@ -14,6 +17,73 @@ class ResponseBlocked(Exception):
     def __init__(self, findings: dict[str, int]) -> None:
         super().__init__("response blocked by policy")
         self.findings = findings
+
+
+def _map_strings(value, fn: Callable[[str], object]):
+    """Apply fn to every string value of a JSON document (keys stay as they are)."""
+    if isinstance(value, str):
+        return fn(value)
+    if isinstance(value, list):
+        return [_map_strings(v, fn) for v in value]
+    if isinstance(value, dict):
+        return {k: _map_strings(v, fn) for k, v in value.items()}
+    return value
+
+
+def map_arguments(arguments: str, fn: Callable[[str], object]) -> str:
+    """Tool-call arguments are a JSON document inside a string. Transform its string values and keep it valid JSON
+    (a restored value may contain quotes or newlines, which must be escaped again). Not JSON: transform the whole string."""
+    try:
+        doc = json.loads(arguments)
+    except ValueError:
+        out = fn(arguments)
+        return out if isinstance(out, str) else str(out)
+    return json.dumps(_map_strings(doc, fn), ensure_ascii=False)
+
+
+def _map_calls(message: dict, fn_args: Callable[[str], str]) -> dict:
+    """Return the message with fn_args applied to the arguments string of its tool_calls / legacy function_call."""
+    out = dict(message)
+    calls = message.get("tool_calls")
+    if isinstance(calls, list):
+        out["tool_calls"] = [
+            {**c, "function": {**c["function"], "arguments": fn_args(c["function"]["arguments"])}}
+            if isinstance(c, dict) and isinstance(c.get("function"), dict) and isinstance(c["function"].get("arguments"), str)
+            else c
+            for c in calls
+        ]
+    legacy = message.get("function_call")
+    if isinstance(legacy, dict) and isinstance(legacy.get("arguments"), str):
+        out["function_call"] = {**legacy, "arguments": fn_args(legacy["arguments"])}
+    return out
+
+
+# Structured data (tool results, tool arguments) says what a value is through its key, even when the value alone looks like
+# nothing: "홍길동" has no title, "5000000" no unit. Key (lowercase, no spaces/_/-) -> placeholder label.
+# Extend with SENSITIVE_KEYS="cust_nm=사람,tel_no=전화번호" for a company's own field names.
+_KEY_GROUPS = {
+    "사람": ("name", "fullname", "customername", "username", "이름", "성명", "고객명", "담당자", "담당자명"),
+    "이메일": ("email", "emailaddress", "mail", "이메일", "메일"),
+    "전화번호": ("phone", "phonenumber", "mobile", "tel", "telephone", "전화", "전화번호", "휴대폰", "휴대전화", "연락처"),
+    "주민번호": ("ssn", "rrn", "주민번호", "주민등록번호"),
+    "주소": ("address", "주소"),
+    "계좌번호": ("account", "accountnumber", "계좌", "계좌번호"),
+    "카드번호": ("card", "cardnumber", "카드번호"),
+    "급여": ("salary", "wage", "급여", "연봉"),
+}
+
+
+def _norm_key(key: str) -> str:
+    return "".join(ch for ch in key.lower() if ch not in " _-")
+
+
+def key_labels() -> dict[str, str]:
+    labels = {_norm_key(k): label for label, keys in _KEY_GROUPS.items() for k in keys}
+    for pair in os.getenv("SENSITIVE_KEYS", "").split(","):
+        key, _, label = pair.partition("=")
+        if key.strip() and label.strip():
+            labels[_norm_key(key)] = label.strip()
+    return labels
 
 
 def count_by_label(matches: list[Match]) -> dict[str, int]:
@@ -54,24 +124,50 @@ def sanitize_messages(
     untouched, because they stay inside the company.
     """
     all_matches: list[Match] = []
+    labels = key_labels()
+    skip = company_policy.active().skip_labels
 
     def mask(s: str) -> str:
         redacted, ms = redact_text(s, vault, industries)
         all_matches.extend(ms)
         return redacted
 
+    def mask_doc(value):
+        if isinstance(value, dict):
+            out = {}
+            for k, v in value.items():
+                label = labels.get(_norm_key(k)) if isinstance(k, str) else None
+                if label and label not in skip and isinstance(v, (str, int, float)) and not isinstance(v, bool) and str(v).strip():
+                    all_matches.append(Match(0, 0, label, "redact", 1))  # for the audit log and the findings count
+                    out[k] = vault.placeholder(label, str(v), numeric=isinstance(v, (int, float)))
+                else:
+                    out[k] = mask_doc(v)
+            return out
+        if isinstance(value, list):
+            return [mask_doc(v) for v in value]
+        return mask(value) if isinstance(value, str) else value
+
+    def mask_structured(text: str) -> str:
+        """JSON (a tool result, tool arguments) is masked by key and by content; anything else by content."""
+        try:
+            doc = json.loads(text)
+        except ValueError:
+            return mask(text)
+        return json.dumps(mask_doc(doc), ensure_ascii=False) if isinstance(doc, (dict, list)) else mask(text)
+
     masked = []
     for msg in messages:
         content = msg.get("content")
+        text_mask = mask_structured if msg.get("role") in ("tool", "function") else mask
         if isinstance(content, str):
-            msg = {**msg, "content": mask(content)}
+            msg = {**msg, "content": text_mask(content)}
         elif isinstance(content, list):
             parts = [
-                {**p, "text": mask(p["text"])} if isinstance(p, dict) and p.get("type") == "text" else p
+                {**p, "text": text_mask(p["text"])} if isinstance(p, dict) and p.get("type") == "text" else p
                 for p in content
             ]
             msg = {**msg, "content": parts}
-        masked.append(msg)
+        masked.append(_map_calls(msg, mask_structured))  # an assistant turn replayed from history carries real values in its tool calls
     route = policy.decide(all_matches, internal_available)
     return (messages if route == "internal" else masked), all_matches, route
 
@@ -104,8 +200,11 @@ def scan_body(body: dict) -> list[Match]:
 
 
 def restore_response(body: dict, vault: Vault) -> dict:
+    """Put the original values back into the answer and into the arguments of any tool call, so the app that runs
+    the tool (inside the company) gets real values while the model only ever saw placeholders."""
     for choice in body.get("choices", []):
         message = choice.get("message") or {}
         if isinstance(message.get("content"), str):
             message["content"] = vault.restore(message["content"])
+        choice["message"] = _map_calls(message, lambda args: map_arguments(args, vault.restore_value))
     return body

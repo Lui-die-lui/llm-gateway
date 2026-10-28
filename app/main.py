@@ -17,6 +17,7 @@ from .evaluate import evaluate
 from .sanitizer import (
     ResponseBlocked,
     count_by_label,
+    map_arguments,
     redact_text,
     restore_response,
     sanitize_messages,
@@ -215,6 +216,13 @@ async def chat_completions(
         log("blocked")
         return error(403, "gateway_blocked", direction="request", findings=count_by_label(matches))
 
+    uses_tools = bool(payload.get("tools") or payload.get("functions")) or any(
+        isinstance(m, dict) and m.get("role") in ("tool", "function") for m in payload["messages"]
+    )
+    if uses_tools and not upstream.supports_tools(route):
+        log("blocked")
+        return error(400, "unsupported", message="tool calls are not supported with UPSTREAM_PROVIDER=anthropic yet; use an OpenAI-compatible provider")
+
     outbound = {**payload, "messages": messages}
     scan = route == "external" and response_scan_enabled()  # internal answers never left the company
     headers = {"X-Gateway-Redacted": str(sum(m.action != "log" for m in matches)), "X-Gateway-Route": route}
@@ -233,15 +241,36 @@ async def chat_completions(
 
         async def events():
             status = "ok"
+            calls: dict[int, dict] = {}  # streamed tool calls, put together here and sent once restored
             try:
                 async for delta in upstream.stream(outbound, authorization, route):
+                    if isinstance(delta, upstream.ToolDelta):
+                        call = calls.setdefault(delta.index, {"id": None, "name": "", "arguments": ""})
+                        call["id"] = delta.id or call["id"]
+                        call["name"] += delta.name or ""
+                        call["arguments"] += delta.arguments
+                        continue
                     text = flt.feed(delta)
                     if text:
                         yield sse(chunk(text))
                 tail = flt.flush()
                 if tail:
                     yield sse(chunk(tail))
-                yield sse(chunk("", finish="stop"))
+                if calls:
+                    # A placeholder can be split across fragments, so the arguments are released whole, after restoring.
+                    restored = [
+                        {
+                            "index": i,
+                            "id": c["id"],
+                            "type": "function",
+                            "function": {"name": c["name"], "arguments": map_arguments(c["arguments"], vault.restore_value)},
+                        }
+                        for i, c in sorted(calls.items())
+                    ]
+                    first = chunk("")
+                    first["choices"] = [{"index": 0, "delta": {"tool_calls": restored}, "finish_reason": None}]
+                    yield sse(first)
+                yield sse(chunk("", finish="tool_calls" if calls else "stop"))
                 yield "data: [DONE]\n\n"
             except upstream.UpstreamError as e:
                 status = "upstream_error"
