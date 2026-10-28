@@ -9,11 +9,11 @@
       // #prompt-textarea is a contenteditable on the logged-in page; other layouts use a <textarea> or a bare ProseMirror.
       composer: ["#prompt-textarea", 'textarea[name="prompt-textarea"]', 'div.ProseMirror[contenteditable="true"]'],
       send: ['button[data-testid="send-button"]', 'button[aria-label="Send prompt"]', 'button[aria-label="프롬프트 보내기"]', 'button[aria-label="Send message"]'],
-      reply: ['[data-message-author-role="assistant"]'],
+      reply: ['[data-message-author-role="assistant"]', '[data-dil-message-id]'],
       mine: ['[data-message-author-role="user"]'], // my own bubbles: shown with the original values again
       // Cards the site draws next to an answer (mail drafts, canvas, tool results) sit outside the assistant element but
       // inside the turn; scanned too so a placeholder there is not left behind.
-      around: ['article', '[data-testid^="conversation-turn"]'],
+      around: ['article', '[data-testid^="conversation-turn"]', '[data-dil-message-id]'],
     },
     "claude.ai": {
       composer: ['div[contenteditable="true"].ProseMirror', 'div[contenteditable="true"]'],
@@ -212,6 +212,7 @@
     }
 
     if (outText !== text && cfg.hint !== false && PLACEHOLDER.test(outText)) outText += HINT;
+    if (outText !== text) (sent.push(outText), sent.length > 20 && sent.shift());
     if (outText !== text) writeText(box, outText);
     if (entries.length) {
       await bg("historyAdd", { entry: { kind: "텍스트", entries } });
@@ -364,33 +365,52 @@
   const scanned = new Map(); // text node text -> true
   let noteTimer;
 
+  // Sites change how they draw answers and cards (ChatGPT now uses a separate renderer for some answers), so the whole page is
+  // searched for placeholders instead of trusting a list of containers. Only what the person is typing and our own UI are skipped.
+  // "Mine" (text I sent) vs "reply" decides which notices apply; both get their originals back.
+  const sent = []; // what really went out, to recognise my own text on screen when the site's markup does not say so
+  const isMine = (node, el, mineSel) => {
+    if (mineSel && el.closest(mineSel)) return true;
+    const v = node.nodeValue.trim();
+    return HINT_SHOWN.test(v) || (v.length >= 12 && sent.some((t) => t.includes(v)));
+  };
+  const skipEl = (el) => !el || inOurUi(el) || !!el.closest("textarea,[contenteditable=true],script,style,noscript,[data-gw-skip]");
+
   async function restoreReplies() {
     let restored = 0;
     let expired = false;
     const fuzzy = [];
     const mineSel = (site.mine || []).join(",");
-    for (const root of document.querySelectorAll([...site.reply, ...(site.mine || []), ...(site.around || [])].join(","))) {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      const nodes = [];
-      while (walker.nextNode()) nodes.push(walker.currentNode);
-      for (const node of nodes) {
-        let value = node.nodeValue;
-        const el = node.parentElement;
-        if (!el || inOurUi(el) || el.closest("textarea,[contenteditable=true],script,style")) continue; // never touch what is being typed
-        const isReply = !(mineSel && el.closest(mineSel));
-        if (!isReply && HINT_SHOWN.test(value)) node.nodeValue = value = value.replace(HINT_SHOWN, "");
-        if (PLACEHOLDER.test(value) && asked.get(node) !== value) {
-          asked.set(node, value);
-          const res = await bg("restore", { text: value });
-          if (res.ok && res.data.text !== value) {
-            node.nodeValue = res.data.text;
-            asked.set(node, node.nodeValue);
-            wrote.add(node);
-            if (isReply) restored++;
-          } else if (res.status === 404 && isReply) expired = true;
-        } else if (isReply && !PLACEHOLDER.test(value)) {
-          for (const f of Gw.findFuzzy(value)) fuzzy.push({ node, ...f });
-        }
+    const nodes = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const v = n.nodeValue;
+      if (v.length > 2 && (PLACEHOLDER.test(v) || v.includes("(안내:"))) nodes.push(n);
+    }
+    for (const node of nodes) {
+      let value = node.nodeValue;
+      const el = node.parentElement;
+      if (skipEl(el)) continue;
+      const isReply = !isMine(node, el, mineSel);
+      if (!isReply && HINT_SHOWN.test(value)) node.nodeValue = value = value.replace(HINT_SHOWN, "");
+      if (PLACEHOLDER.test(value) && asked.get(node) !== value) {
+        asked.set(node, value);
+        const res = await bg("restore", { text: value });
+        if (res.ok && res.data.text !== value) {
+          node.nodeValue = res.data.text;
+          asked.set(node, node.nodeValue);
+          wrote.add(node);
+          if (isReply) restored++;
+        } else if (res.status === 404 && isReply) expired = true;
+      }
+    }
+    // Misspelled placeholders are only looked for inside answers we can positively identify.
+    for (const root of document.querySelectorAll([...site.reply, ...(site.around || [])].join(","))) {
+      const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let n = w.nextNode(); n; n = w.nextNode()) {
+        const el = n.parentElement;
+        if (skipEl(el) || PLACEHOLDER.test(n.nodeValue) || isMine(n, el, mineSel)) continue;
+        for (const f of Gw.findFuzzy(n.nodeValue)) fuzzy.push({ node: n, ...f });
       }
     }
     if (restored && lastSent) {
