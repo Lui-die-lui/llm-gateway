@@ -27,7 +27,7 @@ class Match:
 _SURNAMES = "김이박최정강조윤장임한오서신권황안송류홍전고문양손배백허유남심노하곽성차주우구민나진지엄채원천방공"
 _PARTICLE = "에게|한테|께서|으로|에서|님|씨|의|은|는|이|가|을|를|과|와|도|께|로"
 _TITLE_BEFORE = "고객|환자|담당자|담당|대표|성명|성함|이름|보호자|수신자|신청인|계약자|예금주|작성자|문의자"
-_TITLE_AFTER = r"(?:님|씨|(?:대표|이사|부장|과장|팀장|사원|대리|교수|박사|원장|의사|선생)(?:님)?)"
+_TITLE_AFTER = r"(?:님|씨|(?:고객|회원|환자|보호자|담당자)(?:님|분)|(?:대표|이사|부장|과장|팀장|사원|대리|교수|박사|원장|의사|선생)(?:님)?)"
 # Common words that start with a surname character and would otherwise look like a name after a title.
 _NOT_NAME = (
     "이메일|이름|이용|이번|이상|이후|이전|이미|이것|이런|고객|환자|정보|주소|전화|번호|오늘|오전|오후|한국|서울|부산|"
@@ -55,6 +55,11 @@ BUILTIN_RULES: list[tuple[str, re.Pattern[str], Action] | tuple[str, re.Pattern[
     # Foreigner registration number: second part starts with 5-8. Birth date is validated to cut false positives.
     ("외국인등록번호", re.compile(r"(?<!\d)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])-[5-8][\dxX*]{6}(?!\d)"), "redact"),
     ("전화번호", re.compile(r"(?<!\d)01[016789]-?\d{3,4}-?\d{4}(?!\d)"), "redact"),
+    # Other ways people write a number: "010 1234 5678", "010.1234.5678", "+82-10-1234-5678", and landlines ("02-1234-5678",
+    # "031-123-4567"). A landline needs a separator before the last four digits, so a bare run of digits is never taken for one.
+    ("전화번호", re.compile(r"(?<!\d)01[016789][ .]\d{3,4}[ .]\d{4}(?!\d)"), "redact"),
+    ("전화번호", re.compile(r"(?<![\d+])\+82[-. ]?\(?0?\)?(?:10|1[16-9])[-. ]?\d{3,4}[-. ]?\d{4}(?!\d)"), "redact"),
+    ("전화번호", re.compile(r"(?<!\d)0(?:2|[3-6][1-5]|70)[-. ]\d{3,4}[-. ]\d{4}(?!\d)"), "redact"),
     ("사업자번호", re.compile(r"(?<!\d)\d{3}-\d{2}-\d{5}(?!\d)"), "redact"),
     # Passport: new (M123A4567) and old (M12345678) formats. Product codes look alike, so a keyword is required.
     (

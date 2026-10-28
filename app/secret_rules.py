@@ -329,6 +329,8 @@ _PASSWORD = re.compile(
     r"""((?:(?!["'`])[\x21-\x7e]){4,})""",
     re.I,
 )
+# The way people say it in Korean: "비밀번호는 Abc12345! 입니다" (no colon). Same value rules as above.
+_PASSWORD_SPOKEN = re.compile(r"""(?<![A-Za-z0-9])(?:비밀번호|비번|패스워드)(?:은|는|이|가)[ 	]+((?:(?!["'`])[!-~]){4,})""")
 _DB_URL = re.compile(
     r"\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|rediss?|amqps?|mssql|sqlserver)://[^\s:/@]+:([^\s@/]+)@", re.I
 )
@@ -341,7 +343,7 @@ def _hand_written(text: str, low: str) -> list[Match]:
             if not _PLACEHOLDER.fullmatch(m.group(1)):
                 found.append(Match(m.start(1), m.end(1), LABEL, "block", BLOCK_PRIORITY))
     if any(w in low for w in _PASSWORD_WORDS):
-        for m in _PASSWORD.finditer(text):
+        for m in (*_PASSWORD.finditer(text), *_PASSWORD_SPOKEN.finditer(text)):
             value = m.group(1).rstrip(".,;")  # sentence punctuation after the password is not part of it
             # Words and code ("Password: required", "password = get_password()") are not passwords: the value needs a digit
             # or one of !@#$%^&*+=~?, and must not be a placeholder.

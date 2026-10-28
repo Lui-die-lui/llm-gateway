@@ -36,6 +36,17 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test extension/test/*.test.js
+      - name: Syntax of every extension script
+        run: for f in extension/*.js extension/mock/*.js extension/dev/*.js; do node --check "$f"; done
+
   # The image Railway (or any Docker host) builds: gateway + console. Builds it, starts it, and calls it.
   docker:
     runs-on: ubuntu-latest
