@@ -148,12 +148,15 @@ button{font:inherit;color:inherit}
     window.addEventListener("scroll", place, true);
 
     function rebuildDock() {
-      dock.replaceChildren(...[slots.drawer, ...slots.strips.values(), slots.chip, slots.pill].filter(Boolean));
+      const next = [slots.drawer, ...slots.strips.values(), slots.chip, slots.pill].filter(Boolean);
+      const same = next.length === dock.childElementCount && next.every((el, i) => dock.children[i] === el);
+      if (!same) dock.replaceChildren(...next); // re-attaching an unchanged node would swallow a click in progress
       place();
     }
 
     /* ---------- chip (status above the composer) ---------- */
     function chip(spec) {
+      if (!spec && !slots.chip) return;
       if (!spec) slots.chip = null;
       else {
         slots.chip = h(
@@ -172,6 +175,7 @@ button{font:inherit;color:inherit}
     function strip(id, spec, ms) {
       clearTimeout(timers.get(id));
       if (!spec) {
+        if (!slots.strips.has(id)) return;
         slots.strips.delete(id);
         timers.delete(id);
         return rebuildDock();
@@ -203,6 +207,7 @@ button{font:inherit;color:inherit}
     let lastHistory = null;
     function history(entries, o = {}) {
       lastHistory = entries && entries.length ? { entries, o } : null;
+      const changed = lastHistory ? entries.filter((e) => e.how !== "keep").length : 0;
       if (!lastHistory) {
         slots.pill = slots.drawer = null;
         drawerOpen = false;
@@ -220,14 +225,14 @@ button{font:inherit;color:inherit}
             "button",
             { type: "button", class: "pill glass", "data-testid": "gw-pill", "aria-expanded": "false", "aria-label": "치환 내역 펼치기", onclick: toggle },
             h("span", { class: "logo" }, icon("shield", 13)),
-            `${entries.length}개 바꿔서 보냄`,
+            changed ? `${changed}개 바꿔서 보냄` : `원문 ${entries.length}개 그대로 보냄`,
             h("span", { "aria-hidden": "true", class: "t3", text: "▴" }),
           );
       slots.drawer = drawerOpen
         ? h(
             "div",
             { class: "drawer glass", role: "dialog", "aria-label": "치환 내역", "data-testid": "gw-drawer" },
-            h("div", { class: "hd" }, h("b", { text: `이 메시지에서 바꾼 것 ${entries.length}` }), h("button", { type: "button", class: "xbtn", "aria-label": "접기", onclick: toggle }, "▾")),
+            h("div", { class: "hd" }, h("b", { text: changed ? `이 메시지에서 바꾼 것 ${changed}` : "이 메시지는 원문으로 보냈어요" }), h("button", { type: "button", class: "xbtn", "aria-label": "접기", onclick: toggle }, "▾")),
             h(
               "div",
               {},

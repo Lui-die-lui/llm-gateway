@@ -30,15 +30,17 @@
   </div>
   <script>
     // layout=changed: the site renamed its composer, so the selector table no longer matches (safe mode).
-    const mode = new URLSearchParams(location.search).get("layout");
-    const composer = document.getElementById("composer");
-    composer.id = mode === "changed" ? "box" : "prompt-textarea";
+    (() => {
+      const mode = new URLSearchParams(location.search).get("layout");
+      document.getElementById("composer").id = mode === "changed" ? "box" : "prompt-textarea";
+    })();
   </script>
   <script src="shim.js"></script>
   <script src="../lib.js"></script>
   <script src="../background.js"></script>
   <script src="../ui.js"></script>
   <script>
+    (() => {
     const reply = new URLSearchParams(location.search).get("reply") || "echo";
     const composer = document.querySelector("[contenteditable]");
     function send() {
@@ -67,6 +69,7 @@
     composer.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
     });
+    })();
   </script>
   <script src="../content.js"></script>
 </body>

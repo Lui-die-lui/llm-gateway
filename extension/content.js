@@ -9,11 +9,13 @@
       composer: ["#prompt-textarea"],
       send: ['button[data-testid="send-button"]'],
       reply: ['[data-message-author-role="assistant"]'],
+      mine: ['[data-message-author-role="user"]'], // my own bubbles: shown with the original values again
     },
     "claude.ai": {
       composer: ['div[contenteditable="true"].ProseMirror', 'div[contenteditable="true"]'],
       send: ['button[aria-label="Send message"]', 'button[aria-label="메시지 보내기"]'],
       reply: [".font-claude-message", "[data-is-streaming]"],
+      mine: [], // no verified selector for claude.ai yet (see extension/README.md)
     },
   };
   SITES["chat.openai.com"] = SITES["chatgpt.com"];
@@ -312,7 +314,9 @@
     let restored = 0;
     let expired = false;
     const fuzzy = [];
-    for (const root of document.querySelectorAll(site.reply.join(","))) {
+    const replySel = site.reply.join(",");
+    for (const root of document.querySelectorAll([...site.reply, ...(site.mine || [])].join(","))) {
+      const isReply = root.matches(replySel);
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       const nodes = [];
       while (walker.nextNode()) nodes.push(walker.currentNode);
@@ -325,9 +329,9 @@
             node.nodeValue = res.data.text;
             asked.set(node, node.nodeValue);
             wrote.add(node);
-            restored++;
-          } else if (res.status === 404) expired = true;
-        } else if (!PLACEHOLDER.test(value)) {
+            if (isReply) restored++;
+          } else if (res.status === 404 && isReply) expired = true;
+        } else if (isReply && !PLACEHOLDER.test(value)) {
           for (const f of Gw.findFuzzy(value)) fuzzy.push({ node, ...f });
         }
       }
