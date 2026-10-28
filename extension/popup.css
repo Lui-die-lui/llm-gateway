@@ -44,3 +44,7 @@ h2{margin:0 0 10px;font-size:12px;font-weight:600;color:var(--ink3)}
 .adv .row{display:flex;gap:6px}
 .adv input{flex:1;min-width:0;height:34px;border-radius:10px;border:1px solid rgba(15,26,43,.14);background:#fff;padding:0 10px;font:12px inherit;font-family:inherit}
 @media (prefers-reduced-motion:no-preference){.tog,.tog::after{transition:background .15s}}
+
+.adv .chk{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;margin-top:4px;cursor:pointer;min-height:32px}
+.adv .chk input{flex:0 0 16px;width:16px;height:16px;margin:0;accent-color:#0F1A2B}
+.adv .chk small{flex:1 1 100%;color:var(--ink3);font-size:11px}

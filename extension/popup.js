@@ -1,7 +1,7 @@
 (() => {
 "use strict";
 const DEFAULT_GATEWAY = "http://localhost:8000";
-const DEFAULTS = { enabled: true, industries: [], portalUrl: "" };
+const DEFAULTS = { enabled: true, industries: [], portalUrl: "", demoFiles: false };
 const INDUSTRY_KO = { cosmetics: "화장품", medical: "의료", manufacturing: "제조", finance: "금융", hr: "인사", legal: "법무", it_dev: "IT 개발", ecommerce: "이커머스", logistics: "물류" };
 const $ = (id) => document.getElementById(id);
 
@@ -56,6 +56,8 @@ async function init() {
   $("gw-url").value = gatewayUrl;
   $("portal-url").value = settings.portalUrl || "";
   $("gw").addEventListener("submit", saveGateway);
+  $("demo-files").checked = !!settings.demoFiles;
+  $("demo-files").addEventListener("change", (e) => chrome.storage.local.set({ demoFiles: e.target.checked }));
 
   const base = Gw.portalBase(gatewayUrl, settings.portalUrl);
   $("open-portal").href = `${base}/me`;

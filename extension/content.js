@@ -292,7 +292,39 @@
   bg("settings").then((s) => {
     cfg = s;
     offStrip(s.enabled);
+    if (s.demoFiles) startFileDemo();
   });
+
+  // DEMO ONLY (mock/files.js): with the flag on, files are held back from the site and a made-up inspection is shown.
+  // Without the flag none of this runs and files go to the site as before.
+  function startFileDemo() {
+    if (!self.GwMockFiles) return;
+    const demo = self.GwMockFiles.install(ui);
+    const take = (files) => {
+      const list = [...files];
+      if (list.length) demo.inspect(list);
+    };
+    const stop = (e) => (e.preventDefault(), e.stopPropagation(), e.stopImmediatePropagation());
+    document.addEventListener("dragover", (e) => e.dataTransfer?.types?.includes("Files") && e.preventDefault(), true);
+    document.addEventListener("drop", (e) => {
+      if (!e.dataTransfer?.files?.length) return;
+      stop(e);
+      take(e.dataTransfer.files);
+    }, true);
+    document.addEventListener("change", (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLInputElement) || t.type !== "file" || !t.files.length) return;
+      stop(e);
+      const files = [...t.files];
+      t.value = "";
+      take(files);
+    }, true);
+    document.addEventListener("paste", (e) => {
+      if (!e.clipboardData?.files?.length) return;
+      stop(e);
+      take(e.clipboardData.files);
+    }, true);
+  }
   document.addEventListener(
     "focusin",
     (e) => {

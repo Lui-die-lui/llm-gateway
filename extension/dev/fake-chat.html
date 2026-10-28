@@ -39,6 +39,7 @@
   <script src="../lib.js"></script>
   <script src="../background.js"></script>
   <script src="../ui.js"></script>
+  <script src="../mock/files.js"></script>
   <script>
     (() => {
     const reply = new URLSearchParams(location.search).get("reply") || "echo";
@@ -71,6 +72,7 @@
     });
     })();
   </script>
+  <input type="file" id="fake-file" multiple aria-label="파일 첨부" style="position:fixed;left:8px;bottom:8px">
   <script src="../content.js"></script>
 </body>
 </html>
