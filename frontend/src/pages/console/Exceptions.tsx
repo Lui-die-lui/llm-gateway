@@ -10,6 +10,7 @@ import { MockBadge, Seg } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
 import { useFeedback } from '../../features/feedback';
 import { qk, useExceptions } from '../../features/queries';
+import { isReal } from '../../api/exceptions';
 
 const TTL_OPTS = [
   ['1x', '1회'],
@@ -166,6 +167,7 @@ export function ExceptionsPage() {
                     </span>
                     <span style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                       <span className={`badge ${SEV_CLS[r.sev]}`}>{r.sev}</span>
+                      {isReal(r.id) && <span className="badge b-accent">실제 접수</span>}
                       <span className="chip">{r.entity}</span>
                       <span className="chip">{r.scope}</span>
                     </span>
@@ -253,6 +255,7 @@ export function ExceptionsPage() {
                     <button type="button" className="btn btn-d" disabled={decide.isPending} onClick={() => onDecide('rejected')}>
                       반려
                     </button>
+                    {!isReal(cur.id) && (
                     <button
                       type="button"
                       className="btn"
@@ -265,6 +268,7 @@ export function ExceptionsPage() {
                     >
                       정보 추가 요청
                     </button>
+                    )}
                     <button type="button" className="btn btn-p" disabled={decide.isPending} onClick={() => onDecide('approved')}>
                       승인 · {TTL_KO[ttl]}
                     </button>

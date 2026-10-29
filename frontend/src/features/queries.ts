@@ -33,7 +33,7 @@ export const useHealth = () =>
 
 export const useCompany = () => useQuery({ queryKey: qk.company, queryFn: consoleApi.company });
 export const useJoinRequests = () => useQuery({ queryKey: qk.joins, queryFn: consoleApi.joinRequests });
-export const useExceptions = () => useQuery({ queryKey: qk.exceptions, queryFn: consoleApi.exceptions });
+export const useExceptions = () => useQuery({ queryKey: qk.exceptions, queryFn: consoleApi.exceptions, refetchInterval: 5_000 });
 export const useSettings = () => useQuery({ queryKey: qk.settings, queryFn: consoleApi.settings });
 
 /** Counts for the sidebar badges and overview alerts. */

@@ -3,6 +3,7 @@
 // users, sessions, exceptions or settings yet); swapping one for a real endpoint means changing only that function's body.
 import * as mock from '../mocks/db';
 import { ApiError, request } from './client';
+import { createReal, decideReal, isReal, realExceptions, realMine } from './exceptions';
 import { gateway } from './gateway';
 import type { BasicRuleState, Decision, MinutePoint, MemberStatus, PolicyRule, PolicyState, RuleDraft, Settings, Ttl } from './consoleTypes';
 
@@ -55,8 +56,10 @@ export const consoleApi = {
   applyBasicRules: (next: Record<string, boolean>) =>
     request<BasicRuleState>('/v1/policy/builtin', { method: 'PUT', body: { enabled: next } }),
 
-  exceptions: () => served(mock.listExceptions),
-  decideException: (id: string, d: Decision, ttl: Ttl, memo: string) => served(() => mock.decideException(id, d, ttl, memo)),
+  // Requests really sent to the gateway (REQ-) come first, then the mock seed (EXC-).
+  exceptions: () => Promise.all([realExceptions(), served(mock.listExceptions)]).then(([real, seed]) => [...real, ...seed]),
+  decideException: (id: string, d: Decision, ttl: Ttl, memo: string) =>
+    isReal(id) ? decideReal(id, d, ttl, memo) : served(() => mock.decideException(id, d, ttl, memo)),
   requestMoreInfo: (id: string) => served(() => mock.requestMoreInfo(id)),
 
   adminLog: () => served(mock.listAdminLog),
@@ -89,8 +92,8 @@ export const portalApi = {
   profile: () => served(mock.portalProfile),
   recent: () => served(mock.portalRecent),
   flagRecent: (id: string) => served(() => mock.flagRecent(id)),
-  requests: () => served(mock.portalRequests),
-  createException: (input: { reason: string; scope: '1회' | '1시간' | '24시간' }) => served(() => mock.createException(input)),
+  requests: () => Promise.all([realMine(), served(mock.portalRequests)]).then(([real, seed]) => [...real, ...seed]),
+  createException: (input: { reason: string; scope: '1회' | '1시간' | '24시간'; requester: string; entity: string; site: string }) => createReal(input),
   lastBlocked: () => served(mock.lastBlockedSend),
   history: () => served(mock.history),
   clearHistory: () => served(mock.clearHistory),

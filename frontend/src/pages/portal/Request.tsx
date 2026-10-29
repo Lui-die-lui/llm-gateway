@@ -1,7 +1,7 @@
 // U9 예외 요청하기 (UserRequest.dc.html). Submitting creates a pending request in the mock store, which then shows
 // up in the admin console's 06 예외 요청 and in 내 예외 요청.
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { portalApi } from '../../api/console';
 import { errorMessage } from '../../api/client';
@@ -23,12 +23,17 @@ export function RequestPage() {
   const nav = useNavigate();
   const { toast } = useFeedback();
   const blocked = useQuery({ queryKey: qk.portal('blocked'), queryFn: portalApi.lastBlocked });
+  // The extension's block dialog opens this page with what it blocked and where; without it the card shows the sample.
+  const [params] = useSearchParams();
+  const labels = params.get('labels') ?? '';
+  const site = params.get('site') ?? '';
+  const [name, setName] = useState('');
   const [reason, setReason] = useState('');
   const [scope, setScope] = useState<Scope>('1회');
   const [agree, setAgree] = useState(false);
   const [internal, setInternal] = useState(false);
   const submit = useMutation({
-    mutationFn: () => portalApi.createException({ reason, scope }),
+    mutationFn: () => portalApi.createException({ reason, scope, requester: name, entity: labels, site }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.portal('requests') });
       qc.invalidateQueries({ queryKey: qk.exceptions });
@@ -69,13 +74,22 @@ export function RequestPage() {
                 </span>
                 <span style={{ minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: 14, fontWeight: 600 }}>
-                    막힌 전송 · {blocked.data?.when ?? '…'} · {blocked.data?.site ?? ''}
+                    {labels ? `막힌 전송 · ${site || '브라우저 확장'}` : `막힌 전송 · ${blocked.data?.when ?? '…'} · ${blocked.data?.site ?? ''}`}
                   </span>
                   <span className="t2" style={{ fontSize: 12.5 }}>
-                    {blocked.data?.summary}
+                    {labels ? `${labels.split(',').join(' · ')} — 항목 종류만 전달돼요` : blocked.data?.summary}
                   </span>
                 </span>
               </div>
+              <label className="field">
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-body)' }}>
+                  이름{' '}
+                  <span className="t3" style={{ fontWeight: 400 }}>
+                    (선택 · 보안관리자 화면에 표시돼요)
+                  </span>
+                </span>
+                <input className="in-lg" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} placeholder="예: 김민지" />
+              </label>
               <label className="field">
                 <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-body)' }}>
                   왜 원래 값 그대로 보내야 하나요?{' '}
