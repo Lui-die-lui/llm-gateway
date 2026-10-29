@@ -380,6 +380,14 @@ button{font:inherit;color:inherit}
     }
 
     /* ---------- U2-A secret block ---------- */
+    // The request page shows what was blocked and where; only the kinds of data and the site travel, never the text.
+    function requestPage(url, labels) {
+      const q = new URLSearchParams();
+      if (labels.length) q.set("labels", labels.join(","));
+      q.set("site", location.hostname);
+      return `${url}?${q}`;
+    }
+
     function blocked({ labels, requestUrl, canSelect }) {
       return modal(
         (done) =>
@@ -396,7 +404,7 @@ button{font:inherit;color:inherit}
               "div",
               { class: "btns" },
               canSelect ? h("button", { type: "button", class: "btn p", "data-autofocus": "1", text: "해당 부분 선택하기", onclick: () => done("select") }) : null,
-              requestUrl ? h("a", { class: "btn", href: requestUrl, target: "_blank", rel: "noopener", text: "예외 요청" }) : null,
+              requestUrl ? h("a", { class: "btn", href: requestPage(requestUrl, labels), target: "_blank", rel: "noopener", text: "예외 요청" }) : null,
               h("button", { type: "button", class: "btn", text: "닫기", onclick: () => done("close") }),
             ),
           ),

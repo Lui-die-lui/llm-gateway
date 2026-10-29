@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
-from . import audit, company_policy, llm_detector, policy, rules_catalog, sessions, upstream
+from . import audit, company_policy, exception_requests, llm_detector, policy, rules_catalog, sessions, upstream
 from .evaluate import evaluate
 from .sanitizer import (
     ResponseBlocked,
@@ -31,6 +31,7 @@ INDUSTRIES_DIR = Path(os.getenv("INDUSTRIES_DIR", Path(__file__).resolve().paren
 industries = load_industries(INDUSTRIES_DIR)
 audit.configure(os.getenv("AUDIT_DB", str(Path(__file__).resolve().parent.parent / "data" / "audit.db")))
 company_policy.configure(os.getenv("POLICY_DB", str(Path(__file__).resolve().parent.parent / "data" / "policy.db")))
+exception_requests.configure(os.getenv("EXCEPTIONS_DB", str(Path(__file__).resolve().parent.parent / "data" / "exceptions.db")))
 
 app = FastAPI(title="LLM Gateway")
 if not os.getenv("GATEWAY_ADMIN_TOKEN"):
@@ -499,6 +500,28 @@ def policy_builtin_get():
 @app.put("/v1/policy/builtin", dependencies=admin)
 def policy_builtin_put(body: BuiltinIn):
     return company_policy.set_builtin(body.enabled)
+
+
+# ---------------------------------------------------------------- exception requests (record only, see exception_requests.py)
+
+@app.post("/v1/exceptions")
+def exception_create(body: exception_requests.ExceptionIn):
+    return exception_requests.create(body)
+
+
+@app.get("/v1/exceptions/mine")
+def exception_mine(client_id: str = Query(min_length=4, max_length=64)):
+    return exception_requests.listing(client_id)
+
+
+@app.get("/v1/exceptions", dependencies=admin)
+def exception_list():
+    return exception_requests.listing()
+
+
+@app.post("/v1/exceptions/{request_id}/decide", dependencies=admin)
+def exception_decide(request_id: str, body: exception_requests.DecisionIn):
+    return exception_requests.decide(request_id, body)
 
 
 # ---------------------------------------------------------------- audit / dashboard (metadata only)

@@ -63,7 +63,7 @@ export function PortalPage() {
   const qc = useQueryClient();
   const profile = useQuery({ queryKey: qk.portal('profile'), queryFn: portalApi.profile });
   const recent = useQuery({ queryKey: qk.portal('recent'), queryFn: portalApi.recent });
-  const requests = useQuery({ queryKey: qk.portal('requests'), queryFn: portalApi.requests });
+  const requests = useQuery({ queryKey: qk.portal('requests'), queryFn: portalApi.requests, refetchInterval: 5_000 });
   const flag = useMutation({ mutationFn: portalApi.flagRecent, onSuccess: () => qc.invalidateQueries({ queryKey: qk.portal('recent') }) });
 
   const p = profile.data;
