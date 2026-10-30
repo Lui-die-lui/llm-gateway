@@ -126,7 +126,20 @@
 
   /* ---------- UI ---------- */
   // The status line sits above the chat box and stays there. It must not follow the focus into an editable card inside an answer.
-  const anchorEl = () => siteComposer() ?? guessComposer() ?? findComposer();
+  // The bubbles line up with the whole chat box (its right edge and top), not with the narrower text field inside it.
+  const anchorEl = () => {
+    const c = siteComposer() ?? guessComposer() ?? findComposer();
+    if (!c) return null;
+    const form = c.closest("form");
+    if (form && shown(form)) return form;
+    let box = c; // no form: climb a few levels while the parent is still a compact box (the rounded chat box, not the page column)
+    for (let p = c.parentElement, n = 0; p && n < 5; p = p.parentElement, n++) {
+      const r = p.getBoundingClientRect();
+      if (r.height > 320 || r.width > window.innerWidth * 0.9) break;
+      box = p;
+    }
+    return box;
+  };
   const ui = GwUI.create({ getAnchor: anchorEl });
   const toast = (t) => ui.toast(t);
 
