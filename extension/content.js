@@ -54,9 +54,11 @@
   const inOurUi = (el) => !!el && (el.id === "llm-gateway-guard" || !!el.closest?.("#llm-gateway-guard"));
   // Safe mode: the site's composer selector matches nothing on this page (the site changed its layout), so any
   // editable field is treated as the composer and both Enter and the send button are checked.
-  const safeMode = () => !find(site.composer);
+  const safeMode = () => !siteComposer();
   // Answers and the cards next to them can hold editable text (a mail draft, a canvas): never mistake those for the chat box.
-  const ANSWER_AREA = [...site.reply, ...(site.mine || []), ...(site.around || [])].join(",");
+  // ChatGPT's mail/document cards ("writing block") are editors with the same markup as the chat box, but they belong to the answer.
+  const CARDS = '[data-client-defined-widget],[data-testid="chatgpt-writing-block"],[data-oai-writing-block-surface]';
+  const ANSWER_AREA = [...site.reply, ...(site.mine || []), ...(site.around || []), CARDS].join(",");
   const inAnswer = (el) => !!ANSWER_AREA && !!el.closest?.(ANSWER_AREA);
   const shown = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
   // The chat box is the lowest visible text field on the page (widest wins a tie), outside answers and our own UI.
@@ -65,8 +67,14 @@
     fields.sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom || b.offsetWidth - a.offsetWidth);
     return fields[0] ?? null;
   }
+  // The site's own selectors, but never an editor inside an answer or card; of several matches the lowest one on the page is the chat box.
+  function siteComposer() {
+    const all = site.composer.flatMap((sel) => [...document.querySelectorAll(sel)]).filter((el) => !inOurUi(el) && !inAnswer(el) && shown(el));
+    all.sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
+    return all[0] ?? null;
+  }
   function findComposer() {
-    const c = find(site.composer);
+    const c = siteComposer();
     if (c) return c;
     const a = document.activeElement;
     if (isEditable(a) && !inOurUi(a) && !inAnswer(a)) return a; // what the person is typing in right now
@@ -112,7 +120,7 @@
 
   /* ---------- UI ---------- */
   // The status line sits above the chat box and stays there. It must not follow the focus into an editable card inside an answer.
-  const anchorEl = () => find(site.composer) ?? guessComposer() ?? findComposer();
+  const anchorEl = () => siteComposer() ?? guessComposer() ?? findComposer();
   const ui = GwUI.create({ getAnchor: anchorEl });
   const toast = (t) => ui.toast(t);
 
@@ -676,7 +684,7 @@
     const describe = (el) => `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""} ${el.getAttribute("aria-label") ?? el.getAttribute("placeholder") ?? el.getAttribute("data-testid") ?? ""}`.trim();
     reply({
       host: location.hostname,
-      composer: find(site.composer) ? "known" : document.querySelector('textarea,div[role="textbox"],[contenteditable="true"]') ? "guess" : "none",
+      composer: siteComposer() ? "known" : document.querySelector('textarea,div[role="textbox"],[contenteditable="true"]') ? "guess" : "none",
       send: find(site.send) ? "known" : "none",
       reply: !!find(site.reply),
       intercepted: seen.intercepted,
