@@ -2,7 +2,12 @@
   "manifest_version": 3,
   "name": "LLM Gateway Guard",
   "version": "0.5.0",
-  "description": "Masks sensitive data through the local LLM gateway before a prompt is sent to ChatGPT or Claude, and restores it in the reply.",
+  "description": "ChatGPT·Claude에 글을 보내기 전에 회사 게이트웨이로 민감정보를 가리고, 답변에서는 원래 값으로 되돌려 보여 줍니다.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": [
     "storage"
   ],
@@ -18,7 +23,11 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "LLM Gateway Guard"
+    "default_title": "LLM Gateway Guard",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
   },
   "content_scripts": [
     {
