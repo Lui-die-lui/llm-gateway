@@ -89,6 +89,7 @@ def _row(r: sqlite3.Row) -> dict:
         "ttl": r["ttl"],
         "memo": r["memo"],
         "decided": r["decided"],
+        "used": bool(r["used"]),
     }
 
 
@@ -120,7 +121,7 @@ TTL_SECONDS = {"1h": 3600, "24h": 86400, "7d": 604800}
 
 
 def grants(client_id: str | None, site: str | None = None, now: float | None = None) -> list[dict]:
-    """Approvals in force for this browser: approved, not over, not spent, for this site. -> [{id, labels, once}].
+    """Approvals in force for this browser: approved, not over, not spent, for this site. -> [{id, labels, once, left}] (`left`: seconds to go, None for a one-use approval).
 
     `labels` is what the request named (the kinds of information the person asked to send as they are). The browser id is not a
     login: whoever has it can use the approval, so an approval is only as private as the id. It is limited to those kinds of
@@ -134,13 +135,14 @@ def grants(client_id: str | None, site: str | None = None, now: float | None = N
     out = []
     for r in rows:
         seconds = TTL_SECONDS.get(r["ttl"])
-        if seconds and now >= (r["decided"] or 0) + seconds:
+        end = (r["decided"] or 0) + seconds if seconds else None
+        if end and now >= end:
             continue  # over
         if r["site"] and site and r["site"] != site:
             continue
         labels = {x.strip() for x in r["entity"].split(",") if x.strip()}
         if labels:
-            out.append({"id": f"REQ-{r['id']:04d}", "labels": labels, "once": r["ttl"] == "1x"})
+            out.append({"id": f"REQ-{r['id']:04d}", "labels": labels, "once": r["ttl"] == "1x", "left": int(end - now) if end else None})
     return out
 
 

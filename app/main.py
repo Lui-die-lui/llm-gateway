@@ -383,11 +383,12 @@ def sanitize(body: SanitizeIn, caller: str | None = Depends(require_caller)):
     approved = exception_requests.grants(body.client_id, body.site)
     text, matches = redact_text(body.text, vault, templates, approved=frozenset().union(*(g["labels"] for g in approved)))
     used = [g for g in approved if any(m.action == "log" and m.label in g["labels"] for m in matches)]
-    for g in used:
-        if g["once"]:
-            exception_requests.spend(g["id"])
     # Nothing here can route to an internal model, so internal_only is a block too.
     route = policy.decide(matches, internal_available=False)
+    if route != "block":  # a message that is stopped anyway does not use up a one-use approval
+        for g in used:
+            if g["once"]:
+                exception_requests.spend(g["id"])
     audit.record(
         endpoint="sanitize",
         status="blocked" if route == "block" else "ok",
@@ -405,7 +406,10 @@ def sanitize(body: SanitizeIn, caller: str | None = Depends(require_caller)):
     )
     if route == "block":
         return error(403, "gateway_blocked", direction="request", findings=count_by_label(matches))
-    return {"text": text, "vault_id": body.vault_id or sessions.create(vault), "findings": count_by_label(matches)}
+    out = {"text": text, "vault_id": body.vault_id or sessions.create(vault), "findings": count_by_label(matches)}
+    if used:  # so the person can be told: used up, or how much time is left
+        out["exceptions"] = [{"id": g["id"], "once": g["once"], "left": g["left"]} for g in used]
+    return out
 
 
 @app.post("/v1/restore")

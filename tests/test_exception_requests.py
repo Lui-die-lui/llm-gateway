@@ -131,3 +131,24 @@ def test_an_approval_only_covers_the_kinds_it_names():
     approve(LABEL, "1h")
     r = sanitize(text=f"{TEXT} 연락처 010-1234-5678")
     assert r.status_code == 200 and KEY in r.json()["text"] and "010-1234-5678" not in r.json()["text"]
+
+
+def test_the_response_says_which_approval_was_used_and_mine_shows_it_spent():
+    rid = approve(LABEL, "1x")
+    out = sanitize().json()
+    assert out["exceptions"] == [{"id": rid, "once": True, "left": None}]
+    mine = client.get("/v1/exceptions/mine", params={"client_id": "browser-aaaa"}).json()
+    assert [x["used"] for x in mine if x["id"] == rid] == [True]
+    timed = approve(LABEL, "1h")
+    left = sanitize().json()["exceptions"][0]
+    assert left["id"] == timed and not left["once"] and 3500 < left["left"] <= 3600
+
+
+def test_a_message_that_is_blocked_anyway_does_not_spend_a_one_use_approval(monkeypatch):
+    rid = approve(LABEL, "1x")
+    monkeypatch.setattr(main.policy, "decide", lambda *a, **k: "block")  # something else in the text stops it
+    assert sanitize().status_code == 403
+    monkeypatch.undo()
+    assert passes()  # still unused
+    mine = client.get("/v1/exceptions/mine", params={"client_id": "browser-aaaa"}).json()
+    assert [x["used"] for x in mine if x["id"] == rid] == [True]

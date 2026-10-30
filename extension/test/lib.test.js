@@ -159,3 +159,11 @@ test("exceptionNews tells each decision once, skips pending and already-over one
   const decided = Gw.exceptionNews([req({ id: "REQ-0003", ttl: "1x" })], again.told, NOW);
   assert.equal(decided.news[0].id, "REQ-0003"); // the pending one is announced when it gets its answer
 });
+
+test("a spent one-use approval is described as used, is not news, and is listed so its notice can go", () => {
+  const spent = req({ id: "REQ-0009", ttl: "1x", used: true });
+  assert.equal(Gw.describeDecision(spent, NOW).kind, "used");
+  const r = Gw.exceptionNews([spent], {}, NOW);
+  assert.deepEqual(r.news, []);
+  assert.deepEqual(r.used, ["REQ-0009"]);
+});

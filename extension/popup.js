@@ -72,7 +72,7 @@ async function showExceptions() {
   const r = await chrome.runtime.sendMessage({ type: "exceptions" });
   if (!r?.ok) return void (el.textContent = "서버에 연결되면 보낸 요청이 보여요");
   if (!r.data.length) return void (el.textContent = "보낸 요청이 없어요");
-  const mark = { pending: "대기", approved: "승인", rejected: "반려", expired: "만료" };
+  const mark = { pending: "대기", approved: "승인", used: "사용 완료", rejected: "반려", expired: "만료" };
   const draw = () => {
     const now = Date.now();
     el.replaceChildren(

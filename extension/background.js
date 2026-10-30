@@ -111,11 +111,11 @@ async function exceptionNewsNow() {
   const res = await call(await mineUrl());
   if (!res.ok) return { ok: false, news: [], active: [] };
   const { exAnnounced } = await chrome.storage.local.get({ exAnnounced: {} });
-  const { news, active, told } = Gw.exceptionNews(res.data, exAnnounced);
+  const { news, active, used, told } = Gw.exceptionNews(res.data, exAnnounced);
   if (news.length || Object.keys(told).length !== Object.keys(exAnnounced).length) {
     await chrome.storage.local.set({ exAnnounced: Object.fromEntries(Object.entries(told).slice(-100)) });
   }
-  return { ok: true, news, active };
+  return { ok: true, news, active, used };
 }
 function exceptionNews() {
   const run = newsQueue.then(exceptionNewsNow);

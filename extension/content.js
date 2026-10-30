@@ -58,18 +58,19 @@
   // Answers and the cards next to them can hold editable text (a mail draft, a canvas): never mistake those for the chat box.
   // ChatGPT's mail/document cards ("writing block") are editors with the same markup as the chat box, but they belong to the answer.
   const CARDS = '[data-client-defined-widget],[data-testid="chatgpt-writing-block"],[data-oai-writing-block-surface]';
-  const ANSWER_AREA = [...site.reply, ...(site.mine || []), ...(site.around || []), CARDS].join(",");
+  const ANSWER_AREA = [...site.reply, ...(site.mine || []), ...(site.around || [])].join(",");
+  const inCard = (el) => !!el?.closest?.(CARDS);
   const inAnswer = (el) => !!ANSWER_AREA && !!el.closest?.(ANSWER_AREA);
   const shown = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
   // The chat box is the lowest visible text field on the page (widest wins a tie), outside answers and our own UI.
   function guessComposer() {
-    const fields = [...document.querySelectorAll('textarea,div[role="textbox"],[contenteditable="true"]')].filter((el) => shown(el) && !inOurUi(el) && !inAnswer(el));
+    const fields = [...document.querySelectorAll('textarea,div[role="textbox"],[contenteditable="true"]')].filter((el) => shown(el) && !inOurUi(el) && !inAnswer(el) && !inCard(el));
     fields.sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom || b.offsetWidth - a.offsetWidth);
     return fields[0] ?? null;
   }
   // The site's own selectors, but never an editor inside an answer or card; of several matches the lowest one on the page is the chat box.
   function siteComposer() {
-    const all = site.composer.flatMap((sel) => [...document.querySelectorAll(sel)]).filter((el) => !inOurUi(el) && !inAnswer(el) && shown(el));
+    const all = site.composer.flatMap((sel) => [...document.querySelectorAll(sel)]).filter((el) => !inOurUi(el) && !inAnswer(el) && !inCard(el) && shown(el));
     all.sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
     return all[0] ?? null;
   }
@@ -77,9 +78,14 @@
     const c = siteComposer();
     if (c) return c;
     const a = document.activeElement;
-    if (isEditable(a) && !inOurUi(a) && !inAnswer(a)) return a; // what the person is typing in right now
+    if (isEditable(a) && !inOurUi(a) && !inAnswer(a) && !inCard(a)) return a; // what the person is typing in right now
     return guessComposer();
   }
+  // What the live check reads: the card editor while the person types in it, otherwise the chat box.
+  const typingBox = () => {
+    const a = document.activeElement;
+    return isEditable(a) && inCard(a) && !inOurUi(a) ? a : findComposer();
+  };
   const readText = (el) => (el.value ?? el.innerText ?? "").trim();
   function writeText(el, text) {
     el.focus();
@@ -138,6 +144,7 @@
     for (const n of r?.news ?? []) {
       ui.strip(`exception-${n.id}`, { tone: n.kind === "approved" ? "ok" : "warn", text: `예외 요청 · ${n.text}`, note: n.note }, 45_000);
     }
+    for (const id of r?.used ?? []) ui.strip(`exception-${id}`, null); // spent: "1회만 허용돼요" must not stay up
     if (r?.ok) {
       active = r.active ?? [];
       renderActive();
@@ -233,6 +240,15 @@
     }, 100);
   }
 
+  /** The gateway let something through under an approved exception: say that it was used, and what is left. */
+  function noteExceptions(s) {
+    for (const e of s?.data?.exceptions ?? []) {
+      ui.strip(`exception-${e.id}`, null);
+      const text = e.once ? `예외 ${e.id} · 1회 허용을 사용했어요 · 이 승인은 끝났어요` : `예외 ${e.id} · 허용된 항목을 그대로 보냈어요 · 남은 시간 ${Gw.remaining((e.left ?? 0) * 1000)}`;
+      ui.strip(`exception-used-${e.id}`, { tone: "ok", text }, 8000);
+    }
+  }
+
   const kindOf = (label, keepable) => (keepable.has(label) ? "공통 개인정보" : Gw.CRITICAL.has(label) ? "보안 정보" : "영업기밀");
   const HOW_KO = { ph: "자리표시자", alias: "등록 대체어", keep: "그대로 둠" };
 
@@ -247,6 +263,7 @@
       return choice === "close" ? box.focus() : undefined;
     }
     if (!s.ok) return toast(failText(s));
+    noteExceptions(s);
     let out = s.data.text;
     if (out !== text && cfg.hint !== false && PLACEHOLDER.test(out)) out += HINT;
     if (out !== text) {
@@ -291,6 +308,7 @@
       const s = await checked("sanitize", { text }); // nothing to replace: still counted and audited
       if (!s) return;
       if (!s.ok) return toast(failText(s));
+      noteExceptions(s);
       return resend();
     }
 
@@ -313,6 +331,7 @@
     const s = await checked("sanitize", { text });
     if (!s) return;
     if (!s.ok) return toast(s.status === 403 ? "검사 결과가 달라져 전송을 막았어요. 다시 확인해 주세요" : failText(s));
+    noteExceptions(s);
 
     const paired = Gw.pairSpans(text, spans, s.data.text);
     let outText = s.data.text; // fallback: replace everything
@@ -373,7 +392,8 @@
   }
 
   /* ---------- interceptors ---------- */
-  const isComposerTarget = (t) => !!t?.closest && !inOurUi(t) && (!!t.closest(site.composer.join(",")) || (safeMode() && isEditable(t) && !inAnswer(t)));
+  // Enter inside a mail/document card is a new line in the card, never "send"; only the chat box sends.
+  const isComposerTarget = (t) => !!t?.closest && !inOurUi(t) && !inCard(t) && (!!t.closest(site.composer.join(",")) || (safeMode() && isEditable(t) && !inAnswer(t)));
   document.addEventListener(
     "keydown",
     (e) => {
@@ -407,7 +427,7 @@
   let scanTimer;
   let scanSeq = 0;
   async function liveScan() {
-    const box = findComposer(); // in safe mode (layout not recognised) this is the field being typed in, so the chip still works
+    const box = typingBox(); // in safe mode (layout not recognised) this is the field being typed in, so the chip still works
     const text = box ? readText(box) : "";
     const seq = ++scanSeq;
     if (!text) return ui.chip(null);
@@ -431,7 +451,7 @@
     clearTimeout(scanTimer);
     scanTimer = setTimeout(liveScan, ms);
   };
-  const inComposer = isComposerTarget;
+  const inComposer = (t) => isComposerTarget(t) || (isEditable(t) && inCard(t));
   for (const ev of ["input", "keyup", "compositionend", "cut"]) document.addEventListener(ev, (e) => inComposer(e.target) && scanSoon(250), true);
   for (const ev of ["paste", "drop"]) document.addEventListener(ev, (e) => inComposer(e.target) && scanSoon(60), true);
   let lastSeenText = "";
