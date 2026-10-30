@@ -89,11 +89,46 @@ async function addHistory(entry) {
   await chrome.storage.local.set({ history: next });
 }
 
+/* ---------- exception requests ---------- */
+// One id per browser. It rides along in the portal links (?cid=) so the request form and this extension talk about the same person,
+// and it is how "my requests" are found again. It is not a login.
+let idPromise;
+function clientId() {
+  idPromise ??= chrome.storage.local.get({ clientId: "" }).then(async ({ clientId: have }) => {
+    if (have) return have;
+    const id = Gw.makeClientId();
+    await chrome.storage.local.set({ clientId: id });
+    return id;
+  });
+  return idPromise;
+}
+const mineUrl = async () => `/v1/exceptions/mine?client_id=${encodeURIComponent(await clientId())}`;
+
+// Decisions the person has not been told about yet. Announcing is serialised and remembered in storage, so two open tabs (or a
+// reload) never show the same decision twice.
+let newsQueue = Promise.resolve();
+async function exceptionNewsNow() {
+  const res = await call(await mineUrl());
+  if (!res.ok) return { ok: false, news: [], active: [] };
+  const { exAnnounced } = await chrome.storage.local.get({ exAnnounced: {} });
+  const { news, active, told } = Gw.exceptionNews(res.data, exAnnounced);
+  if (news.length || Object.keys(told).length !== Object.keys(exAnnounced).length) {
+    await chrome.storage.local.set({ exAnnounced: Object.fromEntries(Object.entries(told).slice(-100)) });
+  }
+  return { ok: true, news, active };
+}
+function exceptionNews() {
+  const run = newsQueue.then(exceptionNewsNow);
+  newsQueue = run.catch(() => {});
+  return run;
+}
+
 async function settings(tabId) {
   const s = await chrome.storage.local.get(DEFAULTS);
   const gw = await gatewayUrl();
   const base = Gw.portalBase(gw, s.portalUrl);
-  return { enabled: s.enabled, industries: s.industries, gatewayUrl: gw, portalUrl: `${base}/me`, requestUrl: `${base}/me/request`, demoFiles: !!s.demoFiles, hint: s.hint !== false, tabId };
+  const cid = encodeURIComponent(await clientId());
+  return { enabled: s.enabled, industries: s.industries, gatewayUrl: gw, portalUrl: `${base}/me?cid=${cid}`, requestUrl: `${base}/me/request?cid=${cid}`, demoFiles: !!s.demoFiles, hint: s.hint !== false, tabId };
 }
 
 async function analyze(text) {
@@ -161,6 +196,9 @@ async function handle(msg, tabId, site) {
     case "industries": return call("/v1/industries");
     case "rules": return call("/v1/rules/builtin");
     case "status": return status();
+    case "clientId": return { id: await clientId() };
+    case "exceptions": return call(await mineUrl());
+    case "exceptionNews": return exceptionNews();
     case "stats": return getStats();
     case "statsAdd": await bumpStats(msg.delta || {}); return { ok: true };
     case "historyAdd": await addHistory({ site, ...msg.entry }); return { ok: true };

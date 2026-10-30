@@ -163,7 +163,79 @@
     }
   }
 
-  const api = { PLACEHOLDER, PLACEHOLDER_ALL, cps, maskValue, pairSpans, ALIASES, hasAlias, buildOutgoing, restoreAliases, findFuzzy, CRITICAL, keepableLabels, canKeep, dayKey, portalBase };
+  /* ---------- exception requests: the person asks, an admin decides in the console, the answer comes back to the page ---------- */
+  const TTL_SECONDS = { "1h": 3600, "24h": 86400, "7d": 604800 };
+  const TTL_LABEL = { "1x": "1회", "1h": "1시간", "24h": "24시간", "7d": "7일" };
+
+  /** A random id this browser keeps so "my requests" can be found again. It is not a login. */
+  function makeClientId(fill = (a) => crypto.getRandomValues(a)) {
+    return "b-" + Array.from(fill(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  /** When an approval ends, in ms since 1970. null when it has no clock: not approved, or "1회" (one use). */
+  function approvalEnd(req) {
+    const seconds = TTL_SECONDS[req.ttl];
+    return req.status === "approved" && req.decided && seconds ? Math.round((req.decided + seconds) * 1000) : null;
+  }
+
+  /** "오늘 17:32", "내일 09:00", "11월 2일 17:32" in the viewer's own time zone. */
+  function clock(ms, now = Date.now()) {
+    const d = new Date(ms);
+    const n = new Date(now);
+    const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diff = Math.round((day(d) - day(n)) / 86400000);
+    if (diff === 0) return `오늘 ${hm}`;
+    if (diff === 1) return `내일 ${hm}`;
+    return `${d.getMonth() + 1}월 ${d.getDate()}일 ${hm}`;
+  }
+
+  /** "23시간 12분", "12분 05초", "45초": how long is left, counting down. */
+  function remaining(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (d) return `${d}일 ${h}시간`;
+    if (h) return `${h}시간 ${String(m).padStart(2, "0")}분`;
+    if (m) return `${m}분 ${String(s % 60).padStart(2, "0")}초`;
+    return `${s}초`;
+  }
+
+  /**
+   * What to tell the person about one request. kind: pending | approved | rejected | expired.
+   * `note` is what the admin wrote (shown on its own line), `end` the time an approval stops (ms), null when it has no clock.
+   */
+  function describeDecision(req, now = Date.now()) {
+    const what = req.entity ? `${req.entity} ` : "";
+    const note = req.memo || "";
+    if (req.status === "pending") return { kind: "pending", text: `${what}요청은 관리자 결정을 기다리고 있어요`, note: "", end: null };
+    if (req.status === "rejected") return { kind: "rejected", text: `${what}요청이 반려됐어요`, note, end: null };
+    const label = TTL_LABEL[req.ttl] ?? "";
+    const end = approvalEnd(req);
+    if (end === null) return { kind: "approved", text: `${what}요청이 승인됐어요 · ${label || "1회"}만 허용돼요`, note, end: null };
+    if (end <= now) return { kind: "expired", text: `${what}요청은 승인됐지만 ${clock(end, now)}에 끝났어요`, note, end };
+    return { kind: "approved", text: `${what}요청이 승인됐어요 · ${clock(end, now)}까지 (${label})`, note, end };
+  }
+
+  /**
+   * From the list of my requests: what has not been told yet (`news`), the approvals still running (`active`), and the
+   * updated record of what has been told (`told`: id -> status). Pure, so the background worker and the tests share it.
+   */
+  function exceptionNews(list, announced, now = Date.now()) {
+    const told = { ...announced };
+    const news = [];
+    for (const r of list) {
+      if (r.status === "pending" || told[r.id] === r.status) continue;
+      told[r.id] = r.status;
+      const d = describeDecision(r, now);
+      if (d.kind !== "expired") news.push({ id: r.id, kind: d.kind, text: d.text, note: d.note }); // over before it was seen: nothing to say
+    }
+    const active = list.map((r) => ({ id: r.id, entity: r.entity, end: approvalEnd(r), note: r.memo || "" })).filter((a) => a.end && a.end > now);
+    return { news, active, told };
+  }
+
+  const api = { exceptionNews, makeClientId, approvalEnd, clock, remaining, describeDecision, TTL_LABEL, PLACEHOLDER, PLACEHOLDER_ALL, cps, maskValue, pairSpans, ALIASES, hasAlias, buildOutgoing, restoreAliases, findFuzzy, CRITICAL, keepableLabels, canKeep, dayKey, portalBase };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Gw = api;
 })(typeof self !== "undefined" ? self : this);

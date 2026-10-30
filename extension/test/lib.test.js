@@ -79,3 +79,83 @@ test("portalBase uses the dev console for a local gateway and the gateway origin
   assert.equal(Gw.portalBase("https://gw.example.com/"), "https://gw.example.com");
   assert.equal(Gw.portalBase("https://gw.example.com", "https://console.example.com/"), "https://console.example.com");
 });
+
+// ---- exception requests -------------------------------------------------------------
+const NOW = new Date(2026, 9, 30, 15, 0, 0).getTime(); // 2026-10-30 15:00 in whatever time zone the test runs in
+const req = (over) => ({ id: "REQ-0001", status: "approved", entity: "조성비", ttl: "24h", memo: "", decided: NOW / 1000 - 60, ...over });
+
+test("clock says today / tomorrow / a date, in local time", () => {
+  assert.equal(Gw.clock(new Date(2026, 9, 30, 17, 32).getTime(), NOW), "오늘 17:32");
+  assert.equal(Gw.clock(new Date(2026, 9, 31, 9, 5).getTime(), NOW), "내일 09:05");
+  assert.equal(Gw.clock(new Date(2026, 10, 2, 0, 0).getTime(), NOW), "11월 2일 00:00");
+});
+
+test("an approval ends at decided + ttl, and has no clock for one use or for anything not approved", () => {
+  assert.equal(Gw.approvalEnd(req({ ttl: "1h" })), (NOW / 1000 - 60 + 3600) * 1000);
+  assert.equal(Gw.approvalEnd(req({ ttl: "7d" })), (NOW / 1000 - 60 + 7 * 86400) * 1000);
+  assert.equal(Gw.approvalEnd(req({ ttl: "1x" })), null);
+  assert.equal(Gw.approvalEnd(req({ status: "rejected", ttl: null })), null);
+  assert.equal(Gw.approvalEnd(req({ status: "pending", decided: null })), null);
+});
+
+test("describeDecision: approved with a deadline names the time and the length", () => {
+  const d = Gw.describeDecision(req({ ttl: "1h" }), NOW);
+  assert.equal(d.kind, "approved");
+  assert.equal(d.text, `조성비 요청이 승인됐어요 · ${Gw.clock((NOW / 1000 - 60 + 3600) * 1000, NOW)}까지 (1시간)`);
+});
+
+test("describeDecision: one use, rejected with the admin's note, pending, and already over", () => {
+  assert.equal(Gw.describeDecision(req({ ttl: "1x" }), NOW).text, "조성비 요청이 승인됐어요 · 1회만 허용돼요");
+  assert.deepEqual(Gw.describeDecision(req({ status: "rejected", ttl: null, memo: "내부 모델로 먼저 해 보세요" }), NOW), {
+    kind: "rejected",
+    text: "조성비 요청이 반려됐어요",
+    note: "내부 모델로 먼저 해 보세요", // the admin's words come on their own line
+    end: null,
+  });
+  assert.equal(Gw.describeDecision(req({ status: "pending", ttl: null, decided: null }), NOW).kind, "pending");
+  assert.equal(Gw.describeDecision(req({ ttl: "1h", decided: NOW / 1000 - 7200 }), NOW).kind, "expired");
+  assert.match(Gw.describeDecision(req({ entity: "", ttl: "24h" }), NOW).text, /^요청이 승인됐어요/);
+});
+
+test("makeClientId looks like the portal's ids and differs every time", () => {
+  const a = Gw.makeClientId((arr) => arr.fill(171));
+  assert.equal(a, "b-" + "ab".repeat(16));
+  assert.match(Gw.makeClientId(), /^b-[0-9a-f]{32}$/);
+  assert.notEqual(Gw.makeClientId(), Gw.makeClientId());
+});
+
+test("the admin's note travels with an approval, apart from the sentence", () => {
+  const d = Gw.describeDecision(req({ ttl: "1h", memo: "이번 한 번만 허용합니다" }), NOW);
+  assert.equal(d.note, "이번 한 번만 허용합니다");
+  assert.ok(!d.text.includes("이번 한 번만"));
+  assert.equal(d.end, (NOW / 1000 - 60 + 3600) * 1000);
+});
+
+test("remaining counts down in the unit that matters", () => {
+  const s = 1000;
+  assert.equal(Gw.remaining(45 * s), "45초");
+  assert.equal(Gw.remaining(12 * 60 * s + 5 * s), "12분 05초");
+  assert.equal(Gw.remaining(3600 * s + 9 * 60 * s), "1시간 09분");
+  assert.equal(Gw.remaining(23 * 3600 * s + 12 * 60 * s), "23시간 12분");
+  assert.equal(Gw.remaining(86400 * s + 5 * 3600 * s), "1일 5시간");
+  assert.equal(Gw.remaining(-5 * s), "0초");
+});
+
+test("exceptionNews tells each decision once, skips pending and already-over ones, and lists running approvals", () => {
+  const list = [
+    req({ id: "REQ-0003", status: "pending", ttl: null, decided: null }),
+    req({ id: "REQ-0002", ttl: "1h", decided: NOW / 1000 - 7200 }), // over before anyone looked
+    req({ id: "REQ-0001", ttl: "24h", memo: "수고하세요" }),
+    req({ id: "REQ-0000", status: "rejected", ttl: null, memo: "안 돼요" }),
+  ];
+  const first = Gw.exceptionNews(list, {}, NOW);
+  assert.deepEqual(first.news.map((n) => [n.id, n.kind, n.note]), [["REQ-0001", "approved", "수고하세요"], ["REQ-0000", "rejected", "안 돼요"]]);
+  assert.deepEqual(first.active.map((a) => a.id), ["REQ-0001"]);
+  assert.equal(first.told["REQ-0002"], "approved"); // remembered, so it is not announced later either
+  assert.equal(first.told["REQ-0003"], undefined); // pending: still to come
+  const again = Gw.exceptionNews(list, first.told, NOW + 1000);
+  assert.deepEqual(again.news, []); // nothing is shown twice
+  assert.deepEqual(again.active.map((a) => a.id), ["REQ-0001"]); // but the countdown keeps going
+  const decided = Gw.exceptionNews([req({ id: "REQ-0003", ttl: "1x" })], again.told, NOW);
+  assert.equal(decided.news[0].id, "REQ-0003"); // the pending one is announced when it gets its answer
+});

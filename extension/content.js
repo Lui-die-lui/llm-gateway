@@ -111,8 +111,56 @@
   }
 
   /* ---------- UI ---------- */
-  const ui = GwUI.create({ getAnchor: findComposer });
+  // The status line sits above the chat box and stays there. It must not follow the focus into an editable card inside an answer.
+  const anchorEl = () => find(site.composer) ?? guessComposer() ?? findComposer();
+  const ui = GwUI.create({ getAnchor: anchorEl });
   const toast = (t) => ui.toast(t);
+
+  /* ---------- answers to exception requests ---------- */
+  // The person asks for an exception on the portal, an admin decides in the console, and the answer shows up here, on the chat
+  // page, with the time it lasts until. The background decides what is new, so each answer appears once.
+  async function pollDecisions() {
+    if (document.hidden) return;
+    let r;
+    try {
+      r = await bg("exceptionNews");
+    } catch {
+      return; // the extension was reloaded under this page
+    }
+    for (const n of r?.news ?? []) {
+      ui.strip(`exception-${n.id}`, { tone: n.kind === "approved" ? "ok" : "warn", text: `예외 요청 · ${n.text}`, note: n.note }, 45_000);
+    }
+    if (r?.ok) {
+      active = r.active ?? [];
+      renderActive();
+    }
+  }
+
+  // Approvals that are running show a line that counts down, so the person always sees how long it lasts.
+  let active = []; // { id, entity, end (ms), note }
+  const shownActive = new Set();
+  function renderActive() {
+    if (document.hidden && !shownActive.size) return;
+    const now = Date.now();
+    const live = active.filter((a) => a.end > now);
+    for (const id of [...shownActive]) {
+      if (live.some((a) => `active-${a.id}` === id)) continue;
+      shownActive.delete(id);
+      ui.strip(id, null);
+      toast("예외로 허용된 시간이 끝났어요");
+    }
+    for (const a of live) {
+      const id = `active-${a.id}`;
+      const text = `예외 승인 중${a.entity ? ` · ${a.entity}` : ""} · 남은 시간 ${Gw.remaining(a.end - now)} (${Gw.clock(a.end, now)}까지)`;
+      if (shownActive.has(id) && ui.stripText(id, text)) continue;
+      shownActive.add(id);
+      ui.strip(id, { tone: "ok", text, note: a.note, sticky: true });
+    }
+  }
+  setInterval(renderActive, 1000);
+  setTimeout(pollDecisions, 2500);
+  setInterval(pollDecisions, 20_000);
+  document.addEventListener("visibilitychange", pollDecisions);
 
   /* ---------- state of the last sent message (for the change pill and the reply notes) ---------- */
   let lastSent = null; // { entries, expect, noted, replies }

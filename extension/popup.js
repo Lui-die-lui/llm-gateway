@@ -66,6 +66,31 @@ function paintStatus(enabled, ok, gatewayUrl, keyBad = false) {
   $("status-sub").textContent = sub;
 }
 
+// The latest requests and where each one stands, with the time an approval lasts until.
+async function showExceptions() {
+  const el = $("exceptions");
+  const r = await chrome.runtime.sendMessage({ type: "exceptions" });
+  if (!r?.ok) return void (el.textContent = "서버에 연결되면 보낸 요청이 보여요");
+  if (!r.data.length) return void (el.textContent = "보낸 요청이 없어요");
+  const mark = { pending: "대기", approved: "승인", rejected: "반려", expired: "만료" };
+  const draw = () => {
+    const now = Date.now();
+    el.replaceChildren(
+      ...r.data.slice(0, 3).map((req) => {
+        const d = Gw.describeDecision(req, now);
+        const row = document.createElement("div");
+        row.className = `ex ${d.kind}`;
+        row.append(Object.assign(document.createElement("b"), { textContent: mark[d.kind] }), ` ${d.text}`);
+        if (d.kind === "approved" && d.end) row.append(Object.assign(document.createElement("div"), { className: "left", textContent: `남은 시간 ${Gw.remaining(d.end - now)}` }));
+        if (d.note) row.append(Object.assign(document.createElement("div"), { className: "memo", textContent: `관리자 메모 · ${d.note}` }));
+        return row;
+      }),
+    );
+  };
+  draw();
+  if (r.data.slice(0, 3).some((q) => Gw.approvalEnd(q))) setInterval(draw, 1000); // counts down while the popup is open
+}
+
 async function init() {
   const settings = await chrome.storage.local.get(DEFAULTS);
   const { gatewayUrl } = await chrome.storage.local.get({ gatewayUrl: DEFAULT_GATEWAY });
@@ -86,7 +111,9 @@ async function init() {
   $("demo-files").addEventListener("change", (e) => chrome.storage.local.set({ demoFiles: e.target.checked }));
 
   const base = Gw.portalBase(gatewayUrl, settings.portalUrl);
-  $("open-portal").href = `${base}/me`;
+  const { id: cid } = await chrome.runtime.sendMessage({ type: "clientId" });
+  $("open-portal").href = `${base}/me?cid=${encodeURIComponent(cid)}`;
+  showExceptions();
   $("open-console").href = `${base}/login`;
 
   let ok = false;
