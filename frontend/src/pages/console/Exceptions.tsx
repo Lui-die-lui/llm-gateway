@@ -23,7 +23,7 @@ const TTL_HELP: Record<Ttl, string> = {
   '1x': '이번 요청 1건만 원문으로 전송합니다. 이후 같은 내용도 다시 차단됩니다.',
   '1h': '1시간 동안 같은 사용자 · 같은 엔티티 · 같은 대상에 한해 허용합니다.',
   '24h': '24시간 허용. 만료 시 자동 회수되고 사용 내역이 감사 로그에 남습니다.',
-  '7d': '7일 허용은 CISO 추가 승인이 필요합니다.',
+  '7d': '7일 허용: 만료 시 자동 회수되고 사용 내역이 감사 로그에 남습니다. 승인 즉시 적용돼요.',
 };
 const SEV_CLS = { CRITICAL: 'b-block', HIGH: 'b-redact', MEDIUM: 'b-muted' } as const;
 const SLA_COLOR = ['var(--ink-2)', '#B45309', '#B91C1C'];
