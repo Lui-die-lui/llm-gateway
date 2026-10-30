@@ -116,6 +116,9 @@ export interface ExceptionRequest {
   ttl?: Ttl;
   memo?: string;
   requestedAt: string;
+  /** Real requests only: when the admin decided (epoch seconds) and whether a one-use approval has been spent. */
+  decidedAt?: number;
+  used?: boolean;
 }
 
 export interface AdminLogEntry {

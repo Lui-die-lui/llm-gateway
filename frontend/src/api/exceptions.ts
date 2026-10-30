@@ -14,6 +14,8 @@ interface ServerException {
   status: 'pending' | 'approved' | 'rejected';
   ttl: Ttl | null;
   memo: string;
+  decided: number | null;
+  used: boolean;
 }
 
 const TTL_LABEL: Record<Ttl, string> = { '1x': '1회', '1h': '1시간', '24h': '24시간', '7d': '7일' };
@@ -72,8 +74,25 @@ function toException(s: ServerException): ExceptionRequest {
     ttl: s.ttl ?? undefined,
     memo: s.memo || undefined,
     requestedAt: when(s.created),
+    decidedAt: s.decided ?? undefined,
+    used: s.used,
   };
 }
+
+const TTL_SECONDS: Partial<Record<Ttl, number>> = { '1h': 3600, '24h': 86400, '7d': 604800 };
+
+/** When an approval stops (epoch seconds); null for a one-use approval. */
+export const grantEnd = (e: ExceptionRequest): number | null => {
+  const secs = e.ttl ? TTL_SECONDS[e.ttl] : undefined;
+  return secs && e.decidedAt ? e.decidedAt + secs : null;
+};
+
+/** A real approval that still lets something through: approved, not over, a one-use one not yet spent. */
+export const isActiveGrant = (e: ExceptionRequest, nowSeconds: number) => {
+  if (!isReal(e.id) || e.status !== 'approved' || e.used) return false;
+  const end = grantEnd(e);
+  return end === null || end > nowSeconds;
+};
 
 function toPortal(s: ServerException): PortalRequest {
   const note =

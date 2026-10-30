@@ -10,7 +10,7 @@ import { MockBadge, Seg } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
 import { useFeedback } from '../../features/feedback';
 import { qk, useExceptions } from '../../features/queries';
-import { isReal } from '../../api/exceptions';
+import { grantEnd, isActiveGrant, isReal } from '../../api/exceptions';
 
 const TTL_OPTS = [
   ['1x', '1회'],
@@ -34,6 +34,17 @@ const TABS: [ExceptionStatus, string][] = [
   ['expired', '만료'],
 ];
 
+/** "2시간 05분", "12분", "40초". */
+function left(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d) return `${d}일 ${h}시간`;
+  if (h) return `${h}시간 ${String(m).padStart(2, '0')}분`;
+  return m ? `${m}분` : `${s}초`;
+}
+
 export function ExceptionsPage() {
   const qc = useQueryClient();
   const { toast, confirm } = useFeedback();
@@ -44,6 +55,12 @@ export function ExceptionsPage() {
   const [memo, setMemo] = useState('');
 
   const all = list.data ?? [];
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now() / 1000), 15_000);
+    return () => clearInterval(t);
+  }, []);
+  const grants = all.filter((e) => isActiveGrant(e, now));
   const rows = all.filter((e) => e.status === tab);
   const cur = rows.find((e) => e.id === selId) ?? rows[0];
   const pending = all.filter((e) => e.status === 'pending');
@@ -73,6 +90,8 @@ export function ExceptionsPage() {
     if (await confirm(spec)) decide.mutate({ d });
   }
 
+  const ends = grants.map((g) => grantEnd(g)).filter((x): x is number => x !== null);
+  const nextEnd = ends.length ? Math.min(...ends) : null;
   const approvedN = all.filter((e) => e.status === 'approved').length;
   const rejectedN = all.filter((e) => e.status === 'rejected').length;
 
@@ -97,7 +116,7 @@ export function ExceptionsPage() {
           ['PENDING', pending.length, `SLA 임박 ${pending.filter((e) => e.slaUrgent > 0).length}건`, '#B45309'],
           ['APPROVED 30D', 37 + approvedN, '평균 처리 2시간 14분', undefined],
           ['REJECTED 30D', 16 + rejectedN, `반려율 ${Math.round(((16 + rejectedN) / (53 + approvedN + rejectedN)) * 100)}%`, undefined],
-          ['ACTIVE GRANTS', 3 + approvedN, '가장 빠른 만료 47분 후', undefined],
+          ['ACTIVE GRANTS', grants.length, nextEnd === null ? '시간이 있는 승인 없음' : `가장 빠른 만료 ${left(nextEnd - now)} 후`, undefined],
         ].map(([l, v, n, c]) => (
           <div key={l as string} className="card" style={{ padding: '14px 16px' }}>
             <div className="lbl">{l}</div>
@@ -109,6 +128,48 @@ export function ExceptionsPage() {
             </div>
           </div>
         ))}
+      </section>
+
+      <section className="card" aria-label="적용 중인 승인" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, padding: '14px 16px 8px' }}>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>적용 중인 승인 {grants.length}건</h2>
+          <span className="t3" style={{ fontSize: 12 }}>지금 원문 전송이 허용돼 있는 요청 · 시간이 끝나거나 1회를 쓰면 사라집니다</span>
+        </div>
+        {grants.length === 0 ? (
+          <div className="empty">지금 적용 중인 승인이 없어요</div>
+        ) : (
+          <div className="tbl" style={{ padding: '0 6px 8px' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>요청</th>
+                  <th>요청자</th>
+                  <th>허용 항목</th>
+                  <th>대상</th>
+                  <th>기간</th>
+                  <th>남은 시간</th>
+                  <th>메모</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grants.map((g) => {
+                  const end = grantEnd(g);
+                  return (
+                    <tr key={g.id}>
+                      <td className="mono">{g.id}</td>
+                      <td>{g.user}</td>
+                      <td>{g.entity}</td>
+                      <td>{g.target}</td>
+                      <td>{g.ttl ? TTL_KO[g.ttl] : ''}</td>
+                      <td className="mono">{end === null ? '아직 안 씀 (1회)' : left(end - now)}</td>
+                      <td className="t3">{g.memo ?? ''}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <div className="row-wrap top">
