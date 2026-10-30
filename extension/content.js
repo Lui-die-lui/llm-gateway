@@ -55,11 +55,22 @@
   // Safe mode: the site's composer selector matches nothing on this page (the site changed its layout), so any
   // editable field is treated as the composer and both Enter and the send button are checked.
   const safeMode = () => !find(site.composer);
+  // Answers and the cards next to them can hold editable text (a mail draft, a canvas): never mistake those for the chat box.
+  const ANSWER_AREA = [...site.reply, ...(site.mine || []), ...(site.around || [])].join(",");
+  const inAnswer = (el) => !!ANSWER_AREA && !!el.closest?.(ANSWER_AREA);
+  const shown = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  // The chat box is the lowest visible text field on the page (widest wins a tie), outside answers and our own UI.
+  function guessComposer() {
+    const fields = [...document.querySelectorAll('textarea,div[role="textbox"],[contenteditable="true"]')].filter((el) => shown(el) && !inOurUi(el) && !inAnswer(el));
+    fields.sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom || b.offsetWidth - a.offsetWidth);
+    return fields[0] ?? null;
+  }
   function findComposer() {
     const c = find(site.composer);
     if (c) return c;
     const a = document.activeElement;
-    return isEditable(a) && !inOurUi(a) ? a : null;
+    if (isEditable(a) && !inOurUi(a) && !inAnswer(a)) return a; // what the person is typing in right now
+    return guessComposer();
   }
   const readText = (el) => (el.value ?? el.innerText ?? "").trim();
   function writeText(el, text) {
@@ -306,7 +317,7 @@
   }
 
   /* ---------- interceptors ---------- */
-  const isComposerTarget = (t) => !!t?.closest && !inOurUi(t) && (!!t.closest(site.composer.join(",")) || (safeMode() && isEditable(t)));
+  const isComposerTarget = (t) => !!t?.closest && !inOurUi(t) && (!!t.closest(site.composer.join(",")) || (safeMode() && isEditable(t) && !inAnswer(t)));
   document.addEventListener(
     "keydown",
     (e) => {
