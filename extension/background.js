@@ -131,17 +131,18 @@ async function settings(tabId) {
   return { enabled: s.enabled, industries: s.industries, gatewayUrl: gw, portalUrl: `${base}/me?cid=${cid}`, requestUrl: `${base}/me/request?cid=${cid}`, demoFiles: !!s.demoFiles, hint: s.hint !== false, tabId };
 }
 
-async function analyze(text) {
+async function analyze(text, site) {
   const s = await chrome.storage.local.get(DEFAULTS);
   if (!s.enabled) return { ok: true, passthrough: true };
-  return call("/v1/analyze", { text, industries: s.industries });
+  // client_id lets the gateway apply this browser's approved exception requests to the preview too
+  return call("/v1/analyze", { text, industries: s.industries, site, client_id: await clientId() });
 }
 
 async function sanitize(text, tabId, site) {
   const s = await chrome.storage.local.get(DEFAULTS);
   if (!s.enabled) return { ok: true, passthrough: true };
   let vaultId = (await chrome.storage.session.get(vaultKey(tabId)))[vaultKey(tabId)];
-  const body = { text, industries: s.industries, site, client: CLIENT };
+  const body = { text, industries: s.industries, site, client: CLIENT, client_id: await clientId() };
   let res = await call("/v1/sanitize", { ...body, vault_id: vaultId });
   if (res.status === 404 && vaultId) {
     // The gateway forgot this vault (30 min idle or restart): start a new one.
@@ -189,7 +190,7 @@ async function status() {
 async function handle(msg, tabId, site) {
   switch (msg.type) {
     case "settings": return settings(tabId);
-    case "analyze": return analyze(msg.text);
+    case "analyze": return analyze(msg.text, site);
     case "sanitize": return sanitize(msg.text, tabId, site);
     case "restore": return restore(msg.text, tabId);
     case "rememberAliases": return rememberAliases(msg.map || {}, tabId);

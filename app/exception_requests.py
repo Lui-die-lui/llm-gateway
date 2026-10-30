@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS exception_requests (
   status TEXT NOT NULL DEFAULT 'pending',   -- pending | approved | rejected
   ttl TEXT,
   memo TEXT NOT NULL DEFAULT '',
-  decided REAL
+  decided REAL,
+  used INTEGER NOT NULL DEFAULT 0            -- a one-use (1x) approval that has been spent
 );
 """
 
@@ -70,6 +71,8 @@ def configure(path: str) -> None:
         _db = sqlite3.connect(path, check_same_thread=False)
         _db.row_factory = sqlite3.Row
         _db.executescript(SCHEMA)
+        if "used" not in {r["name"] for r in _db.execute("PRAGMA table_info(exception_requests)")}:  # database from before grants
+            _db.execute("ALTER TABLE exception_requests ADD COLUMN used INTEGER NOT NULL DEFAULT 0")
         _db.commit()
 
 
@@ -111,6 +114,43 @@ def listing(client_id: str | None = None) -> list[dict]:
         else:
             rows = _db.execute("SELECT * FROM exception_requests ORDER BY id DESC")
         return [_row(r) for r in rows.fetchall()]
+
+
+TTL_SECONDS = {"1h": 3600, "24h": 86400, "7d": 604800}
+
+
+def grants(client_id: str | None, site: str | None = None, now: float | None = None) -> list[dict]:
+    """Approvals in force for this browser: approved, not over, not spent, for this site. -> [{id, labels, once}].
+
+    `labels` is what the request named (the kinds of information the person asked to send as they are). The browser id is not a
+    login: whoever has it can use the approval, so an approval is only as private as the id. It is limited to those kinds of
+    information, for the time the admin gave, and (when the request named a site) that site.
+    """
+    if not client_id:
+        return []
+    now = time.time() if now is None else now
+    with _lock:
+        rows = _db.execute("SELECT * FROM exception_requests WHERE client_id=? AND status='approved' AND used=0", (client_id,)).fetchall()
+    out = []
+    for r in rows:
+        seconds = TTL_SECONDS.get(r["ttl"])
+        if seconds and now >= (r["decided"] or 0) + seconds:
+            continue  # over
+        if r["site"] and site and r["site"] != site:
+            continue
+        labels = {x.strip() for x in r["entity"].split(",") if x.strip()}
+        if labels:
+            out.append({"id": f"REQ-{r['id']:04d}", "labels": labels, "once": r["ttl"] == "1x"})
+    return out
+
+
+def spend(public_id: str) -> None:
+    """A one-use approval is used up the first time it lets something through."""
+    num = public_id.removeprefix("REQ-")
+    if num.isdigit():
+        with _lock:
+            _db.execute("UPDATE exception_requests SET used=1 WHERE id=? AND ttl='1x'", (int(num),))
+            _db.commit()
 
 
 def decide(public_id: str, body: DecisionIn) -> dict:

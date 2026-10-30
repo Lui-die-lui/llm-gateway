@@ -69,3 +69,65 @@ def test_admin_endpoints_need_the_token_but_submitting_and_mine_do_not(monkeypat
     assert client.get("/v1/exceptions").status_code == 401
     assert client.post("/v1/exceptions/REQ-0001/decide", json={"decision": "approved"}).status_code == 401
     assert client.get("/v1/exceptions", headers={"X-Admin-Token": "s3cret"}).status_code == 200
+
+
+# ---- an approved request actually lets the item through
+KEY = "sk-" + "a1B2c3D4" * 4
+TEXT = f"배포 키는 {KEY} 입니다"
+
+
+def sanitize(**over):
+    body = {"text": TEXT, "client_id": "browser-aaaa", "site": "chatgpt.com"}
+    body.update(over)
+    return client.post("/v1/sanitize", json=body)
+
+
+def passes(**over):
+    """The text went out with the key as typed (a secret is otherwise blocked with 403)."""
+    r = sanitize(**over)
+    return r.status_code == 200 and KEY in r.json()["text"]
+
+
+def approve(entity, ttl):
+    rid = submit(entity=entity).json()["id"]
+    client.post(f"/v1/exceptions/{rid}/decide", json={"decision": "approved", "ttl": ttl})
+    return rid
+
+
+LABEL = next(iter(client.post("/v1/analyze", json={"text": TEXT}).json()["findings"]))
+
+
+def test_without_an_approval_the_key_is_blocked():
+    assert not passes()
+
+
+def test_an_approved_kind_goes_through_as_typed_for_that_browser_only(monkeypatch):
+    from app import exception_requests as ex
+
+    approve(LABEL, "1h")
+    assert passes()
+    assert not passes(client_id="browser-bbbb")  # someone else's browser
+    assert not passes(site="claude.ai")  # the request named chatgpt.com
+    monkeypatch.setattr(ex.time, "time", lambda: 10**10)  # long after the hour is over
+    assert not passes()
+
+
+def test_a_pending_or_rejected_request_lets_nothing_through():
+    rid = submit(entity=LABEL).json()["id"]
+    assert not passes()
+    client.post(f"/v1/exceptions/{rid}/decide", json={"decision": "rejected"})
+    assert not passes()
+
+
+def test_a_one_use_approval_is_spent_by_the_first_message_it_lets_through():
+    approve(LABEL, "1x")
+    preview = client.post("/v1/analyze", json={"text": TEXT, "client_id": "browser-aaaa", "site": "chatgpt.com"}).json()
+    assert KEY in preview["sanitized"]  # the preview spends nothing
+    assert passes()
+    assert not passes()  # used up
+
+
+def test_an_approval_only_covers_the_kinds_it_names():
+    approve(LABEL, "1h")
+    r = sanitize(text=f"{TEXT} 연락처 010-1234-5678")
+    assert r.status_code == 200 and KEY in r.json()["text"] and "010-1234-5678" not in r.json()["text"]
