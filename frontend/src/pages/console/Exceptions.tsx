@@ -92,6 +92,8 @@ export function ExceptionsPage() {
 
   const ends = grants.map((g) => grantEnd(g)).filter((x): x is number => x !== null);
   const nextEnd = ends.length ? Math.min(...ends) : null;
+  // A real request that names no kind of information would let nothing through, so it can only be rejected.
+  const noEntity = !!cur && isReal(cur.id) && cur.entity === '항목 미지정';
   const approvedN = all.filter((e) => e.status === 'approved').length;
   const rejectedN = all.filter((e) => e.status === 'rejected').length;
 
@@ -308,6 +310,11 @@ export function ExceptionsPage() {
                       <span className="badge b-muted">WAIT</span>
                     </div>
                   </div>
+                  {noEntity && (
+                    <div role="alert" className="note-box t2">
+                      허용할 항목이 적혀 있지 않은 요청이에요. 승인해도 아무것도 통과되지 않아서 승인할 수 없어요. 반려하고 메모에 "차단 창의 예외 요청 버튼으로 다시 요청해 주세요"라고 남겨 주세요.
+                    </div>
+                  )}
                   <label className="field">
                     <span>결정 메모 (요청자에게 전달)</span>
                     <textarea className="ta" style={{ minHeight: 70 }} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="승인 조건이나 반려 사유를 적어주세요" />
@@ -330,7 +337,7 @@ export function ExceptionsPage() {
                       정보 추가 요청
                     </button>
                     )}
-                    <button type="button" className="btn btn-p" disabled={decide.isPending} onClick={() => onDecide('approved')}>
+                    <button type="button" className="btn btn-p" disabled={decide.isPending || noEntity} title={noEntity ? '허용할 항목이 적혀 있지 않아 승인할 수 없어요' : undefined} onClick={() => onDecide('approved')}>
                       승인 · {TTL_KO[ttl]}
                     </button>
                   </div>

@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from .company_policy import PolicyError
 
-MAX_ROWS = 1000  # the submit endpoint is open to the portal, so cap what a stray caller can pile up
+MAX_PENDING = 1000  # the submit endpoint is open to the portal, so cap what a stray caller can pile up (undecided requests only)
+KEEP_DECIDED_DAYS = 180  # decided requests older than this are dropped, so the table never fills up with history
 
 _lock = threading.Lock()
 _db: sqlite3.Connection | None = None
@@ -97,7 +98,8 @@ def create(body: ExceptionIn) -> dict:
     # Without a name, tell the people sharing a demo apart by the tail of their browser id.
     requester = body.requester.strip() or f"직원-{body.client_id[-4:]}"
     with _lock:
-        if _db.execute("SELECT COUNT(*) FROM exception_requests").fetchone()[0] >= MAX_ROWS:
+        _db.execute("DELETE FROM exception_requests WHERE status!='pending' AND created<?", (time.time() - KEEP_DECIDED_DAYS * 86400,))
+        if _db.execute("SELECT COUNT(*) FROM exception_requests WHERE status='pending'").fetchone()[0] >= MAX_PENDING:
             raise PolicyError("예외 요청이 너무 많이 쌓였어요. 관리자에게 문의하세요", 429, "too_many_requests")
         cur = _db.execute(
             "INSERT INTO exception_requests(created,client_id,requester,entity,site,reason,scope) VALUES (?,?,?,?,?,?,?)",
@@ -165,6 +167,9 @@ def decide(public_id: str, body: DecisionIn) -> dict:
             raise PolicyError("없는 예외 요청이에요", 404, "not_found")
         if r["status"] != "pending":
             raise PolicyError("이미 처리한 요청이에요", 409, "already_decided")
+        if body.decision == "approved" and not any(x.strip() for x in r["entity"].split(",")):
+            # Without a named kind of information an approval would let nothing through: say so instead of approving in silence.
+            raise PolicyError("허용할 항목이 적혀 있지 않아 승인해도 아무것도 통과되지 않아요. 반려하고 다시 요청받아 주세요", 422, "no_entity")
         _db.execute(
             "UPDATE exception_requests SET status=?, ttl=?, memo=?, decided=? WHERE id=?",
             (body.decision, body.ttl if body.decision == "approved" else None, body.memo.strip(), time.time(), r["id"]),

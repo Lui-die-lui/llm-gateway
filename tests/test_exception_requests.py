@@ -152,3 +152,23 @@ def test_a_message_that_is_blocked_anyway_does_not_spend_a_one_use_approval(monk
     assert passes()  # still unused
     mine = client.get("/v1/exceptions/mine", params={"client_id": "browser-aaaa"}).json()
     assert [x["used"] for x in mine if x["id"] == rid] == [True]
+
+
+def test_a_request_that_names_nothing_cannot_be_approved_but_can_be_rejected():
+    rid = submit(entity="").json()["id"]
+    r = client.post(f"/v1/exceptions/{rid}/decide", json={"decision": "approved", "ttl": "1h"})
+    assert r.status_code == 422 and r.json()["error"]["type"] == "no_entity"
+    assert client.post(f"/v1/exceptions/{rid}/decide", json={"decision": "rejected"}).status_code == 200
+
+
+def test_only_undecided_requests_count_towards_the_cap_and_old_decided_ones_are_dropped(monkeypatch):
+    from app import exception_requests as ex
+
+    monkeypatch.setattr(ex, "MAX_PENDING", 2)
+    done = submit().json()["id"]
+    client.post(f"/v1/exceptions/{done}/decide", json={"decision": "rejected"})
+    assert submit().status_code == 200 and submit().status_code == 200  # the decided one does not use up the room
+    assert submit().status_code == 429  # two waiting: full
+    monkeypatch.setattr(ex, "KEEP_DECIDED_DAYS", -1)  # everything decided counts as old
+    submit.__globals__["client"].post(f"/v1/exceptions/{done}/decide", json={"decision": "rejected"})
+    assert submit().status_code == 429 and all(x["status"] == "pending" for x in client.get("/v1/exceptions").json())
