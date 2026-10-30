@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS requests (
   latency_ms INTEGER NOT NULL,
   site TEXT,                   -- hostname the client reported (chatgpt.com), if any
   client TEXT,                 -- client name/version the client reported (extension 0.3.0), if any
+  exception_id TEXT,           -- the approved exception that let something through as it was, if any
   caller TEXT                  -- the API key's name (hr-app), decided by the gateway; NULL when keys are not enabled
 );
 CREATE TABLE IF NOT EXISTS findings (
@@ -51,7 +52,7 @@ def configure(path: str) -> None:
         _db.executescript(SCHEMA)
         # Databases created before site/client existed.
         have = {r["name"] for r in _db.execute("PRAGMA table_info(requests)")}
-        for col in ("site", "client", "caller"):
+        for col in ("site", "client", "caller", "exception_id"):
             if col not in have:
                 _db.execute(f"ALTER TABLE requests ADD COLUMN {col} TEXT")
         _db.commit()
@@ -70,16 +71,17 @@ def record(
     site: str | None = None,
     client: str | None = None,
     caller: str | None = None,
+    exception_id: str | None = None,
     request_matches: list[Match] = (),
     response_matches: list[Match] = (),
 ) -> None:
     with _lock:
         cur = _db.execute(
-            "INSERT INTO requests(ts,endpoint,provider,route,status,industries,use_case,stream,latency_ms,site,client,caller)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO requests(ts,endpoint,provider,route,status,industries,use_case,stream,latency_ms,site,client,exception_id,caller)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 time.time(), endpoint, provider, route, status, ",".join(industries), use_case, int(stream), latency_ms,
-                _tag(site), _tag(client), caller,
+                _tag(site), _tag(client), _tag(exception_id), caller,
             ),
         )
         rows = [

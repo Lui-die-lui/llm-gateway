@@ -177,7 +177,7 @@ const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
 
 ## 5. 브라우저 확장 등 직접 LLM을 부르는 클라이언트용
 
-- `POST /v1/sanitize` `{text, industries?, use_case?, flow?, vault_id?, site?, client?}` → `{text, vault_id, findings}`. 차단 대상이면 403. 이어서 보낼 때는 받은 `vault_id`를 같이 보내면 `[이메일_1]` 번호가 이어집니다.
+- `POST /v1/sanitize` `{text, industries?, use_case?, flow?, vault_id?, site?, client?, client_id?}` → `{text, vault_id, findings}`. 차단 대상이면 403. `client_id`(브라우저 번호)를 보내면 그 브라우저가 낸 예외 요청 중 승인된 것이 적용됩니다. 요청에 적힌 항목 종류만, 관리자가 정한 시간 동안(요청에 사이트가 있으면 그 사이트에서만) 가리지도 막지도 않고 그대로 나갑니다. 1회 승인은 한 번 통과시키면 소진되고, 감사 기록에는 `exception_id`가 남습니다. `POST /v1/analyze`도 같은 `client_id`·`site`를 받아 미리보기를 맞추지만 1회 승인을 소진하지는 않습니다. 이어서 보낼 때는 받은 `vault_id`를 같이 보내면 `[이메일_1]` 번호가 이어집니다.
 - `POST /v1/restore` `{vault_id, text}` → `{text}`. `vault_id`가 없거나 30분이 지났으면 404.
 
 ## 6. 관리

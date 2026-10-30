@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from . import audit, company_policy, exception_requests, llm_detector, policy, rules_catalog, sessions, upstream
@@ -360,7 +360,8 @@ class SanitizeIn(BaseModel):
     use_case: str | None = None
     flow: str | None = None
     vault_id: str | None = None  # pass the previous one to keep placeholder numbering across messages
-    site: str | None = None  # audit label only: where the text was typed, e.g. "chatgpt.com"
+    site: str | None = None  # where the text was typed, e.g. "chatgpt.com": an exception can be limited to a site
+    client_id: str | None = Field(default=None, max_length=64)  # the browser's id: approved exception requests are looked up by it
     client: str | None = None  # audit label only: e.g. "extension/0.3.0"
 
 
@@ -379,9 +380,15 @@ def sanitize(body: SanitizeIn, caller: str | None = Depends(require_caller)):
     vault = sessions.get(body.vault_id) if body.vault_id else Vault()
     if vault is None:
         return error(404, "unknown_vault")
-    text, matches = redact_text(body.text, vault, templates)
+    approved = exception_requests.grants(body.client_id, body.site)
+    text, matches = redact_text(body.text, vault, templates, approved=frozenset().union(*(g["labels"] for g in approved)))
+    used = [g for g in approved if any(m.action == "log" and m.label in g["labels"] for m in matches)]
     # Nothing here can route to an internal model, so internal_only is a block too.
     route = policy.decide(matches, internal_available=False)
+    if route != "block":  # a message that is stopped anyway does not use up a one-use approval
+        for g in used:
+            if g["once"]:
+                exception_requests.spend(g["id"])
     audit.record(
         endpoint="sanitize",
         status="blocked" if route == "block" else "ok",
@@ -394,11 +401,15 @@ def sanitize(body: SanitizeIn, caller: str | None = Depends(require_caller)):
         site=body.site,
         client=body.client,
         caller=caller,
+        exception_id=",".join(g["id"] for g in used) or None,
         request_matches=matches,
     )
     if route == "block":
         return error(403, "gateway_blocked", direction="request", findings=count_by_label(matches))
-    return {"text": text, "vault_id": body.vault_id or sessions.create(vault), "findings": count_by_label(matches)}
+    out = {"text": text, "vault_id": body.vault_id or sessions.create(vault), "findings": count_by_label(matches)}
+    if used:  # so the person can be told: used up, or how much time is left
+        out["exceptions"] = [{"id": g["id"], "once": g["once"], "left": g["left"]} for g in used]
+    return out
 
 
 @app.post("/v1/restore")
@@ -414,6 +425,8 @@ class AnalyzeIn(BaseModel):
     industries: list[str] = []
     use_case: str | None = None
     flow: str | None = None
+    site: str | None = None
+    client_id: str | None = Field(default=None, max_length=64)  # so the preview matches what sanitize will do for this browser
     use_draft: bool = False  # also apply the console's unapplied draft rules, to try them before applying
 
 
@@ -427,7 +440,8 @@ def analyze(body: AnalyzeIn):
     if unknown:
         return error(400, "unknown_industry", message=", ".join(unknown))
     engine = company_policy.draft_engine() if body.use_draft else None
-    text, matches = redact_text(body.text, Vault(), templates, engine)
+    approved = frozenset().union(*(g["labels"] for g in exception_requests.grants(body.client_id, body.site)))  # preview only: nothing is spent
+    text, matches = redact_text(body.text, Vault(), templates, engine, approved)
     return {
         "sanitized": text,
         "route": policy.decide(matches, upstream.internal_available()),

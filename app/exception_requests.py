@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from .company_policy import PolicyError
 
-MAX_ROWS = 1000  # the submit endpoint is open to the portal, so cap what a stray caller can pile up
+MAX_PENDING = 1000  # the submit endpoint is open to the portal, so cap what a stray caller can pile up (undecided requests only)
+KEEP_DECIDED_DAYS = 180  # decided requests older than this are dropped, so the table never fills up with history
 
 _lock = threading.Lock()
 _db: sqlite3.Connection | None = None
@@ -32,7 +33,8 @@ CREATE TABLE IF NOT EXISTS exception_requests (
   status TEXT NOT NULL DEFAULT 'pending',   -- pending | approved | rejected
   ttl TEXT,
   memo TEXT NOT NULL DEFAULT '',
-  decided REAL
+  decided REAL,
+  used INTEGER NOT NULL DEFAULT 0            -- a one-use (1x) approval that has been spent
 );
 """
 
@@ -70,6 +72,8 @@ def configure(path: str) -> None:
         _db = sqlite3.connect(path, check_same_thread=False)
         _db.row_factory = sqlite3.Row
         _db.executescript(SCHEMA)
+        if "used" not in {r["name"] for r in _db.execute("PRAGMA table_info(exception_requests)")}:  # database from before grants
+            _db.execute("ALTER TABLE exception_requests ADD COLUMN used INTEGER NOT NULL DEFAULT 0")
         _db.commit()
 
 
@@ -86,6 +90,7 @@ def _row(r: sqlite3.Row) -> dict:
         "ttl": r["ttl"],
         "memo": r["memo"],
         "decided": r["decided"],
+        "used": bool(r["used"]),
     }
 
 
@@ -93,7 +98,8 @@ def create(body: ExceptionIn) -> dict:
     # Without a name, tell the people sharing a demo apart by the tail of their browser id.
     requester = body.requester.strip() or f"직원-{body.client_id[-4:]}"
     with _lock:
-        if _db.execute("SELECT COUNT(*) FROM exception_requests").fetchone()[0] >= MAX_ROWS:
+        _db.execute("DELETE FROM exception_requests WHERE status!='pending' AND created<?", (time.time() - KEEP_DECIDED_DAYS * 86400,))
+        if _db.execute("SELECT COUNT(*) FROM exception_requests WHERE status='pending'").fetchone()[0] >= MAX_PENDING:
             raise PolicyError("예외 요청이 너무 많이 쌓였어요. 관리자에게 문의하세요", 429, "too_many_requests")
         cur = _db.execute(
             "INSERT INTO exception_requests(created,client_id,requester,entity,site,reason,scope) VALUES (?,?,?,?,?,?,?)",
@@ -113,6 +119,44 @@ def listing(client_id: str | None = None) -> list[dict]:
         return [_row(r) for r in rows.fetchall()]
 
 
+TTL_SECONDS = {"1h": 3600, "24h": 86400, "7d": 604800}
+
+
+def grants(client_id: str | None, site: str | None = None, now: float | None = None) -> list[dict]:
+    """Approvals in force for this browser: approved, not over, not spent, for this site. -> [{id, labels, once, left}] (`left`: seconds to go, None for a one-use approval).
+
+    `labels` is what the request named (the kinds of information the person asked to send as they are). The browser id is not a
+    login: whoever has it can use the approval, so an approval is only as private as the id. It is limited to those kinds of
+    information, for the time the admin gave, and (when the request named a site) that site.
+    """
+    if not client_id:
+        return []
+    now = time.time() if now is None else now
+    with _lock:
+        rows = _db.execute("SELECT * FROM exception_requests WHERE client_id=? AND status='approved' AND used=0", (client_id,)).fetchall()
+    out = []
+    for r in rows:
+        seconds = TTL_SECONDS.get(r["ttl"])
+        end = (r["decided"] or 0) + seconds if seconds else None
+        if end and now >= end:
+            continue  # over
+        if r["site"] and site and r["site"] != site:
+            continue
+        labels = {x.strip() for x in r["entity"].split(",") if x.strip()}
+        if labels:
+            out.append({"id": f"REQ-{r['id']:04d}", "labels": labels, "once": r["ttl"] == "1x", "left": int(end - now) if end else None})
+    return out
+
+
+def spend(public_id: str) -> None:
+    """A one-use approval is used up the first time it lets something through."""
+    num = public_id.removeprefix("REQ-")
+    if num.isdigit():
+        with _lock:
+            _db.execute("UPDATE exception_requests SET used=1 WHERE id=? AND ttl='1x'", (int(num),))
+            _db.commit()
+
+
 def decide(public_id: str, body: DecisionIn) -> dict:
     num = public_id.removeprefix("REQ-")
     if not num.isdigit():
@@ -123,6 +167,9 @@ def decide(public_id: str, body: DecisionIn) -> dict:
             raise PolicyError("없는 예외 요청이에요", 404, "not_found")
         if r["status"] != "pending":
             raise PolicyError("이미 처리한 요청이에요", 409, "already_decided")
+        if body.decision == "approved" and not any(x.strip() for x in r["entity"].split(",")):
+            # Without a named kind of information an approval would let nothing through: say so instead of approving in silence.
+            raise PolicyError("허용할 항목이 적혀 있지 않아 승인해도 아무것도 통과되지 않아요. 반려하고 다시 요청받아 주세요", 422, "no_entity")
         _db.execute(
             "UPDATE exception_requests SET status=?, ttl=?, memo=?, decided=? WHERE id=?",
             (body.decision, body.ttl if body.decision == "approved" else None, body.memo.strip(), time.time(), r["id"]),

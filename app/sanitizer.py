@@ -3,6 +3,7 @@ import json
 import os
 from collections import Counter
 from collections.abc import Callable
+from dataclasses import replace
 
 from . import company_policy, policy
 from .detector import RESPONSE_LABELS, Match, detect
@@ -99,11 +100,20 @@ def find_matches(text: str, industries: list[Industry], engine: company_policy.E
     return eng.adjust(matches)
 
 
+def let_through(matches: list[Match], labels: frozenset[str] | set[str]) -> list[Match]:
+    """Matches of an approved kind of information stay as typed (recorded, not masked, not blocked)."""
+    return [replace(m, action="log") if m.label in labels and m.action != "log" else m for m in matches]
+
+
 def redact_text(
-    text: str, vault: Vault, industries: list[Industry], engine: company_policy.Engine | None = None
+    text: str,
+    vault: Vault,
+    industries: list[Industry],
+    engine: company_policy.Engine | None = None,
+    approved: frozenset[str] | set[str] = frozenset(),
 ) -> tuple[str, list[Match]]:
     """-> (masked text, matches). `log` matches stay in the text and are only recorded."""
-    matches = find_matches(text, industries, engine)
+    matches = let_through(find_matches(text, industries, engine), approved)
     out, pos = [], 0
     for m in matches:
         if m.action == "log":

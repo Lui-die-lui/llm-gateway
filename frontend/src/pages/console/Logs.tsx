@@ -98,6 +98,7 @@ export function LogsPage() {
       { name: '탐지', note: n ? `${ruleText(e)} 규칙으로 찾음` : '찾은 것 없음', color: '#2563EB' },
       { name: '정책 판정', note: `경로 ${e.route}${e.industries ? ` · 업종 ${e.industries}` : ''}`, color: '#1D4ED8' },
     ];
+    if (e.exception_id) s.push({ name: '예외 승인 적용', note: `${e.exception_id}에 적힌 항목은 가리지 않음`, color: '#7C3AED' });
     if (e.status === 'blocked') s.push({ name: '전송 막음', note: '밖으로 나간 것 없음', color: '#DC2626' });
     else if (e.status === 'response_blocked') s.push({ name: '답변 막음', note: '답변에 차단 대상이 있어 돌려주지 않음', color: '#DC2626' });
     else if (e.status === 'upstream_error') s.push({ name: '외부 LLM 오류', note: '전송은 했지만 답을 받지 못함', color: '#B45309' });
@@ -248,6 +249,11 @@ export function LogsPage() {
                             </td>
                             <td className="mono" style={{ fontSize: 11.5, color: 'var(--link)' }}>
                               {reqId(e)}
+                              {e.exception_id && (
+                                <span className="badge b-accent" style={{ marginLeft: 6 }} title={`예외 승인 ${e.exception_id}로 그대로 보냄`}>
+                                  예외
+                                </span>
+                              )}
                               {flagged.has(e.id) && (
                                 <span className="badge b-redact" style={{ marginLeft: 6 }}>
                                   오탐
@@ -314,6 +320,12 @@ export function LogsPage() {
                     <dd className="mono">{ymdhms(sel.ts)}</dd>
                     <dt>호출한 앱</dt>
                     <dd className="t3">{sel.caller ?? '키를 쓰지 않음'}</dd>
+                    {sel.exception_id && (
+                      <>
+                        <dt>예외 승인</dt>
+                        <dd className="mono">{sel.exception_id} · 승인된 항목은 가리지 않고 그대로 보냄</dd>
+                      </>
+                    )}
                     <dt>경로</dt>
                     <dd className="mono">{sel.endpoint}</dd>
                     <dt>대상</dt>

@@ -203,7 +203,7 @@
   }
 
   /**
-   * What to tell the person about one request. kind: pending | approved | rejected | expired.
+   * What to tell the person about one request. kind: pending | approved | used | rejected | expired.
    * `note` is what the admin wrote (shown on its own line), `end` the time an approval stops (ms), null when it has no clock.
    */
   function describeDecision(req, now = Date.now()) {
@@ -213,6 +213,7 @@
     if (req.status === "rejected") return { kind: "rejected", text: `${what}요청이 반려됐어요`, note, end: null };
     const label = TTL_LABEL[req.ttl] ?? "";
     const end = approvalEnd(req);
+    if (req.used) return { kind: "used", text: `${what}요청의 ${label || "1회"} 허용은 사용을 마쳤어요`, note, end: null };
     if (end === null) return { kind: "approved", text: `${what}요청이 승인됐어요 · ${label || "1회"}만 허용돼요`, note, end: null };
     if (end <= now) return { kind: "expired", text: `${what}요청은 승인됐지만 ${clock(end, now)}에 끝났어요`, note, end };
     return { kind: "approved", text: `${what}요청이 승인됐어요 · ${clock(end, now)}까지 (${label})`, note, end };
@@ -229,10 +230,11 @@
       if (r.status === "pending" || told[r.id] === r.status) continue;
       told[r.id] = r.status;
       const d = describeDecision(r, now);
-      if (d.kind !== "expired") news.push({ id: r.id, kind: d.kind, text: d.text, note: d.note }); // over before it was seen: nothing to say
+      if (d.kind !== "expired" && d.kind !== "used") news.push({ id: r.id, kind: d.kind, text: d.text, note: d.note }); // over before it was seen: nothing to say
     }
     const active = list.map((r) => ({ id: r.id, entity: r.entity, end: approvalEnd(r), note: r.memo || "" })).filter((a) => a.end && a.end > now);
-    return { news, active, told };
+    const used = list.filter((r) => r.used).map((r) => r.id); // spent one-use approvals: the "1회만 허용돼요" line must go
+    return { news, active, used, told };
   }
 
   const api = { exceptionNews, makeClientId, approvalEnd, clock, remaining, describeDecision, TTL_LABEL, PLACEHOLDER, PLACEHOLDER_ALL, cps, maskValue, pairSpans, ALIASES, hasAlias, buildOutgoing, restoreAliases, findFuzzy, CRITICAL, keepableLabels, canKeep, dayKey, portalBase };
