@@ -3,6 +3,7 @@
 Regex first. Anything regex cannot express (free-form names, supplier names) is covered by the
 optional local-LLM detector (llm_detector.py), whose matches are passed in through `extra`.
 """
+import bisect
 import re
 from dataclasses import dataclass
 
@@ -47,7 +48,8 @@ _PLATE = "가나다라마거너더러머버서어저고노도로모보소오조�
 # Rule order matters on a tie (same priority and length): the earlier rule wins, so 법인등록번호 sits before 주민번호.
 BUILTIN_RULES: list[tuple[str, re.Pattern[str], Action] | tuple[str, re.Pattern[str], Action, tuple[str, ...]]] = [
     ("시크릿", re.compile(r"sk-[A-Za-z0-9_-]{20,}"), "block"),
-    ("이메일", re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"), "redact"),
+    # (?<![\w.+-]): start only where the local part begins. Without it every character of a long run is tried as a start (quadratic).
+    ("이메일", re.compile(r"(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+"), "redact"),
     # Same shape as 주민번호; only the label right in front tells them apart. The keyword is part of the pattern (group 1 =
     # the number) instead of a `keywords` window, so a nearby 주민번호 in the same sentence is not relabeled.
     ("법인등록번호", re.compile(r"(?:법인등록번호|법인번호|등기번호)\s*(?:은|는|이|가|:|：)?\s*(\d{6}-\d{7})(?!\d)"), "redact"),
@@ -101,6 +103,17 @@ def builtin_matches(text: str, only: set[str] | None = None) -> list[Match]:
     return found
 
 
+def _linear(pattern: str) -> str:
+    """A template pattern that starts with a digit run (digits, then "%") is tried from every digit of a long run: quadratic,
+    and a 100 KB block of digits would stall the whole server. Starting only where a run begins finds the same matches."""
+    if pattern.startswith(r"\d[\d,]*"):
+        # amounts like 1,250,000: a start after "1," would rescan the rest of the run, so those starts are skipped too
+        return r"(?<!\d)(?<!\d,)" + pattern
+    if pattern.startswith((r"\d", r"[\d")):
+        return r"(?<!\d)" + pattern
+    return pattern
+
+
 def taxonomy_matches(
     text: str, industries: list[Industry], skip_entities: frozenset[tuple[str, str]] = frozenset()
 ) -> list[Match]:
@@ -111,7 +124,7 @@ def taxonomy_matches(
                 continue
             keywords = entity.detection.context_keywords
             for pattern in entity.detection.patterns:
-                for m in re.finditer(pattern, text):
+                for m in re.finditer(_linear(pattern), text):
                     start, end = _span(m)
                     if start == end:
                         continue
@@ -142,11 +155,16 @@ def detect(
     if only is None:
         candidates += taxonomy_matches(text, industries, skip_entities) + list(extra)
     candidates.sort(key=lambda m: (-m.priority, -(m.end - m.start), m.start))
+    # chosen stays sorted by position and never overlaps, so a candidate only has to fit between its two neighbours
+    # (checking against every chosen match is quadratic: a pasted list of 10,000 emails took tens of seconds).
     chosen: list[Match] = []
+    starts: list[int] = []
     for c in candidates:
-        if all(c.end <= k.start or c.start >= k.end for k in chosen):
-            chosen.append(c)
-    return sorted(chosen, key=lambda m: m.start)
+        i = bisect.bisect_left(starts, c.start)
+        if (i == 0 or chosen[i - 1].end <= c.start) and (i == len(chosen) or c.end <= chosen[i].start):
+            chosen.insert(i, c)
+            starts.insert(i, c.start)
+    return chosen
 
 
 # Imported last: secret_rules needs Match from this module. Loading it here compiles the gitleaks rules once, at startup.

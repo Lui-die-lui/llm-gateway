@@ -59,6 +59,11 @@ class AdminTokenRequired(Exception):
     pass
 
 
+# Detection is regex based and Python's `re` holds the GIL, so one huge text can stall every other request. Nothing a person types
+# or pastes into a chat is this long; refuse it instead of scanning it.
+MAX_TEXT = int(os.getenv("GATEWAY_MAX_TEXT", "200000"))  # characters, per text and per chat request
+
+
 def error(status: int, type_: str, **extra) -> JSONResponse:
     return JSONResponse({"error": {"type": type_, **extra}}, status)
 
@@ -215,6 +220,27 @@ def sse(obj: dict) -> str:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
 
 
+def chat_shape_problem(payload: dict) -> str | None:
+    """What the pipeline relies on, checked once up front so a malformed request is a 400 and not a 500 from deep inside."""
+    for i, m in enumerate(payload["messages"]):
+        if not isinstance(m, dict) or not isinstance(m.get("role"), str):
+            return f"messages[{i}] must be an object with a string role"
+        content = m.get("content")
+        if content is None or isinstance(content, str):
+            continue
+        if not isinstance(content, list):
+            return f"messages[{i}].content must be a string, a list of parts, or null"
+        for j, part in enumerate(content):
+            if not isinstance(part, dict):
+                return f"messages[{i}].content[{j}] must be an object"
+            if part.get("type") == "text" and not isinstance(part.get("text"), str):
+                return f"messages[{i}].content[{j}] is a text part without a string text"
+    tools = payload.get("tools")
+    if tools is not None and (not isinstance(tools, list) or not all(isinstance(t, dict) for t in tools)):
+        return "tools must be a list of objects"
+    return None
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(
     request: Request,
@@ -233,6 +259,12 @@ async def chat_completions(
         return error(400, "invalid_request", message="body must be valid UTF-8 JSON")
     if not isinstance(payload, dict) or not isinstance(payload.get("messages"), list) or not payload["messages"]:
         return error(400, "invalid_request", message="messages must be a non-empty list")
+
+    problem = chat_shape_problem(payload)
+    if problem:
+        return error(400, "invalid_request", message=problem)
+    if len(json.dumps(payload["messages"], ensure_ascii=False)) > MAX_TEXT:
+        return error(413, "payload_too_large", message=f"messages are longer than {MAX_TEXT} characters")
 
     names = split_header(x_gateway_industry)
     templates, unknown = pick_industries(names, x_gateway_use_case, x_gateway_flow)
@@ -355,7 +387,7 @@ async def chat_completions(
 # ---------------------------------------------------------------- for clients that call the LLM themselves
 
 class SanitizeIn(BaseModel):
-    text: str
+    text: str = Field(max_length=MAX_TEXT)
     industries: list[str] = []
     use_case: str | None = None
     flow: str | None = None
@@ -366,8 +398,8 @@ class SanitizeIn(BaseModel):
 
 
 class RestoreIn(BaseModel):
-    vault_id: str
-    text: str
+    vault_id: str = Field(max_length=100)
+    text: str = Field(max_length=MAX_TEXT)
 
 
 @app.post("/v1/sanitize")
@@ -421,7 +453,7 @@ def restore(body: RestoreIn, _caller: str | None = Depends(require_caller)):
 
 
 class AnalyzeIn(BaseModel):
-    text: str
+    text: str = Field(max_length=MAX_TEXT)
     industries: list[str] = []
     use_case: str | None = None
     flow: str | None = None
