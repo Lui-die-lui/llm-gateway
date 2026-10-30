@@ -17,7 +17,7 @@ async function showPage() {
     el.textContent = "이 탭에는 확장이 적용되어 있지 않아요. chatgpt.com 또는 claude.ai 탭에서 열어 주세요. 확장을 새로 로드했다면 탭을 새로고침해야 해요.";
     return;
   }
-  const kind = { known: "✓ 찾았어요", none: "✗ 못 찾았어요" };
+  const kind = { known: "✓ 찾았어요", guess: "△ 표에는 없지만 입력 중인 칸으로 동작해요", none: "✗ 못 찾았어요" };
   const lines = [probe.host, `입력창: ${kind[probe.composer]}`, `보내기 버튼: ${kind[probe.send]} (글을 쓰기 전에는 안 보일 수 있어요)`, `답변 영역: ${probe.reply ? "✓ 찾았어요" : "✗ 아직 없어요 (답변이 있어야 보여요)"}`, `가로챈 전송 ${probe.intercepted}번`];
   if (probe.composer !== "known") lines.push(`입력창 후보: ${probe.boxes.join(" / ") || "없음"}`);
   if (probe.send !== "known") lines.push(`보내기 후보: ${probe.buttons.join(" / ") || "없음"}`);

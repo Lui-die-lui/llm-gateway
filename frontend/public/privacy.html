@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LLM Gateway Guard · 개인정보 처리 방침</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { max-width: 720px; margin: 0 auto; padding: 32px 20px 64px; font: 15px/1.7 system-ui, "Noto Sans KR", sans-serif; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    h2 { font-size: 16px; margin: 28px 0 6px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    th, td { border: 1px solid rgba(128, 128, 128, .35); padding: 6px 8px; text-align: left; vertical-align: top; }
+    .meta { opacity: .7; font-size: 13px; }
+    .todo { background: #fff3cd; color: #5c4400; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>LLM Gateway Guard 개인정보 처리 방침</h1>
+  <p class="meta">시행일 2026-10-30</p>
+
+  <p>LLM Gateway Guard(이하 "확장")는 chatgpt.com과 claude.ai에 글을 보내기 직전에 민감정보를 찾아 가리고, 답변이 오면 화면에서만 원래 값으로 되돌려 보여 주는 Chrome 확장입니다. 회사가 직원에게 설치해 주는 업무용 도구이며, 글을 검사하는 서버(이하 "게이트웨이")는 <b>사용자가 확장에 입력한 주소의, 그 회사가 운영하는 서버</b>입니다. 확장을 만든 팀의 서버는 없고, 아래 정보는 확장 제작자에게 전달되지 않습니다.</p>
+
+  <h2>1. 처리하는 정보</h2>
+  <table>
+    <tr><th>정보</th><th>언제, 어디로</th><th>왜</th></tr>
+    <tr><td>입력창에 쓴 글</td><td>chatgpt.com 또는 claude.ai에서 보내기를 누르는 순간, 사용자가 설정한 게이트웨이로 전송</td><td>민감정보를 찾아 가리기 위해</td></tr>
+    <tr><td>답변 속 <code>[사람_1]</code> 같은 자리표시자 문장</td><td>답변이 화면에 나타날 때 게이트웨이로 전송</td><td>원래 값으로 되돌려 보여 주기 위해</td></tr>
+    <tr><td>설정: 게이트웨이 주소, 접속 키, 켜기·끄기, 선택한 업종</td><td>이 브라우저의 확장 저장소에만 저장</td><td>확장이 동작하기 위해</td></tr>
+    <tr><td>오늘의 검사·가림·차단 횟수, 최근 7일 변경 기록 (가려진 값만, 원래 값은 없음)</td><td>이 기기에만 저장</td><td>팝업과 "전체 보기"에 보여 주기 위해</td></tr>
+  </table>
+
+  <h2>2. 게이트웨이가 보관하는 것</h2>
+  <p>게이트웨이는 처리 시각, 사이트 이름, 가린 정보의 <b>종류와 개수</b>, 처리 결과(통과·가림·차단), 호출한 접속 키의 이름만 기록합니다. 글의 내용과 원래 값은 기록하지 않습니다. 원래 값과 자리표시자의 짝은 서버 메모리에만 있고 30분 쓰지 않으면 사라집니다. 게이트웨이의 보관·삭제 기준은 그 서버를 운영하는 회사가 정합니다.</p>
+
+  <h2>3. 하지 않는 것</h2>
+  <ul>
+    <li>정보를 판매하거나 광고, 분석, 신용 평가 등 이 기능과 무관한 목적에 쓰지 않습니다.</li>
+    <li>방문 기록, 쿠키, 계정 정보를 수집하지 않습니다. chatgpt.com과 claude.ai 밖의 페이지에서는 동작하지 않습니다.</li>
+    <li>확장 코드는 원격에서 내려받아 실행하는 코드를 쓰지 않습니다.</li>
+    <li>"파일 검사 데모"(기본 꺼짐)는 실제 검사가 아니며 파일을 어디로도 보내지 않습니다.</li>
+  </ul>
+
+  <h2>4. 가려서 보낸 글의 행방</h2>
+  <p>가려진 글은 사용자가 쓰는 AI 서비스(ChatGPT, Claude)로 전송되며, 그 뒤의 처리는 해당 서비스의 개인정보 처리 방침을 따릅니다. 확장은 민감정보를 찾아 가리지만 모든 정보를 찾는다고 보장하지 않습니다.</p>
+
+  <h2>5. 권한을 쓰는 이유</h2>
+  <ul>
+    <li><b>storage</b>: 위 설정과 횟수를 이 브라우저에 저장합니다.</li>
+    <li><b>chatgpt.com, claude.ai에서 실행</b>: 입력창의 글을 보내기 전에 가로채고 답변을 되돌려 보여 주기 위해서입니다.</li>
+    <li><b>게이트웨이 주소에 접근</b>: 사용자가 설정한 주소(기본은 내 PC의 <code>localhost</code>)에만 연결합니다. 다른 주소를 쓰려면 저장할 때 Chrome이 허용을 묻습니다. 내 PC 밖의 서버는 <code>https</code>만 받습니다.</li>
+  </ul>
+
+  <h2>6. 삭제</h2>
+  <p>확장을 제거하면 이 기기에 저장된 설정, 횟수, 변경 기록이 모두 지워집니다. 게이트웨이에 남은 기록은 그 서버를 운영하는 회사에 요청하세요.</p>
+
+  <h2>7. 문의</h2>
+  <p><span class="todo">[운영자 이름과 문의 이메일을 여기에 적으세요]</span></p>
+</body>
+</html>

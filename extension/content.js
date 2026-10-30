@@ -340,7 +340,7 @@
   let scanTimer;
   let scanSeq = 0;
   async function liveScan() {
-    const box = find(site.composer);
+    const box = findComposer(); // in safe mode (layout not recognised) this is the field being typed in, so the chip still works
     const text = box ? readText(box) : "";
     const seq = ++scanSeq;
     if (!text) return ui.chip(null);
@@ -364,12 +364,12 @@
     clearTimeout(scanTimer);
     scanTimer = setTimeout(liveScan, ms);
   };
-  const inComposer = (t) => !!t?.closest && !inOurUi(t) && !!t.closest(site.composer.join(","));
+  const inComposer = isComposerTarget;
   for (const ev of ["input", "keyup", "compositionend", "cut"]) document.addEventListener(ev, (e) => inComposer(e.target) && scanSoon(250), true);
   for (const ev of ["paste", "drop"]) document.addEventListener(ev, (e) => inComposer(e.target) && scanSoon(60), true);
   let lastSeenText = "";
   function composerChanged() {
-    const box = find(site.composer);
+    const box = findComposer();
     const t = box ? (box.value ?? box.textContent ?? "") : "";
     if (t === lastSeenText) return;
     lastSeenText = t;
@@ -617,7 +617,7 @@
     const describe = (el) => `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""} ${el.getAttribute("aria-label") ?? el.getAttribute("placeholder") ?? el.getAttribute("data-testid") ?? ""}`.trim();
     reply({
       host: location.hostname,
-      composer: find(site.composer) ? "known" : "none",
+      composer: find(site.composer) ? "known" : document.querySelector('textarea,div[role="textbox"],[contenteditable="true"]') ? "guess" : "none",
       send: find(site.send) ? "known" : "none",
       reply: !!find(site.reply),
       intercepted: seen.intercepted,
