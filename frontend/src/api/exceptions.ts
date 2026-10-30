@@ -21,9 +21,20 @@ const CLIENT_KEY = 'gw.clientId';
 
 export const isReal = (id: string) => id.startsWith('REQ-');
 
-/** A random id this browser keeps, so "my requests" shows only what was sent from here. It is not a login. */
+const ID_SHAPE = /^b-[A-Za-z0-9]{8,64}$/;
+
+/**
+ * A random id this browser keeps, so "my requests" shows only what was sent from here. It is not a login.
+ * The extension opens the portal with ?cid=<its own id>: that one wins and is remembered, so the request form and the chat page
+ * (which shows the answer, with the time it lasts) talk about the same person.
+ */
 export function clientId(): string {
   try {
+    const fromLink = new URLSearchParams(location.search).get('cid');
+    if (fromLink && ID_SHAPE.test(fromLink)) {
+      localStorage.setItem(CLIENT_KEY, fromLink);
+      return fromLink;
+    }
     const have = localStorage.getItem(CLIENT_KEY);
     if (have) return have;
     const made = `b-${(globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/-/g, '')}`;

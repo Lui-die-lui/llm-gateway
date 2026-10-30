@@ -55,6 +55,7 @@ button{font:inherit;color:inherit}
 .strip{border-radius:14px;padding:8px 8px 8px 12px;font-weight:500;line-height:1.5;flex-wrap:wrap;justify-content:space-between}
 .strip.tone-info{background:rgba(239,246,255,.97)}.strip.tone-warn,.strip.tone-off{background:rgba(255,247,237,.97)}.strip.tone-danger{background:rgba(254,242,242,.97)}.strip.tone-ok{background:rgba(236,253,245,.97)}
 .strip .txt{flex:1 1 180px;min-width:0}
+.strip .note{display:block;margin-top:2px;font-weight:400;opacity:.85}
 .sbtn{border:1px solid rgba(15,26,43,.14);background:#fff;border-radius:999px;padding:0 12px;min-height:30px;font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap}
 .sbtn:hover{border-color:rgba(15,26,43,.35)}
 .xbtn{border:0;background:transparent;width:30px;height:30px;border-radius:50%;cursor:pointer;display:grid;place-items:center;color:#4A5568}
@@ -183,13 +184,20 @@ button{font:inherit;color:inherit}
       const el = h(
         "div",
         { class: `strip glass tone-${spec.tone || "info"}`, role: spec.tone === "danger" ? "alert" : "status", "data-testid": `gw-strip-${id}` },
-        h("span", { class: "txt" }, spec.text),
+        h("span", { class: "txt" }, h("span", { class: "main", text: spec.text }), spec.note ? h("span", { class: "note", text: `관리자 메모 · ${spec.note}` }) : null),
         spec.action ? h("button", { type: "button", class: "sbtn", text: spec.action.label, onclick: spec.action.onClick }) : null,
-        h("button", { type: "button", class: "xbtn", "aria-label": "닫기", onclick: () => strip(id, null) }, icon("close", 14)),
+        spec.sticky ? null : h("button", { type: "button", class: "xbtn", "aria-label": "닫기", onclick: () => strip(id, null) }, icon("close", 14)),
       );
       slots.strips.set(id, el);
       if (ms) timers.set(id, setTimeout(() => strip(id, null), ms));
       rebuildDock();
+    }
+
+    /** Change the first line of a strip that is already showing (a countdown), without rebuilding it. */
+    function stripText(id, text) {
+      const main = slots.strips.get(id)?.querySelector(".main");
+      if (main && main.textContent !== text) main.textContent = text;
+      return !!main;
     }
 
     /* ---------- toast ---------- */
@@ -382,10 +390,10 @@ button{font:inherit;color:inherit}
     /* ---------- U2-A secret block ---------- */
     // The request page shows what was blocked and where; only the kinds of data and the site travel, never the text.
     function requestPage(url, labels) {
-      const q = new URLSearchParams();
-      if (labels.length) q.set("labels", labels.join(","));
-      q.set("site", location.hostname);
-      return `${url}?${q}`;
+      const u = new URL(url); // already carries ?cid=…
+      if (labels.length) u.searchParams.set("labels", labels.join(","));
+      u.searchParams.set("site", location.hostname);
+      return u.href;
     }
 
     function blocked({ labels, requestUrl, canSelect }) {
@@ -444,7 +452,7 @@ button{font:inherit;color:inherit}
       host.remove();
     }
 
-    return { chip, strip, toast, history, review, blocked, connection, place, destroy, host, shadow, h, icon, modal };
+    return { chip, strip, stripText, toast, history, review, blocked, connection, place, destroy, host, shadow, h, icon, modal };
   }
 
   root.GwUI = { create, h, icon };
