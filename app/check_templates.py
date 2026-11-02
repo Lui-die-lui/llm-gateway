@@ -19,8 +19,8 @@ def check_industry(ind: Industry) -> list[str]:
                 re.compile(p)
             except re.error as err:
                 problems.append(f"{e.id}: bad regex {p!r}: {err}")
-        if not e.detection.patterns and not e.detection.ner_hint:
-            problems.append(f"{e.id}: no patterns and no ner_hint, so it can never be detected")
+        if not e.detection.patterns:
+            problems.append(f"{e.id}: no patterns, so it can never be detected")
         if not e.detection.patterns and e.detection.context_keywords:
             problems.append(f"{e.id}: context_keywords only work together with patterns")
     if problems:

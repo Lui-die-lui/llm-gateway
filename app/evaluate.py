@@ -14,6 +14,23 @@ def covered(text: str, value: str, matches: list[Match]) -> bool:
     return i >= 0 and any(m.start <= i and i + len(value) <= m.end for m in matches)
 
 
+def entity_examples(ind: Industry) -> dict[str, dict]:
+    """What each template entity really catches, taken from the template's own `tests`: one example sentence and the values
+    it masked. For the console to show next to a rule (entities defined only by a regex have no keyword list to show)."""
+    out: dict[str, dict] = {}
+    for entity in ind.entities:
+        only = ind.model_copy(update={"entities": [entity]})
+        example, detected = None, []
+        for case in ind.tests:
+            ms = taxonomy_matches(case.text, [only]) if case.detect else []
+            values = [v for v in case.detect if covered(case.text, v, ms)]
+            if values and example is None:
+                example = {"text": case.text, "detect": values}
+            detected += [v for v in values if v not in detected]
+        out[entity.id] = {"example": example, "detected": detected}
+    return out
+
+
 def evaluate(industries: dict[str, Industry]) -> dict:
     rows = []
     for ind in industries.values():

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from app import audit, llm_detector, main, upstream
+from app import audit, main, upstream
 from app.check_templates import check_industry
 from app.detector import Match, detect
 from app.evaluate import evaluate
@@ -57,35 +57,6 @@ def test_names_with_title(text):
 @pytest.mark.parametrize("text", ["고객 이메일을 알려줘", "고객 이름을 입력하세요", "김치찌개 레시피", "고객 정보를 요약해줘"])
 def test_common_words_are_not_names(text):
     assert not any(m.label == "사람" for m in detect(text, []))
-
-
-# ---- local LLM assist ------------------------------------------------------
-
-def test_llm_assist_adds_only_values_present_in_text(monkeypatch):
-    monkeypatch.setenv("LOCAL_LLM_MODEL", "fake")
-    monkeypatch.setattr(
-        llm_detector, "_chat", lambda prompt: json.dumps({"사람": ["박철민", "유령이름"], "공급처": ["한국콜마"]})
-    )
-    cosmetics = main.industries["cosmetics"]
-    ms = llm_detector.llm_matches("박철민 대리가 한국콜마 에서 받았다", [cosmetics])
-    assert sorted((m.label, "박철민 대리가 한국콜마 에서 받았다"[m.start : m.end]) for m in ms) == [
-        ("공급처", "한국콜마"),
-        ("사람", "박철민"),
-    ]
-
-
-def test_llm_assist_failure_falls_back_to_regex(monkeypatch):
-    monkeypatch.setenv("LOCAL_LLM_MODEL", "fake")
-
-    def down(prompt):
-        raise llm_detector.httpx.ConnectError("down")
-
-    monkeypatch.setattr(llm_detector, "_chat", down)
-    assert llm_detector.llm_matches("아무 텍스트", []) == []
-
-
-def test_llm_assist_is_off_by_default():
-    assert llm_detector.llm_matches("박철민", []) == []
 
 
 # ---- routing + response scan ----------------------------------------------
@@ -408,3 +379,17 @@ def test_console_is_served_after_the_api_and_cannot_read_outside_its_folder(tmp_
     r = c.get("/v1/nope")
     assert r.status_code == 404 and r.json()["error"]["type"] == "not_found"  # unknown API paths are not the console
     assert "secret" not in c.get("/..%2fsecret.txt").text
+
+
+def test_industries_show_what_each_rule_looks_for():
+    """The console shows a rule's keywords and an example taken from the template's own tests, not just a count."""
+    rows = {i["industry"]: i for i in client.get("/v1/industries").json()}
+    ratio = next(e for e in rows["cosmetics"]["entities"] if e["id"] == "formulation_ratio")
+    assert "배합" in ratio["keywords"]
+    assert ratio["example"]["text"] and ratio["example"]["detect"]
+    assert ratio["example"]["text"].count(ratio["example"]["detect"][0]) >= 1
+    assert "72.4%" in ratio["detected"]
+    # a rule defined only by a regex has no keywords, but still says what it blocked in the tests
+    batch = next(e for e in rows["cosmetics"]["entities"] if e["id"] == "batch_number")
+    assert batch["keywords"] == [] and "LOT240315A" in batch["detected"]
+    assert all("test_cases" in i for i in rows.values())

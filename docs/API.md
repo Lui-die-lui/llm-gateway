@@ -105,7 +105,7 @@ const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
 | 엔드포인트 | 설명 |
 |---|---|
 | `GET /health` | `{"status":"ok"}` |
-| `GET /v1/config` | `provider`, `mock`, `internal_route`, `response_scan`, `local_llm_detector`, `streaming`, `admin_protected`. 상태 패널용 (비밀 값 없음) |
+| `GET /v1/config` | `provider`, `mock`, `internal_route`, `response_scan`, `streaming`, `admin_protected`. 상태 패널용 (비밀 값 없음) |
 | `GET /v1/industries` | 산업 목록. 각 항목에 `entities`(id, label, sensitivity, action, regulation), `applies_to`, `test_cases` |
 | `GET /v1/industries/{name}` | 템플릿 전체 |
 | `GET /v1/eval` | 범용 탐지 vs 템플릿 탐지 비교. 템플릿의 `tests`를 정답으로 계산 (발표용 비교표/차트) |

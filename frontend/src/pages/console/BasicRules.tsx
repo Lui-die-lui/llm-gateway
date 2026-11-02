@@ -12,7 +12,7 @@ import { Seg } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
 import { industryGroup, useBuiltinGroups, useIndustries, type CatalogGroup } from '../../features/catalog';
 import { useFeedback } from '../../features/feedback';
-import { ACTION_KO, providerName } from '../../features/format';
+import { ACTION_KO } from '../../features/format';
 import { qk, useHealth } from '../../features/queries';
 import './basic-rules.css';
 
@@ -64,10 +64,7 @@ export function BasicRulesPage() {
   const c = config.data;
   const status = [
     { label: '검사 서버', value: health.isSuccess ? '정상' : health.isLoading ? '확인 중' : '연결 안 됨', ok: health.isSuccess },
-    { label: '외부 LLM', value: c ? `${providerName(c.provider)}${c.mock ? ' (mock)' : ''}` : '…', ok: !!c },
     { label: '답변 검사', value: c ? (c.response_scan ? '켜짐' : '꺼짐') : '…', ok: !!c?.response_scan },
-    { label: '내부 모델 경로', value: c ? (c.internal_route ? '있음' : '없음') : '…', ok: !!c?.internal_route },
-    { label: '로컬 LLM 탐지 보조', value: c ? (c.local_llm_detector ? '켜짐' : '꺼짐') : '…', ok: !!c?.local_llm_detector },
     { label: '관리자 토큰', value: c ? (c.admin_protected ? '보호 중' : '열려 있음') : '…', ok: !!c?.admin_protected },
   ];
 
@@ -136,7 +133,7 @@ export function BasicRulesPage() {
             <div className="p2row p2head" aria-hidden="true">
               <span />
               <span className="lbl">규칙명</span>
-              <span className="lbl">무엇을 찾나 · 예시 (가짜 값)</span>
+              <span className="lbl">무엇을 찾나 · 예시</span>
               <span className="lbl" style={{ textAlign: 'right' }}>
                 처리
               </span>

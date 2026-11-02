@@ -19,8 +19,9 @@ const KINDS = [
   ['builtin', '기본 정보'],
   ['words', '회사 단어 목록'],
   ['pattern', '모양 (패턴)'],
-  ['ai', '설명으로 (AI)'],
 ] as const;
+// Rules of this kind were saved before the local LLM was dropped; nothing detects them any more, so it is only offered when one is open.
+const OLD_AI = ['ai', '설명으로 (지원 종료)'] as const;
 const ACTIONS = [
   ['redact', '가림'],
   ['block', '차단'],
@@ -314,7 +315,7 @@ export function PolicyPage() {
 
           <div className="field">
             <span>1 · 무엇을 찾을까요</span>
-            <Seg label="찾는 방법" options={KINDS} value={draft.kind} onChange={(v) => set('kind', v)} />
+            <Seg label="찾는 방법" options={draft.kind === 'ai' ? [...KINDS, OLD_AI] : KINDS} value={draft.kind} onChange={(v) => set('kind', v)} />
             <span className="t3" style={{ fontSize: 11.5 }}>
               {KIND_HELP[draft.kind]}
             </span>

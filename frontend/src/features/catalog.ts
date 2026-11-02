@@ -3,7 +3,7 @@
 import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { gateway } from '../api/gateway';
-import type { Action, Industry } from '../api/types';
+import type { Action, Industry, IndustryEntity } from '../api/types';
 import { qk } from './queries';
 
 export interface CatalogRule {
@@ -44,6 +44,14 @@ export const INDUSTRY_KO: Record<string, string> = {
 };
 export const industryName = (id: string): string => INDUSTRY_KO[id] ?? id;
 
+/** "위험 키워드 …" from the rule's context words; a regex-only rule has none, so show what it blocked in the template's tests. */
+export function industryDesc(e: IndustryEntity): string {
+  const looks = e.keywords.length ? `위험 키워드 ${e.keywords.join(', ')}` : e.detected.length ? `막히는 값 ${e.detected.slice(0, 4).join(', ')}` : '';
+  // the gateway sends the laws as a list (a template without any sends []), the type says string
+  const laws = ([] as string[]).concat(e.regulation ?? []).filter(Boolean).join(', ');
+  return [looks, laws, `민감도 ${e.sensitivity}`].filter(Boolean).join(' · ');
+}
+
 export function industryGroup(list: Industry[]): CatalogGroup {
   return {
     id: 'industry',
@@ -53,8 +61,8 @@ export function industryGroup(list: Industry[]): CatalogGroup {
       ind.entities.map((e) => ({
         id: `i:${ind.industry}:${e.id}`,
         name: `${industryName(ind.industry)} · ${e.label}`,
-        desc: [e.regulation, `민감도 ${e.sensitivity}`].filter(Boolean).join(' · '),
-        example: `템플릿 시험 문장 ${ind.test_cases}개`,
+        desc: industryDesc(e),
+        example: e.example?.text ?? ind.entities.find((x) => x.example)?.example?.text ?? '',
         action: e.action,
         defaultOn: true, // the gateway applies every rule it is not told to switch off
       })),

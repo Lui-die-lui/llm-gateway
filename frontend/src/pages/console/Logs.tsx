@@ -26,6 +26,16 @@ const TONE_CLS = { clean: 'b-clean', accent: 'b-accent', redact: 'b-redact', blo
 /** "a,b,c" -> "a, b, c": the stored list has no spaces, so a long one could never wrap. */
 const industryText = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean).join(', ');
 
+/** Where a record's exception story lives: the request that let it through, or the requests about what it blocked. */
+function exceptionLink(e: AuditEvent): { to: string; label: string } {
+  if (e.exception_id) return { to: `/console/exceptions?req=${encodeURIComponent(e.exception_id)}`, label: `예외 요청 보기 · ${e.exception_id}` };
+  const labels = [...new Set(e.findings.map((f) => f.label))];
+  if (!labels.length) return { to: '/console/exceptions', label: '관련 예외 요청' };
+  const q = new URLSearchParams({ entity: labels.join(',') });
+  if (e.site) q.set('site', e.site);
+  return { to: `/console/exceptions?${q.toString()}`, label: '관련 예외 요청 보기' };
+}
+
 const reqId = (e: AuditEvent) => `req_${e.id.toString(16).padStart(6, '0')}`;
 const itemCount = (e: AuditEvent) => e.findings.reduce((a, f) => a + f.count, 0);
 const ruleText = (e: AuditEvent) => [...new Set(e.findings.map((f) => f.label))].join(' · ') || '—';
@@ -389,8 +399,8 @@ export function LogsPage() {
                     <Link className="btn btn-sm" to="/console/policy">
                       규칙 열기
                     </Link>
-                    <Link className="btn btn-sm" to="/console/exceptions">
-                      관련 예외 요청
+                    <Link className="btn btn-sm" to={exceptionLink(sel).to} data-testid="to-exception">
+                      {exceptionLink(sel).label}
                     </Link>
                   </div>
                 </>

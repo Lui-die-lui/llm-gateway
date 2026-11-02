@@ -12,8 +12,8 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import audit, company_policy, exception_requests, llm_detector, policy, rules_catalog, sessions, upstream
-from .evaluate import evaluate
+from . import audit, company_policy, exception_requests, policy, rules_catalog, sessions, upstream
+from .evaluate import entity_examples, evaluate
 from .sanitizer import (
     ResponseBlocked,
     count_by_label,
@@ -166,7 +166,6 @@ def config():
         "mock": upstream.mock(),
         "internal_route": upstream.internal_available(),
         "response_scan": response_scan_enabled(),
-        "local_llm_detector": llm_detector.enabled(),
         "streaming": True,
         "admin_protected": bool(os.getenv("GATEWAY_ADMIN_TOKEN")),
         "caller_auth": bool(api_keys()),
@@ -175,17 +174,28 @@ def config():
 
 @app.get("/v1/industries")
 def list_industries():
+    """Templates with what each rule looks for: `keywords` (its context words), and `example`/`detected` taken from the
+    template's own tests, so a rule defined only by a regex still shows what it really blocks."""
     return [
         {
             "industry": i.industry,
             "entities": [
-                {"id": e.id, "label": e.label or e.id, "sensitivity": e.sensitivity, "action": e.action, "regulation": e.regulation}
+                {
+                    "id": e.id,
+                    "label": e.label or e.id,
+                    "sensitivity": e.sensitivity,
+                    "action": e.action,
+                    "regulation": e.regulation,
+                    "keywords": e.detection.context_keywords,
+                    **examples[e.id],
+                }
                 for e in i.entities
             ],
             "applies_to": i.applies_to,
             "test_cases": len(i.tests),
         }
         for i in industries.values()
+        for examples in [entity_examples(i)]
     ]
 
 
