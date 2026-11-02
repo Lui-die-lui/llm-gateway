@@ -434,6 +434,12 @@ tr.is-selected td {
 .kv dd {
   margin: 0;
   min-width: 0;
+  overflow-wrap: anywhere; /* a long run like "it_dev,cosmetics,finance,..." has no spaces to break at */
+}
+.wrap-any {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal; /* table cells are nowrap by default */
 }
 .row-line {
   display: flex;

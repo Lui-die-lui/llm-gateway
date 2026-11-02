@@ -139,7 +139,7 @@ export function LivePage() {
                     {e.endpoint.replace('/v1/', '')}
                   </span>
                   <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    <b style={{ fontWeight: 500 }}>{e.industries || '기본 규칙'}</b>
+                    <b style={{ fontWeight: 500 }} title={e.industries || undefined}>{e.industries ? e.industries.split(',').map((x) => x.trim()).join(', ') : '기본 규칙'}</b>
                     <span className="t2">
                       {' '}
                       → {providerName(e.provider)} · {findingsText(e)}
