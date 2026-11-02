@@ -108,7 +108,39 @@ function toPortal(s: ServerException): PortalRequest {
     note,
     when: when(s.created),
     scope: `${s.site || '브라우저'} · ${s.scope}`,
+    ttl: s.ttl ?? undefined,
+    decidedAt: s.decided ?? undefined,
+    used: s.used,
   };
+}
+
+export type GrantTime =
+  | { kind: 'running'; remainingSeconds: number; endsAt: number }
+  | { kind: 'once-open' }
+  | { kind: 'once-used' }
+  | { kind: 'ended' };
+
+/** What an approved request lets the person do right now. null: not an approved, real request, so nothing to show. */
+export function grantTime(p: PortalRequest, nowSeconds: number): GrantTime | null {
+  if (p.status !== 'APPROVED' || !isReal(p.id)) return null;
+  const secs = p.ttl ? TTL_SECONDS[p.ttl] : undefined;
+  if (!secs) return p.used ? { kind: 'once-used' } : { kind: 'once-open' };
+  if (p.decidedAt == null) return null;
+  const endsAt = p.decidedAt + secs;
+  return endsAt > nowSeconds ? { kind: 'running', remainingSeconds: endsAt - nowSeconds, endsAt } : { kind: 'ended' };
+}
+
+/** 3725 -> "1시간 2분", 90 -> "1분 30초" (seconds only under a minute-and-a-half is noise, so >= 10 minutes drops them). */
+export function formatRemaining(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d) return `${d}일 ${h}시간`;
+  if (h) return `${h}시간 ${m}분`;
+  if (m >= 10) return `${m}분`;
+  if (m) return `${m}분 ${s % 60}초`;
+  return `${s}초`;
 }
 
 // The lists fall back to empty (the mock rows still show) if the gateway cannot be reached; a 401 still sends the admin to the token screen.

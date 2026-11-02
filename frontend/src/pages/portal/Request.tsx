@@ -5,6 +5,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { portalApi } from '../../api/console';
 import { errorMessage } from '../../api/client';
+import { GrantTime } from '../../components/GrantTime';
 import { Icon } from '../../components/Icon';
 import { useFeedback } from '../../features/feedback';
 import { qk } from '../../features/queries';
@@ -31,7 +32,6 @@ export function RequestPage() {
   const [reason, setReason] = useState('');
   const [scope, setScope] = useState<Scope>('1회');
   const [agree, setAgree] = useState(false);
-  const [internal, setInternal] = useState(false);
   const submit = useMutation({
     mutationFn: () => portalApi.createException({ reason, scope, requester: name, entity: labels, site }),
     onSuccess: () => {
@@ -44,6 +44,9 @@ export function RequestPage() {
   const len = reason.trim().length;
   const can = len >= 20 && agree;
   const done = submit.data;
+  // After sending, keep looking at the answer: the security admin decides in the console, and an approval shows how long it lasts.
+  const mine = useQuery({ queryKey: qk.portal('requests'), queryFn: portalApi.requests, refetchInterval: 5_000, enabled: !!done });
+  const current = done ? mine.data?.find((r) => r.id === done.id) ?? done : null;
 
   return (
     <div className="page-bg portal">
@@ -147,6 +150,13 @@ export function RequestPage() {
                   </span>
                 </span>
               </div>
+              {current && current.status !== 'PENDING' && (
+                <div role="status" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <b style={{ fontSize: 14 }}>{current.status === 'APPROVED' ? '허용됐어요' : '반려됐어요'}</b>
+                  <span className="t2" style={{ fontSize: 12.5 }}>{current.note}</span>
+                  <GrantTime request={current} />
+                </div>
+              )}
               <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {[
                   ['1', '요청 접수', '방금 · 사유와 막힌 항목 종류만 전달돼요', 'rgba(16,185,129,.16)', '#047857'],
@@ -186,15 +196,6 @@ export function RequestPage() {
           )}
           <aside className="card" style={{ flex: '2 1 320px', display: 'flex', flexDirection: 'column', gap: 14, padding: 22 }}>
             <div className="lbl">먼저 이것도 해 보세요</div>
-            <div style={{ padding: 14, borderRadius: 16, background: 'rgba(37,99,235,.08)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <b style={{ fontSize: 14 }}>내부 모델로 보내기</b>
-              <span className="t2" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-                사내 서버의 모델은 외부로 나가지 않아서 원래 값 그대로 쓸 수 있어요. 번역·요약은 대부분 충분해요.
-              </span>
-              <button type="button" className="btn" aria-pressed={internal} onClick={() => setInternal(!internal)} style={{ alignSelf: 'flex-start', minHeight: 36 }}>
-                {internal ? '내부 모델로 다시 보냈어요' : '내부 모델로 다시 보내기'}
-              </button>
-            </div>
             <div style={{ padding: 14, borderRadius: 16, background: 'rgba(255,255,255,.7)', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <b style={{ fontSize: 14 }}>가린 채로 보내고 복원 받기</b>
               <span className="t2" style={{ fontSize: 12.5, lineHeight: 1.6 }}>

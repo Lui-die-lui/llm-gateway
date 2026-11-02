@@ -23,6 +23,9 @@ const STATUS_OPTS: [AuditStatus | '', string][] = [
 ];
 const TONE_CLS = { clean: 'b-clean', accent: 'b-accent', redact: 'b-redact', block: 'b-block', muted: 'b-muted' } as const;
 
+/** "a,b,c" -> "a, b, c": the stored list has no spaces, so a long one could never wrap. */
+const industryText = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean).join(', ');
+
 const reqId = (e: AuditEvent) => `req_${e.id.toString(16).padStart(6, '0')}`;
 const itemCount = (e: AuditEvent) => e.findings.reduce((a, f) => a + f.count, 0);
 const ruleText = (e: AuditEvent) => [...new Set(e.findings.map((f) => f.label))].join(' · ') || '—';
@@ -96,7 +99,7 @@ export function LogsPage() {
     const s = [
       { name: '수신', note: `${e.endpoint} · ${e.stream ? '스트리밍' : '일반 응답'}`, color: '#4A5568' },
       { name: '탐지', note: n ? `${ruleText(e)} 규칙으로 찾음` : '찾은 것 없음', color: '#2563EB' },
-      { name: '정책 판정', note: `경로 ${e.route}${e.industries ? ` · 업종 ${e.industries}` : ''}`, color: '#1D4ED8' },
+      { name: '정책 판정', note: `경로 ${e.route}${e.industries ? ` · 업종 ${industryText(e.industries)}` : ''}`, color: '#1D4ED8' },
     ];
     if (e.exception_id) s.push({ name: '예외 승인 적용', note: `${e.exception_id}에 적힌 항목은 가리지 않음`, color: '#7C3AED' });
     if (e.status === 'blocked') s.push({ name: '전송 막음', note: '밖으로 나간 것 없음', color: '#DC2626' });
@@ -270,7 +273,9 @@ export function LogsPage() {
                               <span className={`badge ${b.cls}`}>{b.label}</span>
                             </td>
                             <td className="t3" style={{ fontSize: 12 }}>
-                              {e.industries ? `업종 ${e.industries}` : '기본 규칙'}
+                              <div className="wrap-any" style={{ maxWidth: 220 }}>
+                                {e.industries ? `업종 ${industryText(e.industries)}` : '기본 규칙'}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -337,7 +342,7 @@ export function LogsPage() {
                       {findingsText(sel)} ({itemCount(sel)}건)
                     </dd>
                     <dt>적용 규칙</dt>
-                    <dd>{sel.industries ? `기본 규칙 + 업종 ${sel.industries}` : '기본 규칙'}</dd>
+                    <dd>{sel.industries ? `기본 규칙 + 업종 ${industryText(sel.industries)}` : '기본 규칙'}</dd>
                   </dl>
                   <div>
                     <div className="lbl" style={{ marginBottom: 10 }}>
@@ -349,7 +354,7 @@ export function LogsPage() {
                           <span style={{ width: 10, height: 10, borderRadius: '50%', marginTop: 4, background: s.color }} />
                           <span style={{ fontSize: 12.5 }}>
                             {s.name}
-                            <span className="t3" style={{ display: 'block', fontSize: 11.5 }}>
+                            <span className="t3 wrap-any" style={{ display: 'block', fontSize: 11.5 }}>
                               {s.note}
                             </span>
                           </span>

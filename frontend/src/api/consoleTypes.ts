@@ -211,6 +211,10 @@ export interface PortalRequest {
   note: string;
   when: string;
   scope: string;
+  /** Only for requests the gateway really stores: how long an approval lasts, when it was decided, and whether a one-use one is spent. */
+  ttl?: Ttl;
+  decidedAt?: number;
+  used?: boolean;
 }
 
 export type ReplaceHow = 'ph' | 'alias' | 'keep';
