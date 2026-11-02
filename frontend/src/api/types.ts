@@ -62,7 +62,13 @@ export interface IndustryEntity {
   label: string;
   sensitivity: string;
   action: Action;
-  regulation: string | null;
+  regulation: string[] | string | null;
+  /** The rule's context words (yaml context_keywords); empty for a rule defined only by a regex. */
+  keywords: string[];
+  /** One sentence from the template's own tests that this rule masks, and the values it masked. */
+  example: { text: string; detect: string[] } | null;
+  /** Everything this rule masked in the template's tests: what to show when there are no keywords. */
+  detected: string[];
 }
 
 export interface Industry {
@@ -115,7 +121,6 @@ export interface GatewayConfig {
   mock: boolean;
   internal_route: boolean;
   response_scan: boolean;
-  local_llm_detector: boolean;
   streaming: boolean;
   admin_protected: boolean;
   caller_auth: boolean; // apps must send a gateway key
