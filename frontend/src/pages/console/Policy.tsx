@@ -174,6 +174,9 @@ export function PolicyPage() {
           >
             + 새 규칙 만들기
           </a>
+          <button type="button" className="btn btn-p" disabled={!pending || apply.isPending} onClick={onApply}>
+            {pending ? `변경 ${pending}건 승인하고 적용` : '적용할 변경 없음'}
+          </button>
           <Help label="적용 방법 도움말" title="적용 방법">
             <ol>
               <li>규칙을 고치고 "변경으로 저장" · 아직 적용 안 됨</li>
@@ -182,9 +185,6 @@ export function PolicyPage() {
               <li>문제가 있으면 "변경 이력"에서 이전 버전으로 되돌리기</li>
             </ol>
           </Help>
-          <button type="button" className="btn btn-p" disabled={!pending || apply.isPending} onClick={onApply}>
-            {pending ? `변경 ${pending}건 승인하고 적용` : '적용할 변경 없음'}
-          </button>
         </div>
       </header>
 
@@ -192,7 +192,7 @@ export function PolicyPage() {
         <div className="ch" style={{ padding: '0 10px' }}>
           <h2 className="ct">
             규칙 목록{' '}
-            <span className="t3" style={{ fontWeight: 400, fontSize: 12.5 }}>
+            <span className="t3" style={{ fontWeight: 400, fontSize: 13.5 }}>
               · 위에서부터 확인 · 먼저 맞는 규칙 적용
             </span>
           </h2>
@@ -234,7 +234,7 @@ export function PolicyPage() {
                         {r.name}
                       </a>
                       {(r.isNew || draftNote) && (
-                        <span className="mono t3" style={{ display: 'block', fontSize: 11, marginTop: 2 }}>
+                        <span className="mono t3" style={{ display: 'block', fontSize: 12, marginTop: 2 }}>
                           {r.isNew ? '새로 추가 · 승인 전' : '변경 · 승인 전'}
                         </span>
                       )}
@@ -303,7 +303,7 @@ export function PolicyPage() {
               </button>
             </div>
           ) : (
-            <div style={{ marginTop: -8, padding: '10px 12px', borderRadius: 12, background: 'rgba(37,99,235,.08)', fontSize: 12.5, color: '#1E3A8A' }}>
+            <div style={{ marginTop: -8, padding: '10px 12px', borderRadius: 12, background: 'rgba(37,99,235,.08)', fontSize: 13.5, color: '#1E3A8A' }}>
               새 규칙은 목록 맨 아래에 추가돼요. 위치를 옮기면 먼저 확인할 순서가 바뀌어요. "규칙 추가"를 눌러도 승인 전까지는 적용되지 않아요.
             </div>
           )}
@@ -316,7 +316,7 @@ export function PolicyPage() {
           <div className="field">
             <span>1 · 무엇을 찾을까요</span>
             <Seg label="찾는 방법" options={draft.kind === 'ai' ? [...KINDS, OLD_AI] : KINDS} value={draft.kind} onChange={(v) => set('kind', v)} />
-            <span className="t3" style={{ fontSize: 11.5 }}>
+            <span className="t3" style={{ fontSize: 12.5 }}>
               {KIND_HELP[draft.kind]}
             </span>
             <div style={{ background: 'rgba(255,255,255,.72)', border: '1px solid var(--line)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -335,7 +335,7 @@ export function PolicyPage() {
                     단어 목록
                   </label>
                   <textarea id="rule-words" className="ta" value={draft.words} onChange={(e) => set('words', e.target.value)} placeholder={'한 줄에 하나씩\n예: 프로젝트 블루문\n예: 코드명 HB-21'} />
-                  <span className="t3" style={{ fontSize: 11.5 }}>
+                  <span className="t3" style={{ fontSize: 12.5 }}>
                     한 줄에 하나씩 · 회사 안에서만 쓰는 이름을 넣으세요 · 비슷한 띄어쓰기도 같이 찾아요
                   </span>
                 </>
@@ -343,7 +343,7 @@ export function PolicyPage() {
               {draft.kind === 'pattern' && (
                 <>
                   <input className="in mono" aria-label="패턴" value={draft.pattern} onChange={(e) => set('pattern', e.target.value)} placeholder="예: (EMP|DOC)-\d{4}" />
-                  <span className="t3" style={{ fontSize: 11.5 }}>
+                  <span className="t3" style={{ fontSize: 12.5 }}>
                     모양으로 찾기 · 예: 사번(EMP-0000), 문서번호, 단가처럼 숫자 모양이 정해진 값
                   </span>
                 </>
@@ -351,7 +351,7 @@ export function PolicyPage() {
               {draft.kind === 'ai' && (
                 <>
                   <input className="in" aria-label="찾을 내용 설명" value={draft.ai} onChange={(e) => set('ai', e.target.value)} />
-                  <span className="t3" style={{ fontSize: 11.5 }}>
+                  <span className="t3" style={{ fontSize: 12.5 }}>
                     설명으로 찾기 · 검사 서버의 모델이 문맥을 보고 판단해요 · 놓치거나 잘못 잡을 수 있어 "검토 창 띄우기"와 같이 쓰세요
                   </span>
                 </>
@@ -362,7 +362,7 @@ export function PolicyPage() {
           <div className="field">
             <span>2 · 찾으면 어떻게 할까요</span>
             <Seg label="처리" options={ACTIONS} value={draft.action} onChange={(v) => setDraft((d) => ({ ...d, action: v, options: { ...d.options, ask: v !== 'block', exc: v === 'block' } }))} />
-            <span className="t3" style={{ fontSize: 11.5 }}>
+            <span className="t3" style={{ fontSize: 12.5 }}>
               {ACTION_HELP[draft.action]}
             </span>
             {draft.action === 'redact' && (
@@ -401,7 +401,7 @@ export function PolicyPage() {
                 </button>
               ))}
             </div>
-            <span className="t3" style={{ fontSize: 11.5 }}>
+            <span className="t3" style={{ fontSize: 12.5 }}>
               부서별 적용은 아직 저장만 돼요. 지금은 누가 쓰는지 서버가 몰라서 어느 부서를 골라도 전사에 적용돼요.
             </span>
           </div>
@@ -416,8 +416,8 @@ export function PolicyPage() {
             ).map(([k, t, s]) => (
               <div key={k} className="row-line" style={{ padding: '10px 0' }}>
                 <div>
-                  <div style={{ fontSize: 13 }}>{t}</div>
-                  <div className="t3" style={{ fontSize: 11.5, marginTop: 2 }}>
+                  <div style={{ fontSize: 13.5 }}>{t}</div>
+                  <div className="t3" style={{ fontSize: 12.5, marginTop: 2 }}>
                     {s}
                   </div>
                 </div>
@@ -461,7 +461,7 @@ export function PolicyPage() {
           <section className="card">
             <div className="ch">
               <h2 className="ct">미리 시험하기</h2>
-              <span className="t3" style={{ fontSize: 12 }}>
+              <span className="t3" style={{ fontSize: 13 }}>
                 검사 서버 규칙으로 확인 · 저장·전송하지 않음
               </span>
             </div>
@@ -469,7 +469,7 @@ export function PolicyPage() {
               <span>시험 문장</span>
               <textarea className="ta" value={sample} onChange={(e) => setSample(e.target.value)} />
             </label>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, marginTop: 8 }} className="t2">
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginTop: 8 }} className="t2">
               <input type="checkbox" checked={tplOn} onChange={(e) => setTplOn(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
               업종 묶음({industryName(companyIndustry)}) 규칙도 같이 시험
             </label>
@@ -485,7 +485,7 @@ export function PolicyPage() {
                 {pieces
                   .filter((p) => p.span)
                   .map((p, i) => (
-                    <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 8, alignItems: 'center', fontSize: 12.5, padding: '9px 12px', borderRadius: 9, background: 'rgba(255,255,255,.5)' }}>
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 8, alignItems: 'center', fontSize: 13.5, padding: '9px 12px', borderRadius: 9, background: 'rgba(255,255,255,.5)' }}>
                       <span>
                         <b style={{ fontWeight: 500 }}>{p.text}</b>
                         <span className="t3"> · {p.span!.label}</span>
@@ -493,15 +493,15 @@ export function PolicyPage() {
                       <span className={`badge ${p.span!.action === 'block' ? 'b-block' : p.span!.action === 'internal_only' ? 'b-internal' : 'b-redact'}`}>{ACTION_KO[p.span!.action]}</span>
                     </div>
                   ))}
-                <div style={{ marginTop: 2, padding: '10px 12px', borderRadius: 9, background: 'rgba(255,255,255,.72)', fontSize: 12.5, lineHeight: 1.6 }}>
+                <div style={{ marginTop: 2, padding: '10px 12px', borderRadius: 9, background: 'rgba(255,255,255,.72)', fontSize: 13.5, lineHeight: 1.6 }}>
                   <span className="lbl" style={{ display: 'block', marginBottom: 4 }}>
                     외부로 나가는 문장
                   </span>
-                  <span className="mono" style={{ fontSize: 12 }}>
+                  <span className="mono" style={{ fontSize: 13 }}>
                     {result.sanitized}
                   </span>
                 </div>
-                <div style={{ padding: '10px 12px', borderRadius: 9, background: 'rgba(255,255,255,.72)', fontSize: 12.5, lineHeight: 1.6 }}>
+                <div style={{ padding: '10px 12px', borderRadius: 9, background: 'rgba(255,255,255,.72)', fontSize: 13.5, lineHeight: 1.6 }}>
                   {result.route === 'block'
                     ? '차단할 값이 있어 보내지 않아요 · 직원에게 경고창이 떠요'
                     : result.spans.length === 0
@@ -511,7 +511,7 @@ export function PolicyPage() {
               </div>
             )}
             {!result && !run.error && (
-              <div className="t3" style={{ fontSize: 12.5 }}>
+              <div className="t3" style={{ fontSize: 13.5 }}>
                 "시험하기"를 누르면 검사 서버가 무엇을 찾는지 보여 줘요. 여기서 만든 규칙은 서버에 아직 반영되지 않아 결과에 포함되지 않아요.
               </div>
             )}

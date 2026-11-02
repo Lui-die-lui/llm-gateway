@@ -197,7 +197,7 @@ export function LineChart({
         {annotation && n > 0 && (
           <>
             <div style={{ position: 'absolute', left: `${xPct(annotation.index)}%`, top: y(annotation.value), transform: 'translate(-50%,-50%)', width: 10, height: 10, borderRadius: '50%', background: 'var(--c-block)', boxShadow: '0 0 0 3px #fff,0 0 0 6px rgba(227,73,72,.2)' }} />
-            <div style={{ position: 'absolute', left: `${xPct(annotation.index)}%`, top: Math.max(-6, y(annotation.value) - 36), transform: 'translateX(-50%)', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 600, color: 'var(--danger)', background: '#fff', border: '1px solid rgba(227,73,72,.3)', borderRadius: 999, padding: '3px 9px' }}>
+            <div style={{ position: 'absolute', left: `${xPct(annotation.index)}%`, top: Math.max(-6, y(annotation.value) - 36), transform: 'translateX(-50%)', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 600, color: 'var(--danger)', background: '#fff', border: '1px solid rgba(227,73,72,.3)', borderRadius: 999, padding: '3px 9px' }}>
               {annotation.text}
             </div>
           </>
@@ -263,7 +263,7 @@ export function RankBars({ items, limit = 6 }: { items: RankItem[]; limit?: numb
           <span className="rk">{i + 1}</span>
           <span style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0 }}>
             <span style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
-            {t.tag && <span style={{ fontSize: 10.5, color: 'var(--ink-mute)' }}>{t.tag}</span>}
+            {t.tag && <span style={{ fontSize: 11.5, color: 'var(--ink-mute)' }}>{t.tag}</span>}
           </span>
           <span className="vz-num">
             {fmt(t.value)}

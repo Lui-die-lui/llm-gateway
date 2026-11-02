@@ -183,3 +183,12 @@ const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
 ## 6. 관리
 
 `POST /v1/industries/reload` — 템플릿 파일을 고친 뒤 서버 재시작 없이 다시 읽습니다. 파일 하나라도 형식이 틀리면 400과 파일 이름을 돌려주고 기존 템플릿은 그대로 둡니다. (`GATEWAY_ADMIN_TOKEN` 설정 시 토큰 필요)
+
+## 7. 이상 징후와 데이터 비우기 (관리자 토큰 필요)
+
+| 호출 | 설명 |
+|---|---|
+| `GET /v1/anomalies` | 최근 기록에서 계산한 이상 징후 목록 `[{id, sev, t, title, desc, primary, primary_href, acked}]`. 같은 곳에서 10분 안에 시크릿이 3번 이상 막힘(HIGH), 어떤 항목의 가림이 지난 1시간 10건 이상이면서 평소(전날 시간당)의 3배 이상(MEDIUM), 지난 24시간 모델 답변을 막은 것(MEDIUM), 지난 1시간 외부 모델 오류 3건 이상(LOW). 기록에 사용자가 없어서 "어디서"는 접속 키 이름, 없으면 클라이언트, 없으면 사이트입니다 |
+| `POST /v1/anomalies/ack` `{id}` | 확인 처리. 같은 시간 구간의 같은 징후는 계속 확인됨으로 보입니다 |
+| `DELETE /v1/audit/events` | 전송 기록을 모두 지웁니다 → `{deleted}`. 되돌릴 수 없고 번호가 처음부터 다시 시작합니다 |
+| `DELETE /v1/exceptions` | 예외 요청을 모두 지웁니다 → `{deleted}`. 되돌릴 수 없습니다 |

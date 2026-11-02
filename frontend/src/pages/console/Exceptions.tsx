@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { consoleApi } from '../../api/console';
+import { gateway } from '../../api/gateway';
 import { errorMessage } from '../../api/client';
 import type { Decision, ExceptionStatus, Ttl } from '../../api/consoleTypes';
-import { MockBadge, Seg } from '../../components/Controls';
+import { Help, MockBadge, Seg } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
 import { useFeedback } from '../../features/feedback';
 import { qk, useExceptions } from '../../features/queries';
@@ -104,6 +105,18 @@ export function ExceptionsPage() {
     onError: (e) => toast(errorMessage(e), 'error'),
   });
 
+  // Admin only, no undo: empties the real requests the gateway stored (used before a demo). The sample rows below are not touched.
+  const clearAll = useMutation({
+    mutationFn: gateway.clearExceptions,
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: qk.exceptions });
+      qc.invalidateQueries({ queryKey: qk.portal('requests') });
+      setSelId(null);
+      toast(`예외 요청 ${r.deleted}건을 지웠어요`);
+    },
+    onError: (e) => toast(errorMessage(e), 'error'),
+  });
+
   async function onDecide(d: Decision) {
     const spec =
       d === 'approved'
@@ -130,9 +143,29 @@ export function ExceptionsPage() {
           </div>
           <p className="t2">차단된 사용자가 보낸 원문 전송 요청 · 승인 시 지정된 범위와 시간 동안만 허용됩니다</p>
         </div>
-        <Link className="btn" to="/console/settings">
-          승인 정책 설정
-        </Link>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn"
+            disabled={!all.some((e) => isReal(e.id))}
+            onClick={async () => {
+              if (await confirm({ title: '예외 요청 모두 지우기', body: '게이트웨이에 접수된 예외 요청과 승인 내역이 모두 지워지고 번호가 처음부터 다시 시작돼요. 되돌릴 수 없어요. 발표 전에 테스트 요청을 비울 때 쓰세요.', ok: '모두 지우기', danger: true })) clearAll.mutate();
+            }}
+          >
+            요청 비우기
+          </button>
+          <Link className="btn" to="/console/settings">
+            승인 정책 설정
+          </Link>
+          <Help label="처리 방법 도움말" title="처리 방법">
+            <ol>
+              <li>직원이 막힌 전송을 사유와 함께 요청해요</li>
+              <li>관리자가 기간(1회 · 1시간 · 24시간 · 7일)을 골라 승인하거나, 메모와 함께 반려해요</li>
+              <li>승인되면 요청한 브라우저의 그 항목 · 그 사이트에 한해 기간 동안만 원문이 나가요 (직원 화면에 남은 시간이 보여요)</li>
+              <li>기간이 끝나거나 1회를 쓰면 자동으로 다시 보호돼요</li>
+            </ol>
+          </Help>
+        </div>
       </header>
 
       <section aria-label="요약" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 16 }}>
@@ -147,7 +180,7 @@ export function ExceptionsPage() {
             <div className="mono" style={{ fontSize: 24, marginTop: 6 }}>
               {v}
             </div>
-            <div className={c ? undefined : 't3'} style={{ fontSize: 12, marginTop: 4, color: c as string | undefined }}>
+            <div className={c ? undefined : 't3'} style={{ fontSize: 13, marginTop: 4, color: c as string | undefined }}>
               {n}
             </div>
           </div>
@@ -157,7 +190,7 @@ export function ExceptionsPage() {
       <section className="card" aria-label="적용 중인 승인" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, padding: '14px 16px 8px' }}>
           <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>적용 중인 승인 {grants.length}건</h2>
-          <span className="t3" style={{ fontSize: 12 }}>지금 원문 전송이 허용돼 있는 요청 · 시간이 끝나거나 1회를 쓰면 사라집니다</span>
+          <span className="t3" style={{ fontSize: 13 }}>지금 원문 전송이 허용돼 있는 요청 · 시간이 끝나거나 1회를 쓰면 사라집니다</span>
         </div>
         {grants.length === 0 ? (
           <div className="empty">지금 적용 중인 승인이 없어요</div>
@@ -229,7 +262,7 @@ export function ExceptionsPage() {
             })}
           </div>
           {(entityParam.length > 0 || siteParam) && (
-            <div role="status" style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px', background: 'rgba(37,99,235,.08)', fontSize: 12.5 }}>
+            <div role="status" style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px', background: 'rgba(37,99,235,.08)', fontSize: 13.5 }}>
               <span>
                 기록에서 이동했어요 · <b>{[...entityParam, siteParam].filter(Boolean).join(' · ')}</b> 관련 요청만 보는 중
               </span>
@@ -247,17 +280,17 @@ export function ExceptionsPage() {
                 <li key={r.id}>
                   <button type="button" className={`exc-item${on ? ' on' : ''}`} aria-pressed={on} onClick={() => setSelId(r.id)}>
                     <span style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', width: '100%' }}>
-                      <span style={{ fontSize: 13.5, fontWeight: 600 }}>
+                      <span style={{ fontSize: 14, fontWeight: 600 }}>
                         {r.user}{' '}
                         <span className="t3" style={{ fontWeight: 400 }}>
                           · {r.dept}
                         </span>
                       </span>
-                      <span className="mono" style={{ fontSize: 11, color: r.status === 'pending' ? SLA_COLOR[r.slaUrgent] : 'var(--ink-3)' }}>
+                      <span className="mono" style={{ fontSize: 12, color: r.status === 'pending' ? SLA_COLOR[r.slaUrgent] : 'var(--ink-3)' }}>
                         {r.status === 'pending' ? r.sla : r.requestedAt}
                       </span>
                     </span>
-                    <span className="t2" style={{ fontSize: 12.5, marginTop: 6, textAlign: 'left' }}>
+                    <span className="t2" style={{ fontSize: 13.5, marginTop: 6, textAlign: 'left' }}>
                       {r.title}
                     </span>
                     <span style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
@@ -295,7 +328,7 @@ export function ExceptionsPage() {
                 <dt>차단된 항목</dt>
                 <dd>
                   {cur.entity} — 규칙{' '}
-                  <span className="mono" style={{ fontSize: 12 }}>
+                  <span className="mono" style={{ fontSize: 13 }}>
                     {cur.rule}
                   </span>
                 </dd>
@@ -310,9 +343,9 @@ export function ExceptionsPage() {
                 <div className="lbl" style={{ marginBottom: 8 }}>
                   요청 사유 (사용자 작성)
                 </div>
-                <blockquote style={{ margin: 0, padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,.5)', border: '1px solid var(--line)', fontSize: 13, lineHeight: 1.7 }}>{cur.reason}</blockquote>
+                <blockquote style={{ margin: 0, padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,.5)', border: '1px solid var(--line)', fontSize: 13.5, lineHeight: 1.7 }}>{cur.reason}</blockquote>
               </div>
-              <div role="note" style={{ display: 'flex', gap: 10, padding: '12px 14px', borderRadius: 10, background: 'rgba(37,99,235,.08)', border: '1px solid rgba(37,99,235,.3)', fontSize: 12.5, lineHeight: 1.6 }}>
+              <div role="note" style={{ display: 'flex', gap: 10, padding: '12px 14px', borderRadius: 10, background: 'rgba(37,99,235,.08)', border: '1px solid rgba(37,99,235,.3)', fontSize: 13.5, lineHeight: 1.6 }}>
                 <span className="badge b-accent" style={{ flex: '0 0 auto' }}>
                   대안
                 </span>
@@ -323,7 +356,7 @@ export function ExceptionsPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <span className="lbl">승인 시 허용 기간</span>
                     <Seg label="허용 기간" options={TTL_OPTS} value={ttl} onChange={setTtl} />
-                    <span className="t3" style={{ fontSize: 11.5 }}>
+                    <span className="t3" style={{ fontSize: 12.5 }}>
                       {TTL_HELP[ttl]}
                     </span>
                   </div>
@@ -333,9 +366,9 @@ export function ExceptionsPage() {
                       <span className="av" style={{ background: 'rgba(255,255,255,.88)' }}>
                         나
                       </span>
-                      <span style={{ fontSize: 12.5, flex: 1 }}>
+                      <span style={{ fontSize: 13.5, flex: 1 }}>
                         보안관리자
-                        <span className="t3" style={{ display: 'block', fontSize: 11 }}>
+                        <span className="t3" style={{ display: 'block', fontSize: 12 }}>
                           이 화면에서 승인 · 반려 · 기간을 정하면 바로 적용돼요 · 다른 사람 확인 단계 없음
                         </span>
                       </span>

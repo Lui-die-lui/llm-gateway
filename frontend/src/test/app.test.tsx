@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { Providers, makeQueryClient } from '../app/Providers';
 import { routes } from '../app/router';
+import { addJoinRequest } from '../mocks/db';
 
 function renderAt(path: string) {
   // The gateway is not running in unit tests: every real endpoint answers with an empty body.
@@ -43,13 +44,15 @@ describe('console', () => {
 
   it('approves a join request and updates the sidebar badge', async () => {
     sessionStorage.setItem('gw.console.session', JSON.stringify({ user: { name: '보안관리자', email: 'admin@example.com', role: 'admin', owner: true }, lastLogin: '', lastActive: Date.now() }));
+    addJoinRequest({ id: 't1', name: '테스트직원A', email: 'a@example.com', dept: '영업', when: '방금', check: '회사 메일 ✓', warn: false });
+    addJoinRequest({ id: 't2', name: '테스트직원B', email: 'b@example.com', dept: '개발', when: '방금', check: '회사 메일 ✓', warn: false });
     const user = userEvent.setup();
     renderAt('/console/users');
-    const approve = await screen.findByRole('button', { name: '이서준 가입 승인' });
-    expect(await screen.findByLabelText('대기 4건')).toBeInTheDocument();
+    const approve = await screen.findByRole('button', { name: '테스트직원A 가입 승인' });
+    expect(await screen.findByLabelText('대기 2건')).toBeInTheDocument();
     await user.click(approve);
-    expect(await screen.findByText(/이서준 님 가입을 승인했어요/)).toBeInTheDocument();
-    expect(await screen.findByLabelText('대기 3건')).toBeInTheDocument();
+    expect(await screen.findByText(/테스트직원A 님 가입을 승인했어요/)).toBeInTheDocument();
+    expect(await screen.findByLabelText('대기 1건')).toBeInTheDocument();
   });
 
   it('enables "변경 n건 적용" only after a basic rule changes', async () => {

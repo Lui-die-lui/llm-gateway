@@ -127,7 +127,7 @@ export function LoginPage() {
         <div>
           <div className="lbl">LOGIN · 관리자 콘솔</div>
           <h1 style={{ margin: '6px 0 0', fontSize: 26, fontWeight: 700, letterSpacing: '-.02em' }}>로그인 · 관리자 콘솔</h1>
-          <p className="t2" style={{ margin: '4px 0 0', fontSize: 13 }}>
+          <p className="t2" style={{ margin: '4px 0 0', fontSize: 13.5 }}>
             관리자 콘솔(웹) 전용 로그인이에요. 확장 로그인과 따로 있어요. 확장에서 회사를 등록한 관리자 계정, 또는 관리자로 지정된 계정만 들어올 수 있어요.
           </p>
         </div>
@@ -141,7 +141,7 @@ export function LoginPage() {
             </span>
             <span>
               <b style={{ display: 'block', fontSize: 18 }}>Gateway Security Console</b>
-              <span className="mono" style={{ fontSize: 11, opacity: 0.7 }}>
+              <span className="mono" style={{ fontSize: 12, opacity: 0.7 }}>
                 admin.gateway.example.com
               </span>
             </span>
@@ -151,13 +151,13 @@ export function LoginPage() {
             <br />
             관리자만 들어와요
           </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: 13, lineHeight: 1.65, opacity: 0.92 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: 13.5, lineHeight: 1.65, opacity: 0.92 }}>
             <div>· 관리자 권한이 있는 계정만 들어올 수 있어요. 일반 직원 계정은 비밀번호가 맞아도 막혀요.</div>
             <div>· 비밀번호를 5번 틀리면 15분 동안 잠기고, 보안 담당자에게 알림이 가요.</div>
             <div>· 30분 동안 아무것도 안 하면 자동으로 로그아웃돼요.</div>
             <div>· 로그인·로그아웃·실패 기록은 모두 감사 로그에 남아요.</div>
           </div>
-          <div style={{ marginTop: 'auto', fontSize: 11.5, opacity: 0.65 }}>테스트용 가짜 계정만 쓰세요 · 실제 사번이나 비밀번호를 넣지 마세요</div>
+          <div style={{ marginTop: 'auto', fontSize: 12.5, opacity: 0.65 }}>테스트용 가짜 계정만 쓰세요 · 실제 사번이나 비밀번호를 넣지 마세요</div>
         </section>
 
         <section className="glass login-box" aria-label="로그인">
@@ -183,18 +183,18 @@ export function LoginPage() {
                 비밀번호
                 <input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="••••••••" autoComplete="current-password" required />
               </label>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />이 기기 기억 (아이디만)
                 </label>
-                <button type="button" className="link-btn" style={{ fontSize: 12.5, fontWeight: 400 }} onClick={() => toast('재설정 메일은 서버 연동 후 보낼 수 있어요 (지금은 mock 계정만)')}>
+                <button type="button" className="link-btn" style={{ fontSize: 13.5, fontWeight: 400 }} onClick={() => toast('재설정 메일은 서버 연동 후 보낼 수 있어요 (지금은 mock 계정만)')}>
                   비밀번호 재설정
                 </button>
               </div>
               <button type="submit" className="btn btn-p login-btn" disabled={locked || busy}>
                 {locked ? '잠김 · 15분 뒤 다시 시도' : busy ? '확인 중…' : '다음'}
               </button>
-              <div className="t3" style={{ fontSize: 11.5, lineHeight: 1.6 }}>
+              <div className="t3" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
                 시험해 보기: 아이디 admin@example.com · 비밀번호 test1234. 다른 값을 넣으면 실패 화면을 볼 수 있어요.
               </div>
             </form>
@@ -207,7 +207,7 @@ export function LoginPage() {
                 <h2 ref={heading} tabIndex={-1} style={{ margin: '6px 0 0', fontSize: 22, outline: 'none' }}>
                   인증 앱의 6자리 숫자
                 </h2>
-                <p className="t2" style={{ margin: '6px 0 0', fontSize: 13 }}>
+                <p className="t2" style={{ margin: '6px 0 0', fontSize: 13.5 }}>
                   {id} 계정 · Google Authenticator 같은 인증 앱에서 확인하세요.
                 </p>
               </div>
@@ -251,23 +251,23 @@ export function LoginPage() {
                 ))}
               </div>
               {otpErr && (
-                <div role="alert" className="login-err wrong" style={{ fontSize: 12.5 }}>
+                <div role="alert" className="login-err wrong" style={{ fontSize: 13.5 }}>
                   숫자가 맞지 않아요. 앱의 숫자는 30초마다 바뀌어요.
                 </div>
               )}
               <button type="button" className="btn btn-p login-btn" onClick={verify}>
                 확인하고 콘솔 열기
               </button>
-              <div className="t3" style={{ fontSize: 11.5, lineHeight: 1.6 }}>
+              <div className="t3" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
                 설정 › 로그인 · 보안 › "관리자 2단계 인증"이 꺼져 있으면 이 화면은 나오지 않고 바로 콘솔로 가요.
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
-                <button type="button" className="link-btn" style={{ fontSize: 12.5, padding: '6px 0' }} onClick={back}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
+                <button type="button" className="link-btn" style={{ fontSize: 13.5, padding: '6px 0' }} onClick={back}>
                   ← 다른 계정
                 </button>
                 <span className="t3">휴대폰을 잃어버렸다면 복구 코드 사용</span>
               </div>
-              <div className="t3" style={{ fontSize: 11.5 }}>
+              <div className="t3" style={{ fontSize: 12.5 }}>
                 시험해 보기: 아무 6자리 · 000000을 넣으면 실패
               </div>
             </div>
@@ -281,7 +281,7 @@ export function LoginPage() {
               <h2 ref={heading} tabIndex={-1} style={{ margin: 0, fontSize: 22, outline: 'none' }}>
                 확인됐어요 · {session?.user.name ?? '보안관리자'}
               </h2>
-              <p className="t2" style={{ margin: 0, fontSize: 13, lineHeight: 1.7 }}>
+              <p className="t2" style={{ margin: 0, fontSize: 13.5, lineHeight: 1.7 }}>
                 마지막 로그인: {lastLogin || session?.lastLogin}
                 <br />
                 이번 로그인은 감사 로그에 기록됐어요.
@@ -290,7 +290,7 @@ export function LoginPage() {
                 관리자 콘솔 열기 →
               </button>
               {pendingJoins > 0 && (
-                <Link to="/console/users" style={{ fontSize: 12.5, fontWeight: 600 }}>
+                <Link to="/console/users" style={{ fontSize: 13.5, fontWeight: 600 }}>
                   가입 승인 대기 {pendingJoins}건 보기 →
                 </Link>
               )}
@@ -303,7 +303,7 @@ export function LoginPage() {
               <h2 ref={heading} tabIndex={-1} style={{ margin: 0, fontSize: 22, outline: 'none' }}>
                 30분 동안 활동이 없어 로그아웃됐어요
               </h2>
-              <p className="t2" style={{ margin: 0, fontSize: 13, lineHeight: 1.7 }}>
+              <p className="t2" style={{ margin: 0, fontSize: 13.5, lineHeight: 1.7 }}>
                 정책 편집 중이던 내용은 임시 저장돼 있어요. 다시 로그인하면 이어서 할 수 있어요.
               </p>
               <button type="button" className="btn btn-p login-btn" onClick={back}>

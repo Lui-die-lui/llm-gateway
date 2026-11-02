@@ -9,6 +9,7 @@ import type {
   EvalReport,
   GatewayConfig,
   Industry,
+  ServerAnomaly,
   StatsSummary,
   TimeseriesPoint,
 } from './types';
@@ -26,6 +27,11 @@ export const gateway = {
     request<TimeseriesPoint[]>('/v1/stats/timeseries', {
       query: { bucket, since: Math.floor(since), tz_offset: -new Date().getTimezoneOffset() },
     }),
+  anomalies: () => request<ServerAnomaly[]>('/v1/anomalies'),
+  ackAnomaly: (id: string) => request<{ ok: boolean }>('/v1/anomalies/ack', { method: 'POST', body: { id } }),
+  /** Admin only, no undo: empties what the gateway stored (used before a demo). */
+  clearAudit: () => request<{ deleted: number }>('/v1/audit/events', { method: 'DELETE' }),
+  clearExceptions: () => request<{ deleted: number }>('/v1/exceptions', { method: 'DELETE' }),
   auditEvents: (q: AuditQuery = {}) =>
     request<AuditEvent[]>('/v1/audit/events', {
       query: { limit: q.limit ?? 50, offset: q.offset ?? 0, label: q.label, status: q.status },

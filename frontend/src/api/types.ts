@@ -50,6 +50,18 @@ export interface AuditEvent {
   findings: Finding[];
 }
 
+/** From GET /v1/anomalies: computed from the audit log (see docs/API.md 7). */
+export interface ServerAnomaly {
+  id: string;
+  sev: 'HIGH' | 'MEDIUM' | 'LOW';
+  t: string;
+  title: string;
+  desc: string;
+  primary: string;
+  primary_href: string;
+  acked: boolean;
+}
+
 export interface AuditQuery {
   limit?: number;
   offset?: number;

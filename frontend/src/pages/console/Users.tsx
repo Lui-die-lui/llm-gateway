@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { consoleApi } from '../../api/console';
 import { errorMessage } from '../../api/client';
 import type { Decision, Member } from '../../api/consoleTypes';
-import { MockBadge } from '../../components/Controls';
+import { Help, MockBadge } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
 import { useFeedback } from '../../features/feedback';
 import { qk, useCompany, useJoinRequests } from '../../features/queries';
@@ -93,6 +93,16 @@ export function UsersPage() {
           </div>
           <p className="t2">{c?.name ?? '…'} · 회사 코드로 들어온 가입 요청을 승인하고, 누가 관리자인지 정해요</p>
         </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <Help label="가입 승인 흐름 도움말" title="가입 승인 흐름">
+            <ol>
+              <li>직원이 회사 코드로 가입을 신청해요</li>
+              <li>관리자가 회사 메일 주소가 맞는지 확인해요 (아니면 "확인"에 경고가 떠요)</li>
+              <li>승인하면 그때부터 확장 보호가 켜지고 정책을 받아요</li>
+              <li>거절하면 사유가 신청자에게 전달되고 관리자 작업 기록에 남아요</li>
+            </ol>
+          </Help>
+        </div>
       </header>
 
       <section aria-label="요약" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 16 }}>
@@ -107,7 +117,7 @@ export function UsersPage() {
             <div className="mono" style={{ fontSize: 24, marginTop: 6, color: col }}>
               {v}
             </div>
-            <div className="t3" style={{ fontSize: 12, marginTop: 4 }}>
+            <div className="t3" style={{ fontSize: 13, marginTop: 4 }}>
               {n}
             </div>
           </div>
@@ -119,11 +129,11 @@ export function UsersPage() {
           <div className="ch" style={{ padding: '0 10px' }}>
             <h2 className="ct">
               가입 요청{' '}
-              <span className="t3" style={{ fontWeight: 400, fontSize: 12.5 }}>
+              <span className="t3" style={{ fontWeight: 400, fontSize: 13.5 }}>
                 · 승인해야 보호가 켜지고 정책을 받아요
               </span>
             </h2>
-            <span className="t3" style={{ fontSize: 12 }}>
+            <span className="t3" style={{ fontSize: 13 }}>
               {pending}건 대기
             </span>
           </div>
@@ -147,7 +157,7 @@ export function UsersPage() {
                         <span className="av">{r.name.slice(0, 1)}</span>
                         <span>
                           <span style={{ fontWeight: 500 }}>{r.name}</span>
-                          <span className="t3 mono" style={{ display: 'block', fontSize: 11 }}>
+                          <span className="t3 mono" style={{ display: 'block', fontSize: 12 }}>
                             {r.email}
                           </span>
                         </span>
@@ -156,7 +166,7 @@ export function UsersPage() {
                     <td>{r.dept}</td>
                     <td className="t2">{r.when}</td>
                     <td style={{ whiteSpace: 'normal', minWidth: 120 }}>
-                      <span style={{ fontSize: 12, lineHeight: 1.5, color: r.warn ? '#B91C1C' : '#047857' }}>{r.check}</span>
+                      <span style={{ fontSize: 13, lineHeight: 1.5, color: r.warn ? '#B91C1C' : '#047857' }}>{r.check}</span>
                     </td>
                     <td className="num">
                       {r.decision ? (
@@ -177,7 +187,7 @@ export function UsersPage() {
               </tbody>
             </table>
           </div>
-          <p className="t3" style={{ fontSize: 11.5, lineHeight: 1.6, margin: '10px 10px 4px' }}>
+          <p className="t3" style={{ fontSize: 12.5, lineHeight: 1.6, margin: '10px 10px 4px' }}>
             회사 메일 주소({c?.mailDomain ?? '@example.com'})가 아니면 "확인"에 경고가 떠요. 거절하면 사유가 신청자에게 전달되고 관리자 작업 기록에 남아요.
           </p>
         </section>
@@ -203,7 +213,7 @@ export function UsersPage() {
               복사
             </button>
           </div>
-          <p className="t2" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6 }}>
+          <p className="t2" style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6 }}>
             직원이 가입할 때 넣는 코드예요. 코드만으로는 들어올 수 없고, 여기서 승인해야 해요.
           </p>
           <button
@@ -217,7 +227,7 @@ export function UsersPage() {
           >
             새 코드로 바꾸기
           </button>
-          <span className="t3" style={{ fontSize: 11.5 }}>
+          <span className="t3" style={{ fontSize: 12.5 }}>
             바꾸면 이전 코드로는 새로 신청할 수 없어요. 이미 가입한 사람은 그대로예요.
           </span>
         </section>
@@ -238,7 +248,7 @@ export function UsersPage() {
               ))}
             </select>
           </div>
-          <span className="t3" style={{ fontSize: 12 }}>
+          <span className="t3" style={{ fontSize: 13 }}>
             {c?.members ?? '…'}명 중 {shown.length}명 표시
           </span>
         </div>
@@ -274,7 +284,7 @@ export function UsersPage() {
                       </span>
                       <span>
                         <span style={{ fontWeight: 500 }}>{m.name}</span>
-                        <span className="t3 mono" style={{ display: 'block', fontSize: 11 }}>
+                        <span className="t3 mono" style={{ display: 'block', fontSize: 12 }}>
                           {m.email}
                         </span>
                       </span>
@@ -287,7 +297,7 @@ export function UsersPage() {
                     </button>
                   </td>
                   <td>
-                    <span style={{ fontSize: 12, color: m.status === 'active' ? '#047857' : '#B45309' }}>{STATUS_KO[m.status]}</span>
+                    <span style={{ fontSize: 13, color: m.status === 'active' ? '#047857' : '#B45309' }}>{STATUS_KO[m.status]}</span>
                   </td>
                   <td className="t2">{m.last}</td>
                   <td>
@@ -305,7 +315,7 @@ export function UsersPage() {
       <section className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 16 }}>
         <div>
           <div className="lbl">역할은 두 가지</div>
-          <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.7 }}>
+          <p style={{ margin: '8px 0 0', fontSize: 13.5, lineHeight: 1.7 }}>
             <b>보안 관리자</b> · 콘솔 로그인, 가입 승인, 규칙·예외 승인, 설정 변경
             <br />
             <b>직원</b> · 확장 사용, 내 기록 보기, 예외 요청
@@ -313,13 +323,13 @@ export function UsersPage() {
         </div>
         <div>
           <div className="lbl">소유자</div>
-          <p className="t2" style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.7 }}>
+          <p className="t2" style={{ margin: '8px 0 0', fontSize: 13.5, lineHeight: 1.7 }}>
             회사를 등록한 관리자예요. 다른 관리자를 지정하거나 뺄 수 있고, 마지막 관리자는 뺄 수 없어요. 역할 표시를 누르면 바뀌어요.
           </p>
         </div>
         <div>
           <div className="lbl">아무도 못 보는 것</div>
-          <p className="t2" style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.7 }}>
+          <p className="t2" style={{ margin: '8px 0 0', fontSize: 13.5, lineHeight: 1.7 }}>
             프롬프트 원문과 원래 값은 저장하지 않아서 관리자도 볼 수 없어요.
           </p>
         </div>
