@@ -580,6 +580,12 @@ def exception_decide(request_id: str, body: exception_requests.DecisionIn):
     return exception_requests.decide(request_id, body)
 
 
+@app.delete("/v1/exceptions", dependencies=admin)
+def exception_clear():
+    """Empty the exception requests (before a demo). Admin only; there is no undo."""
+    return {"deleted": exception_requests.clear()}
+
+
 # ---------------------------------------------------------------- audit / dashboard (metadata only)
 
 @app.get("/v1/stats/summary", dependencies=[Depends(require_admin)])
@@ -597,6 +603,29 @@ def stats_timeseries(bucket: str = "hour", since: float = 0.0, tz_offset: int = 
     if bucket not in ("minute", "hour", "day"):
         return error(400, "invalid_request", message="bucket must be minute, hour or day")
     return audit.timeseries(bucket, since, tz_offset)
+
+
+@app.get("/v1/anomalies", dependencies=[Depends(require_admin)])
+def anomalies_list():
+    """Unusual things in the recent log, computed on request: repeated blocked secrets from one source, a sudden rise in masking,
+    answers withheld, model errors. `acked` ones were marked as seen by an admin."""
+    return [{k: v for k, v in a.items() if k != "ts"} for a in audit.anomalies()]
+
+
+class AnomalyAck(BaseModel):
+    id: str = Field(min_length=1, max_length=200)
+
+
+@app.post("/v1/anomalies/ack", dependencies=[Depends(require_admin)])
+def anomaly_ack(body: AnomalyAck):
+    audit.ack_anomaly(body.id)
+    return {"ok": True}
+
+
+@app.delete("/v1/audit/events", dependencies=[Depends(require_admin)])
+def audit_clear():
+    """Empty the audit log (before a demo). Admin only; there is no undo."""
+    return {"deleted": audit.clear()}
 
 
 @app.get("/v1/audit/events", dependencies=[Depends(require_admin)])

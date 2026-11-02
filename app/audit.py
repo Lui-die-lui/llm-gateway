@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS findings (
   action TEXT NOT NULL,
   count INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS anomaly_acks (
+  id TEXT PRIMARY KEY,         -- the anomaly's stable id (rule + source + time window)
+  ts REAL NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_requests_ts ON requests(ts);
 CREATE INDEX IF NOT EXISTS idx_findings_request ON findings(request_id);
 """
@@ -238,3 +242,88 @@ def events(
             ]
             out.append(e)
     return out, total
+
+
+def clear() -> int:
+    """Delete every audit record (and the acknowledgements that refer to them). Returns how many requests were deleted."""
+    with _lock:
+        n = _db.execute("SELECT COUNT(*) FROM requests").fetchone()[0]
+        _db.execute("DELETE FROM findings")
+        _db.execute("DELETE FROM requests")
+        _db.execute("DELETE FROM anomaly_acks")
+        _db.execute("DELETE FROM sqlite_sequence WHERE name='requests'")  # numbering starts over
+        _db.commit()
+    return n
+
+
+# ---------------------------------------------------------------- anomalies (computed from the log; only acknowledgements are stored)
+# The log has no user, only where a request came from (the API key's name, else the client, else the site), so that is the
+# "who" here. Thresholds are deliberately plain: a person reads these, they are not a model.
+SECRET_BURST = (3, 600)  # blocked secrets from one source: how many, within how many seconds
+SPIKE_MIN = 10  # a label masked at least this often in the last hour...
+SPIKE_FACTOR = 3  # ...and at least this many times its usual hourly rate over the day before
+RESPONSE_BLOCKED_WINDOW = 86400
+UPSTREAM_ERRORS = (3, 3600)
+
+_HITS = (
+    "SELECT f.label label, SUM(f.count) n FROM findings f JOIN requests r ON r.id=f.request_id"
+    " WHERE f.direction='request' AND f.action='redact' AND r.ts>=? AND r.ts<? GROUP BY f.label"
+)
+
+
+def _hhmm(ts: float) -> str:
+    return time.strftime("%H:%M", time.localtime(ts))
+
+
+def anomalies(now: float | None = None) -> list[dict]:
+    """Things in the recent log an admin should look at, most severe first. Acknowledged ones stay in the list, marked."""
+    now = time.time() if now is None else now
+    out: list[dict] = []
+    with _lock:
+        n, win = SECRET_BURST
+        for r in _q(
+            "SELECT COALESCE(caller, client, site, '알 수 없는 곳') src, COUNT(*) n, MAX(ts) t FROM requests"
+            " WHERE ts>=? AND status='blocked' AND id IN (SELECT request_id FROM findings WHERE label='시크릿')"
+            " GROUP BY src HAVING COUNT(*)>=?",
+            now - win, n,
+        ):
+            out.append({
+                "id": f"secret-burst:{r['src']}:{int(r['t'] // win)}", "sev": "HIGH", "ts": r["t"],
+                "title": "같은 곳에서 시크릿 전송 시도가 반복돼 막혔어요",
+                "desc": f"{r['src']} · {win // 60}분 안에 시크릿 {r['n']}회 차단. 자동화 스크립트에서 키를 붙여넣는 경우일 수 있어요.",
+            })
+        hour = {r["label"]: r["n"] for r in _q(_HITS, now - 3600, now + 1)}
+        before = {r["label"]: r["n"] for r in _q(_HITS, now - 25 * 3600, now - 3600)}
+        for label, count in hour.items():
+            usual = max(1.0, before.get(label, 0) / 24)
+            if count >= SPIKE_MIN and count >= SPIKE_FACTOR * usual:
+                out.append({
+                    "id": f"redact-spike:{label}:{int(now // 3600)}", "sev": "MEDIUM", "ts": now,
+                    "title": f"{label} 가림 건수가 평소보다 크게 늘었어요",
+                    "desc": f"지난 1시간 {int(count)}건 · 평소 시간당 약 {usual:.1f}건의 {count / usual:.1f}배. 정상 업무일 수 있지만 확인이 필요해요.",
+                })
+        rb = _q("SELECT COUNT(*) n, MAX(ts) t FROM requests WHERE status='response_blocked' AND ts>=?", now - RESPONSE_BLOCKED_WINDOW)[0]
+        if rb["n"]:
+            out.append({
+                "id": f"response-blocked:{int(now // 86400)}", "sev": "MEDIUM", "ts": rb["t"],
+                "title": f"모델 답변에 차단 대상이 있어 돌려주지 않은 것이 {rb['n']}건 있어요",
+                "desc": "지난 24시간 동안 외부 모델의 답변에서 보내면 안 되는 값이 발견돼 직원에게 전달하지 않았어요.",
+            })
+        n, win = UPSTREAM_ERRORS
+        ue = _q("SELECT COUNT(*) n, MAX(ts) t FROM requests WHERE status='upstream_error' AND ts>=?", now - win)[0]
+        if ue["n"] >= n:
+            out.append({
+                "id": f"upstream-errors:{int(now // 3600)}", "sev": "LOW", "ts": ue["t"],
+                "title": f"외부 모델 호출 오류 {ue['n']}건",
+                "desc": f"지난 {win // 3600}시간 동안 외부 모델이 응답하지 못했어요. 모델 제공자 상태와 접속 키를 확인해 보세요.",
+            })
+        acked = {r["id"] for r in _q("SELECT id FROM anomaly_acks")}
+    order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+    out.sort(key=lambda a: (order[a["sev"]], -a["ts"]))
+    return [{**a, "t": _hhmm(a["ts"]), "primary": "기록 보기", "primary_href": "/console/logs", "acked": a["id"] in acked} for a in out]
+
+
+def ack_anomaly(anomaly_id: str) -> None:
+    with _lock:
+        _db.execute("INSERT OR REPLACE INTO anomaly_acks(id, ts) VALUES (?, ?)", (anomaly_id[:200], time.time()))
+        _db.commit()

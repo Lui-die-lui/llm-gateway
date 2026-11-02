@@ -176,3 +176,13 @@ def decide(public_id: str, body: DecisionIn) -> dict:
         )
         _db.commit()
         return _row(_db.execute("SELECT * FROM exception_requests WHERE id=?", (r["id"],)).fetchone())
+
+
+def clear() -> int:
+    """Delete every exception request. Returns how many were deleted; numbering starts over at REQ-0001."""
+    with _lock:
+        n = _db.execute("SELECT COUNT(*) FROM exception_requests").fetchone()[0]
+        _db.execute("DELETE FROM exception_requests")
+        _db.execute("DELETE FROM sqlite_sequence WHERE name='exception_requests'")
+        _db.commit()
+    return n
