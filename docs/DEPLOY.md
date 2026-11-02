@@ -83,3 +83,8 @@ python -m app.keys extension
 **콘솔만 Vercel에 따로 올리기**: 화면은 Vercel, 서버는 Railway로 나누는 방식입니다. 서버 주소 설정과 CORS를 직접 맞춰야 해서 더 번거롭습니다. 그래도 하려면 Vercel에서 Root Directory를 `frontend`로 하고 `VITE_GATEWAY_URL`에 서버 주소를 넣은 뒤(`frontend/vercel.json`이 화면 경로를 처리합니다), 서버의 `GATEWAY_CORS_ORIGINS`에 Vercel 주소를 넣습니다. org 저장소는 org 소유자가 Vercel 앱 설치를 승인해야 목록에 보입니다.
 
 **직원 PC마다 게이트웨이를 띄우기**: 서버 배포가 필요 없습니다. 각자 `.\dev.bat`으로 켜면 되고 확장은 기본값(`http://localhost:8000`) 그대로 씁니다. 다만 정책이 PC마다 따로 저장되어 회사 전체의 규칙을 한곳에서 관리할 수 없습니다.
+
+
+## 발표 전에 데이터 비우기
+
+테스트하면서 쌓인 예외 요청·기록은 서버의 `data/` 볼륨에 있습니다. 비우려면 서버를 멈춘 뒤 `python scripts/reset_data.py --yes`를 그 서버에서 실행하거나 볼륨의 `exceptions.db`, `audit.db`를 지웁니다 (인자 없이 실행하면 무엇이 지워질지만 보여 줍니다). 다시 켜면 빈 파일이 생기고, `python scripts/seed_demo.py <주소>`로 가짜 트래픽을 채울 수 있습니다. 콘솔의 "예시 값" 표시가 붙은 숫자와 목록은 브라우저 안의 가짜 데이터라 이 스크립트와 무관합니다.
