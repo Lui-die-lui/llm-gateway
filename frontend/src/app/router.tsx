@@ -12,7 +12,6 @@ import { BasicRulesPage } from '../pages/console/BasicRules';
 import { ExceptionsPage } from '../pages/console/Exceptions';
 import { UsersPage } from '../pages/console/Users';
 import { SettingsPage } from '../pages/console/Settings';
-import { DemoPage } from '../pages/demo/DemoApp';
 import { PortalPage } from '../pages/portal/Portal';
 import { HistoryPage } from '../pages/portal/History';
 import { RequestPage } from '../pages/portal/Request';
@@ -40,7 +39,6 @@ export const routes = [
       { path: 'token', element: <TokenPage /> },
     ],
   },
-  { path: '/demo', element: <DemoPage /> },
   { path: '/me', element: <PortalPage /> },
   { path: '/me/history', element: <HistoryPage /> },
   { path: '/me/request', element: <RequestPage /> },

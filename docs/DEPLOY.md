@@ -50,7 +50,7 @@ python -m app.keys extension
 
 2. 나온 줄들을 쉼표로 이어서 Railway의 `GATEWAY_API_KEYS`에 넣습니다 (`hr-app:gw_...,extension:gw_...`).
 3. 모델 제공자의 키를 `UPSTREAM_API_KEY`에, 모델 이름을 `UPSTREAM_MODEL`에 넣고, `UPSTREAM_MODE=mock`을 지웁니다.
-4. 앱에는 `gw_...` 부분을 `api_key`로 줍니다. 확장 팝업의 "접속 키" 칸과 `/demo` 화면의 키 칸에도 같은 방식으로 넣습니다.
+4. 앱에는 `gw_...` 부분을 `api_key`로 줍니다. 확장 팝업의 "접속 키" 칸에도 같은 방식으로 넣습니다.
 5. 키 없이 `/v1/chat/completions`를 불러서 401이 나오는지 확인합니다.
 
 모델 제공자 쪽에서도 사용 한도를 걸어 두세요. 게이트웨이에는 아직 키별 한도가 없습니다.

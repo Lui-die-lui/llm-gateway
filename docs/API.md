@@ -7,7 +7,7 @@
 
 ## 0. 접속 키 (누가 게이트웨이를 쓰나)
 
-`GATEWAY_API_KEYS`를 설정하면 앱, 확장, 시연 화면은 키를 보내야 합니다. 비워 두면 열려 있습니다(로컬 개발용).
+`GATEWAY_API_KEYS`를 설정하면 앱과 확장은 키를 보내야 합니다. 비워 두면 열려 있습니다(로컬 개발용).
 
 ```
 GATEWAY_API_KEYS="hr-app:gw_aaaa...,extension:gw_bbbb..."      # 이름:키, 쉼표로 여러 개
