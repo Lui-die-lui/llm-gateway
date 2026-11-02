@@ -7,7 +7,7 @@ import { consoleApi } from '../../api/console';
 import { gateway } from '../../api/gateway';
 import { errorMessage } from '../../api/client';
 import type { Decision, ExceptionStatus, Ttl } from '../../api/consoleTypes';
-import { MockBadge, Seg } from '../../components/Controls';
+import { Help, MockBadge, Seg } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
 import { useFeedback } from '../../features/feedback';
 import { qk, useExceptions } from '../../features/queries';
@@ -157,6 +157,14 @@ export function ExceptionsPage() {
           <Link className="btn" to="/console/settings">
             승인 정책 설정
           </Link>
+          <Help label="처리 방법 도움말" title="처리 방법">
+            <ol>
+              <li>직원이 막힌 전송을 사유와 함께 요청해요</li>
+              <li>관리자가 기간(1회 · 1시간 · 24시간 · 7일)을 골라 승인하거나, 메모와 함께 반려해요</li>
+              <li>승인되면 요청한 브라우저의 그 항목 · 그 사이트에 한해 기간 동안만 원문이 나가요 (직원 화면에 남은 시간이 보여요)</li>
+              <li>기간이 끝나거나 1회를 쓰면 자동으로 다시 보호돼요</li>
+            </ol>
+          </Help>
         </div>
       </header>
 

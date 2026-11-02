@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { consoleApi } from '../../api/console';
 import { errorMessage } from '../../api/client';
 import { gateway } from '../../api/gateway';
-import { Seg } from '../../components/Controls';
+import { Help, Seg } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
 import { industryGroup, useBuiltinGroups, useIndustries, type CatalogGroup } from '../../features/catalog';
 import { useFeedback } from '../../features/feedback';
@@ -90,6 +90,14 @@ export function BasicRulesPage() {
           <button type="button" className="btn btn-p" disabled={!changes.length || apply.isPending} onClick={() => apply.mutate()}>
             {changes.length ? `변경 ${changes.length}건 적용` : '바뀐 것 없음'}
           </button>
+          <Help label="적용 방법 도움말" title="적용 방법">
+            <ol>
+              <li>쓸 규칙만 체크해요 · 아직 적용 안 됨</li>
+              <li>"변경 n건 적용"을 눌러요</li>
+              <li>직원 확장이 몇 분 안에 새 규칙을 받아요</li>
+              <li>바꾼 내용은 기록 › 관리자 작업에 남아요</li>
+            </ol>
+          </Help>
         </div>
       </header>
 

@@ -7,7 +7,7 @@ import { consoleApi } from '../../api/console';
 import { errorMessage } from '../../api/client';
 import { gateway } from '../../api/gateway';
 import type { Anomaly } from '../../api/consoleTypes';
-import { Seg } from '../../components/Controls';
+import { Help, Seg } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
 import { LineChart } from '../../components/charts';
 import { useFeedback } from '../../features/feedback';
@@ -66,6 +66,14 @@ export function LivePage() {
           <Link className="btn" to="/console/settings">
             알림 규칙
           </Link>
+          <Help label="이상 징후 기준 도움말" title="이상 징후 기준">
+            <ol>
+              <li>같은 곳에서 10분 안에 시크릿이 3번 이상 막히면 HIGH</li>
+              <li>어떤 항목의 가림이 1시간에 10건 이상이면서 평소의 3배 이상이면 MEDIUM</li>
+              <li>모델 답변이 차단됐거나(24시간) 외부 모델 오류가 1시간에 3건 이상이면 각각 MEDIUM · LOW</li>
+              <li>"확인 처리"하면 목록에서 사라져요</li>
+            </ol>
+          </Help>
         </div>
       </header>
 

@@ -174,6 +174,9 @@ export function PolicyPage() {
           >
             + 새 규칙 만들기
           </a>
+          <button type="button" className="btn btn-p" disabled={!pending || apply.isPending} onClick={onApply}>
+            {pending ? `변경 ${pending}건 승인하고 적용` : '적용할 변경 없음'}
+          </button>
           <Help label="적용 방법 도움말" title="적용 방법">
             <ol>
               <li>규칙을 고치고 "변경으로 저장" · 아직 적용 안 됨</li>
@@ -182,9 +185,6 @@ export function PolicyPage() {
               <li>문제가 있으면 "변경 이력"에서 이전 버전으로 되돌리기</li>
             </ol>
           </Help>
-          <button type="button" className="btn btn-p" disabled={!pending || apply.isPending} onClick={onApply}>
-            {pending ? `변경 ${pending}건 승인하고 적용` : '적용할 변경 없음'}
-          </button>
         </div>
       </header>
 

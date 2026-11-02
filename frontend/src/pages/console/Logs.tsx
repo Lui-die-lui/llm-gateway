@@ -7,7 +7,7 @@ import { errorMessage } from '../../api/client';
 import { consoleApi } from '../../api/console';
 import { gateway } from '../../api/gateway';
 import type { AuditEvent, AuditStatus } from '../../api/types';
-import { MockBadge, Seg } from '../../components/Controls';
+import { Help, MockBadge, Seg } from '../../components/Controls';
 import { Icon } from '../../components/Icon';
 import { QueryState } from '../../components/QueryState';
 import { useFeedback } from '../../features/feedback';
@@ -177,6 +177,14 @@ export function LogsPage() {
               기록 비우기
             </button>
           )}
+          <Help label="기록 보는 법 도움말" title="기록 보는 법">
+            <ol>
+              <li>원문은 저장하지 않고, 찾은 종류와 개수만 남아요</li>
+              <li>줄을 누르면 오른쪽에 처리 과정이 보여요</li>
+              <li>예외가 적용됐거나 막힌 기록은 오른쪽 아래 버튼으로 관련 예외 요청과 반려 사유를 바로 볼 수 있어요</li>
+              <li>"기록 비우기"는 되돌릴 수 없어요</li>
+            </ol>
+          </Help>
         </div>
       </header>
 

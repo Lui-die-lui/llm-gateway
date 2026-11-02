@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { consoleApi } from '../../api/console';
 import { errorMessage } from '../../api/client';
 import type { Decision, Member } from '../../api/consoleTypes';
-import { MockBadge } from '../../components/Controls';
+import { Help, MockBadge } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
 import { useFeedback } from '../../features/feedback';
 import { qk, useCompany, useJoinRequests } from '../../features/queries';
@@ -92,6 +92,16 @@ export function UsersPage() {
             <MockBadge />
           </div>
           <p className="t2">{c?.name ?? '…'} · 회사 코드로 들어온 가입 요청을 승인하고, 누가 관리자인지 정해요</p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <Help label="가입 승인 흐름 도움말" title="가입 승인 흐름">
+            <ol>
+              <li>직원이 회사 코드로 가입을 신청해요</li>
+              <li>관리자가 회사 메일 주소가 맞는지 확인해요 (아니면 "확인"에 경고가 떠요)</li>
+              <li>승인하면 그때부터 확장 보호가 켜지고 정책을 받아요</li>
+              <li>거절하면 사유가 신청자에게 전달되고 관리자 작업 기록에 남아요</li>
+            </ol>
+          </Help>
         </div>
       </header>
 
