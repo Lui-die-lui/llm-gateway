@@ -31,7 +31,6 @@ export function RequestPage() {
   const [reason, setReason] = useState('');
   const [scope, setScope] = useState<Scope>('1회');
   const [agree, setAgree] = useState(false);
-  const [internal, setInternal] = useState(false);
   const submit = useMutation({
     mutationFn: () => portalApi.createException({ reason, scope, requester: name, entity: labels, site }),
     onSuccess: () => {
@@ -186,15 +185,6 @@ export function RequestPage() {
           )}
           <aside className="card" style={{ flex: '2 1 320px', display: 'flex', flexDirection: 'column', gap: 14, padding: 22 }}>
             <div className="lbl">먼저 이것도 해 보세요</div>
-            <div style={{ padding: 14, borderRadius: 16, background: 'rgba(37,99,235,.08)', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <b style={{ fontSize: 14 }}>내부 모델로 보내기</b>
-              <span className="t2" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-                사내 서버의 모델은 외부로 나가지 않아서 원래 값 그대로 쓸 수 있어요. 번역·요약은 대부분 충분해요.
-              </span>
-              <button type="button" className="btn" aria-pressed={internal} onClick={() => setInternal(!internal)} style={{ alignSelf: 'flex-start', minHeight: 36 }}>
-                {internal ? '내부 모델로 다시 보냈어요' : '내부 모델로 다시 보내기'}
-              </button>
-            </div>
             <div style={{ padding: 14, borderRadius: 16, background: 'rgba(255,255,255,.7)', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <b style={{ fontSize: 14 }}>가린 채로 보내고 복원 받기</b>
               <span className="t2" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
