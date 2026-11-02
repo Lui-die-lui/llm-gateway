@@ -1,6 +1,8 @@
 """Ways people really write things that the first set of built-in rules missed (found by trying realistic sentences)."""
 import pytest
+from fastapi.testclient import TestClient
 
+from app import detector, main
 from app.sanitizer import find_matches
 
 
@@ -67,3 +69,30 @@ def test_a_password_said_in_a_sentence_is_blocked(text, value):
 )
 def test_talking_about_passwords_is_not_a_password(text):
     assert not find_matches(text, [])
+
+
+# ---- IP addresses are found without a keyword such as "IP" or "서버"
+def _ips(text):
+    return [text[m.start:m.end] for m in detector.builtin_matches(text) if m.label == "IP주소"]
+
+
+def test_ip_addresses_are_found_with_no_keyword_around():
+    assert _ips("10.1.2.3") == ["10.1.2.3"]
+    assert _ips("192.168.0.1 로 붙어줘") == ["192.168.0.1"]
+    assert _ips("203.0.113.45") == ["203.0.113.45"]
+    assert _ips("a 8.8.8.8, b 1.1.1.1.") == ["8.8.8.8", "1.1.1.1"]
+    assert _ips("(172.16.0.5)") == ["172.16.0.5"]
+
+
+def test_ip_lookalikes_are_left_alone():
+    for text in ["127.0.0.1", "0.0.0.0", "255.255.255.255", "버전 10.0.19045.1", "v1.2.3.4", "version 2.3.4.5", "Ver.1.2.3.4",
+                 "1.2.3", "256.1.1.1", "1.2.3.4.5", "2024.10.30.1", "12345.1.2.3", "가격 1,234.5"]:
+        assert _ips(text) == [], text
+
+
+def test_the_ip_rule_is_in_the_catalog_and_masks_in_a_message():
+    from app import rules_catalog
+
+    assert "IP주소" in rules_catalog.covered_labels()
+    r = TestClient(main.app).post("/v1/sanitize", json={"text": "접속은 10.1.2.3 으로"}).json()
+    assert "10.1.2.3" not in r["text"] and r["findings"] == {"IP주소": 1}

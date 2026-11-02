@@ -74,6 +74,18 @@ BUILTIN_RULES: list[tuple[str, re.Pattern[str], Action] | tuple[str, re.Pattern[
     # Licence plate. Without a space it is distinctive enough; with a space ("90도 2024년") it needs a keyword.
     ("차량번호", re.compile(rf"(?<!\d)\d{{2,3}}[{_PLATE}]\d{{4}}(?!\d)"), "redact"),
     ("차량번호", re.compile(rf"(?<!\d)\d{{2,3}}[{_PLATE}]\s\d{{4}}(?!\d)"), "redact", ("차량", "번호판")),
+    # IPv4 address written as four numbers 0-255. No keyword is needed: 10.1.2.3 is an address wherever it stands. Left alone:
+    # loopback / 0.x / the broadcast address (nothing to protect), a longer dotted run such as 10.0.19045.1 (a build number, and
+    # 19045 is no valid field anyway), and a number right after "v", "ver", "version" or "버전" (a software version like v1.2.3.4).
+    (
+        "IP주소",
+        re.compile(
+            r"(?<![\d.])(?<![vV])(?<![vV] )(?<![vV]er)(?<![vV]er )(?<![vV]ersion)(?<![vV]ersion )(?<!버전)(?<!버전 )"
+            r"(?!127\.|0\.|255\.255\.255\.255(?!\d))"
+            r"(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?!\d|\.\d)"
+        ),
+        "redact",
+    ),
     # 사람: only with a title/label next to it ("고객 홍길동", "홍길동 부장님"); bare names need the LLM detector.
     ("사람", re.compile(rf"(?:{_TITLE_BEFORE})\s*[:：]?\s*(?!{_NOT_NAME})({_NAME})(?=(?:{_PARTICLE})?(?![가-힣]))"), "redact"),
     ("사람", re.compile(rf"(?<![가-힣])({_NAME})\s?{_TITLE_AFTER}"), "redact"),
