@@ -119,6 +119,7 @@ export interface ExceptionRequest {
   /** Real requests only: when the admin decided (epoch seconds) and whether a one-use approval has been spent. */
   decidedAt?: number;
   used?: boolean;
+  revoked?: boolean;
 }
 
 export interface AdminLogEntry {
@@ -215,6 +216,7 @@ export interface PortalRequest {
   ttl?: Ttl;
   decidedAt?: number;
   used?: boolean;
+  revoked?: boolean;
 }
 
 export type ReplaceHow = 'ph' | 'alias' | 'keep';

@@ -105,6 +105,16 @@ export function ExceptionsPage() {
     onError: (e) => toast(errorMessage(e), 'error'),
   });
 
+  const revoke = useMutation({
+    mutationFn: (id: string) => consoleApi.revokeException(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.exceptions });
+      qc.invalidateQueries({ queryKey: qk.portal('requests') });
+      toast('승인을 회수했어요 · 지금부터 다시 막혀요');
+    },
+    onError: (e) => toast(errorMessage(e), 'error'),
+  });
+
   // Admin only, no undo: empties the real requests the gateway stored (used before a demo). The sample rows below are not touched.
   const clearAll = useMutation({
     mutationFn: gateway.clearExceptions,
@@ -206,6 +216,7 @@ export function ExceptionsPage() {
                   <th>기간</th>
                   <th>남은 시간</th>
                   <th>메모</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -218,8 +229,20 @@ export function ExceptionsPage() {
                       <td>{g.entity}</td>
                       <td>{g.target}</td>
                       <td>{g.ttl ? TTL_KO[g.ttl] : ''}</td>
-                      <td className="mono">{end === null ? '아직 안 씀 (1회)' : left(end - now)}</td>
+                      <td className="mono">{end === null ? '' : g.ttl === '1x' ? `아직 안 씀 · ${left(end - now)} 안에 안 쓰면 끝` : left(end - now)}</td>
                       <td className="t3">{g.memo ?? ''}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn-d"
+                          disabled={revoke.isPending}
+                          onClick={async () => {
+                            if (await confirm({ title: '승인 회수', body: `${g.id} · ${g.user}님의 ${g.entity} 허용을 지금 거둬요. 바로 다시 막히고, 되돌릴 수 없어요.`, ok: '회수', danger: true })) revoke.mutate(g.id);
+                          }}
+                        >
+                          회수
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}

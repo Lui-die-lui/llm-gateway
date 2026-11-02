@@ -16,6 +16,10 @@ describe('grantTime', () => {
     expect(grantTime({ ...base, ttl: '1x' }, 2000)).toEqual({ kind: 'once-open' });
     expect(grantTime({ ...base, ttl: '1x', used: true }, 2000)).toEqual({ kind: 'once-used' });
   });
+  it('lets a one-use approval nobody used lapse after a day, and ends one an admin took back', () => {
+    expect(grantTime({ ...base, ttl: '1x' }, 1000 + 86400)).toEqual({ kind: 'ended' });
+    expect(grantTime({ ...base, revoked: true }, 2000)).toEqual({ kind: 'ended' });
+  });
   it('shows nothing for requests that are not approved, or are mock rows', () => {
     expect(grantTime({ ...base, status: 'PENDING' }, 2000)).toBeNull();
     expect(grantTime({ ...base, status: 'REJECTED' }, 2000)).toBeNull();

@@ -164,6 +164,7 @@
   }
 
   /* ---------- exception requests: the person asks, an admin decides in the console, the answer comes back to the page ---------- */
+  const ONCE_SECONDS = 86400;
   const TTL_SECONDS = { "1h": 3600, "24h": 86400, "7d": 604800 };
   const TTL_LABEL = { "1x": "1회", "1h": "1시간", "24h": "24시간", "7d": "7일" };
 
@@ -175,7 +176,7 @@
   /** When an approval ends, in ms since 1970. null when it has no clock: not approved, or "1회" (one use). */
   function approvalEnd(req) {
     const seconds = TTL_SECONDS[req.ttl];
-    return req.status === "approved" && req.decided && seconds ? Math.round((req.decided + seconds) * 1000) : null;
+    return req.status === "approved" && !req.revoked && req.decided && seconds ? Math.round((req.decided + seconds) * 1000) : null;
   }
 
   /** "오늘 17:32", "내일 09:00", "11월 2일 17:32" in the viewer's own time zone. */
@@ -203,7 +204,7 @@
   }
 
   /**
-   * What to tell the person about one request. kind: pending | approved | used | rejected | expired.
+   * What to tell the person about one request. kind: pending | approved | used | revoked | rejected | expired.
    * `note` is what the admin wrote (shown on its own line), `end` the time an approval stops (ms), null when it has no clock.
    */
   function describeDecision(req, now = Date.now()) {
@@ -213,8 +214,14 @@
     if (req.status === "rejected") return { kind: "rejected", text: `${what}요청이 반려됐어요`, note, end: null };
     const label = TTL_LABEL[req.ttl] ?? "";
     const end = approvalEnd(req);
+    if (req.revoked) return { kind: "revoked", text: `${what}요청의 허용을 관리자가 회수했어요`, note, end: null };
     if (req.used) return { kind: "used", text: `${what}요청의 ${label || "1회"} 허용은 사용을 마쳤어요`, note, end: null };
-    if (end === null) return { kind: "approved", text: `${what}요청이 승인됐어요 · ${label || "1회"}만 허용돼요`, note, end: null };
+    if (end === null) {
+      // one use, and a day to use it: after that it lapses (same as ONCE_VALID_SECONDS on the gateway)
+      const lapses = req.decided ? Math.round((req.decided + ONCE_SECONDS) * 1000) : null;
+      if (lapses !== null && lapses <= now) return { kind: "expired", text: `${what}요청은 승인됐지만 쓰지 않아 ${clock(lapses, now)}에 끝났어요`, note, end: lapses };
+      return { kind: "approved", text: `${what}요청이 승인됐어요 · ${label || "1회"}만 허용돼요${lapses ? ` (${clock(lapses, now)}까지 안 쓰면 끝)` : ""}`, note, end: null };
+    }
     if (end <= now) return { kind: "expired", text: `${what}요청은 승인됐지만 ${clock(end, now)}에 끝났어요`, note, end };
     return { kind: "approved", text: `${what}요청이 승인됐어요 · ${clock(end, now)}까지 (${label})`, note, end };
   }
@@ -227,13 +234,14 @@
     const told = { ...announced };
     const news = [];
     for (const r of list) {
-      if (r.status === "pending" || told[r.id] === r.status) continue;
-      told[r.id] = r.status;
+      const state = r.status + (r.revoked ? ":revoked" : "");
+      if (r.status === "pending" || told[r.id] === state) continue;
+      told[r.id] = state;
       const d = describeDecision(r, now);
       if (d.kind !== "expired" && d.kind !== "used") news.push({ id: r.id, kind: d.kind, text: d.text, note: d.note }); // over before it was seen: nothing to say
     }
     const active = list.map((r) => ({ id: r.id, entity: r.entity, end: approvalEnd(r), note: r.memo || "" })).filter((a) => a.end && a.end > now);
-    const used = list.filter((r) => r.used).map((r) => r.id); // spent one-use approvals: the "1회만 허용돼요" line must go
+    const used = list.filter((r) => r.used || r.revoked).map((r) => r.id); // spent one-use approvals: the "1회만 허용돼요" line must go
     return { news, active, used, told };
   }
 

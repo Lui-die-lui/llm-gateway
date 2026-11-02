@@ -105,7 +105,7 @@ test("describeDecision: approved with a deadline names the time and the length",
 });
 
 test("describeDecision: one use, rejected with the admin's note, pending, and already over", () => {
-  assert.equal(Gw.describeDecision(req({ ttl: "1x" }), NOW).text, "조성비 요청이 승인됐어요 · 1회만 허용돼요");
+  assert.ok(Gw.describeDecision(req({ ttl: "1x" }), NOW).text.startsWith("조성비 요청이 승인됐어요 · 1회만 허용돼요 ("));  // and says when it lapses (clock text depends on the time zone)
   assert.deepEqual(Gw.describeDecision(req({ status: "rejected", ttl: null, memo: "내부 모델로 먼저 해 보세요" }), NOW), {
     kind: "rejected",
     text: "조성비 요청이 반려됐어요",
@@ -166,4 +166,18 @@ test("a spent one-use approval is described as used, is not news, and is listed 
   const r = Gw.exceptionNews([spent], {}, NOW);
   assert.deepEqual(r.news, []);
   assert.deepEqual(r.used, ["REQ-0009"]);
+});
+
+test("a one-use approval nobody used lapses after a day; one an admin took back is told once and its notice goes", () => {
+  const given = { id: "REQ-0010", status: "approved", ttl: "1x", decided: NOW / 1000 - 60, entity: "시크릿", memo: "" };
+  assert.equal(Gw.describeDecision(given, NOW).kind, "approved");
+  assert.equal(Gw.describeDecision(given, NOW + 86400 * 1000).kind, "expired");
+  const taken = { ...given, ttl: "1h", revoked: true };
+  assert.equal(Gw.describeDecision(taken, NOW).kind, "revoked");
+  assert.equal(Gw.approvalEnd(taken), null);
+  const first = Gw.exceptionNews([{ ...given, ttl: "1h" }], {}, NOW);
+  const second = Gw.exceptionNews([taken], first.told, NOW);
+  assert.deepEqual(second.news.map((n) => n.kind), ["revoked"]);
+  assert.deepEqual(second.used, ["REQ-0010"]);
+  assert.deepEqual(second.active, []);
 });
