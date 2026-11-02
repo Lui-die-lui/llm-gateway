@@ -1,7 +1,7 @@
 // 06 예외 요청 (Exceptions.dc.html). Mock: the gateway has no exception workflow yet.
 // Requests sent from the user portal (/me/request) show up here because both read the same mock store.
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { consoleApi } from '../../api/console';
 import { errorMessage } from '../../api/client';
@@ -55,13 +55,35 @@ export function ExceptionsPage() {
   const [memo, setMemo] = useState('');
 
   const all = list.data ?? [];
+  // Opened from a log record: ?req=REQ-0013 selects that request, ?entity=이름표&site=chatgpt.com shows only the requests about it,
+  // so "why was this let through / turned down" is one click from the record.
+  const [params, setParams] = useSearchParams();
+  const reqParam = params.get('req');
+  const entityParam = (params.get('entity') ?? '').split(',').filter(Boolean);
+  const siteParam = params.get('site');
+  const scoped = entityParam.length || siteParam ? all.filter((e) => (!entityParam.length || entityParam.includes(e.entity)) && (!siteParam || e.target === siteParam)) : all;
+  const jumped = useRef('');
+  useEffect(() => {
+    const key = params.toString();
+    if (!list.isSuccess || !key || jumped.current === key) return;
+    jumped.current = key;
+    const hit = reqParam ? all.find((e) => e.id === reqParam) : null;
+    if (hit) {
+      setTab(hit.status);
+      setSelId(hit.id);
+      return;
+    }
+    const first = (['pending', 'rejected', 'approved', 'expired'] as ExceptionStatus[]).find((s) => scoped.some((e) => e.status === s));
+    if (first) setTab(first);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list.isSuccess, params]);
   const [now, setNow] = useState(() => Date.now() / 1000);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now() / 1000), 15_000);
     return () => clearInterval(t);
   }, []);
   const grants = all.filter((e) => isActiveGrant(e, now));
-  const rows = all.filter((e) => e.status === tab);
+  const rows = scoped.filter((e) => e.status === tab);
   const cur = rows.find((e) => e.id === selId) ?? rows[0];
   const pending = all.filter((e) => e.status === 'pending');
 
@@ -179,7 +201,7 @@ export function ExceptionsPage() {
           <div className="tabs" role="tablist" aria-label="요청 상태" style={{ padding: '0 12px' }}>
             {TABS.map(([v, l]) => {
               const on = tab === v;
-              const n = all.filter((e) => e.status === v).length;
+              const n = scoped.filter((e) => e.status === v).length;
               return (
                 <button
                   key={v}
@@ -206,6 +228,16 @@ export function ExceptionsPage() {
               );
             })}
           </div>
+          {(entityParam.length > 0 || siteParam) && (
+            <div role="status" style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px', background: 'rgba(37,99,235,.08)', fontSize: 12.5 }}>
+              <span>
+                기록에서 이동했어요 · <b>{[...entityParam, siteParam].filter(Boolean).join(' · ')}</b> 관련 요청만 보는 중
+              </span>
+              <button type="button" className="btn btn-sm" onClick={() => setParams({})}>
+                전체 보기
+              </button>
+            </div>
+          )}
           <QueryState isLoading={list.isLoading} error={list.error} />
           <ul role="tabpanel" style={{ listStyle: 'none', margin: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {rows.length === 0 && list.data && <li className="empty">이 상태의 요청이 없어요</li>}
