@@ -6,6 +6,7 @@ import type {
   ConsoleUser,
   Decision,
   ExceptionRequest,
+  JoinRequest,
   LoginResult,
   MemberStatus,
   OtpResult,
@@ -46,7 +47,6 @@ function fresh() {
     exceptions: seed.exceptions(),
     adminLog: seed.adminLog(),
     candidates: seed.trainingCandidates(),
-    anomalies: seed.anomalies(),
     portalRecent: seed.portalRecent(),
     portalRequests: seed.portalRequests(),
     history: seed.history(),
@@ -117,6 +117,11 @@ export function verifyOtp(ticket: string, code: string): OtpResult {
 
 export const getCompany = () => clone({ ...db.company, name: db.settings.companyName });
 export const listJoinRequests = () => clone(db.joins);
+
+/** For tests: the sample queue is empty, so a test that needs applicants adds its own. */
+export function addJoinRequest(j: JoinRequest): void {
+  db.joins.push(j);
+}
 export const listMembers = () => clone(db.members);
 
 export function decideJoin(id: string, decision: Decision) {
@@ -287,16 +292,6 @@ export function sendSlack(id: string) {
   c.sentAt = `방금 · ${nowHm()}`;
   log('Slack 발송', c.user, `교육 안내 메시지 · ${c.why}`, 'muted');
   return clone(c);
-}
-
-export const listAnomalies = () => clone(db.anomalies);
-
-export function ackAnomaly(id: string, action: 'ack' | 'primary') {
-  const a = db.anomalies.find((x) => x.id === id);
-  if (!a) throw new Error('없는 이상 징후예요');
-  if (action === 'ack') a.acked = true;
-  else log(a.primary, a.title, '이상 징후에서 실행', 'block');
-  return clone(a);
 }
 
 /** Per-minute send counts for the last 60 minutes (the gateway only buckets by hour/day). */

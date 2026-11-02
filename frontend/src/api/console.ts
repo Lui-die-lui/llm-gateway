@@ -5,7 +5,7 @@ import * as mock from '../mocks/db';
 import { ApiError, request } from './client';
 import { createReal, decideReal, isReal, realExceptions, realMine } from './exceptions';
 import { gateway } from './gateway';
-import type { BasicRuleState, Decision, MinutePoint, MemberStatus, PolicyRule, PolicyState, RuleDraft, Settings, Ttl } from './consoleTypes';
+import type { Anomaly, BasicRuleState, Decision, MinutePoint, MemberStatus, PolicyRule, PolicyState, RuleDraft, Settings, Ttl } from './consoleTypes';
 
 /** The gateway's policy view, with the "new" flag the editor shows for rules that exist only in the draft. */
 interface ServerPolicy extends Omit<PolicyState, 'rules'> {
@@ -65,8 +65,10 @@ export const consoleApi = {
   adminLog: () => served(mock.listAdminLog),
   trainingCandidates: () => served(mock.listCandidates),
   sendSlack: (id: string) => served(() => mock.sendSlack(id)),
-  anomalies: () => served(mock.listAnomalies),
-  ackAnomaly: (id: string, action: 'ack' | 'primary') => served(() => mock.ackAnomaly(id, action)),
+  /** Real: computed by the gateway from its audit log. */
+  anomalies: (): Promise<Anomaly[]> =>
+    gateway.anomalies().then((l) => l.map((a) => ({ id: a.id, sev: a.sev, t: a.t, title: a.title, desc: a.desc, primary: a.primary, primaryHref: a.primary_href, acked: a.acked }))),
+  ackAnomaly: (id: string) => gateway.ackAnomaly(id),
   /** Real: the gateway's per-minute buckets for the last 60 minutes (empty minutes are 0). */
   minuteSeries: async (): Promise<MinutePoint[]> => {
     const nowMin = Math.floor(Date.now() / 60_000);

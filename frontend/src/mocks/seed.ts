@@ -1,7 +1,6 @@
 // Seed data for the mock server. All names, mails and codes are fake (example.com, HANBIT-7Q2K).
 import type {
   AdminLogEntry,
-  Anomaly,
   Company,
   DeptHeatmap,
   ExceptionRequest,
@@ -44,12 +43,8 @@ export const settings = (): Settings => ({
   deviceHistory: '7일',
 });
 
-export const joinRequests = (): JoinRequest[] => [
-  { id: 'j1', name: '이서준', email: 'seojun.lee@example.com', dept: '영업', when: '10분 전', check: '회사 메일 ✓', warn: false },
-  { id: 'j2', name: '박하은', email: 'haeun.park@example.com', dept: '연구소', when: '1시간 전', check: '회사 메일 ✓', warn: false },
-  { id: 'j3', name: 'minji.k', email: 'minji.k@gmail.example', dept: '연구소', when: '어제', check: '회사 메일 아님 · 비슷한 이름의 구성원 있음', warn: true },
-  { id: 'j4', name: '정우진', email: 'woojin.jung@example.com', dept: '개발', when: '어제', check: '회사 메일 ✓', warn: false },
-];
+// No sample applicants: the gateway has no sign-up flow yet, so the queue starts empty instead of showing made-up people.
+export const joinRequests = (): JoinRequest[] => [];
 
 export const members = (): Member[] => [
   { id: 'm1', name: '보안관리자', email: 'admin@example.com', dept: '정보보호팀', role: 'admin', owner: true, status: 'active', last: '방금' },
@@ -166,10 +161,8 @@ export const exceptions = (): ExceptionRequest[] => [
 ];
 
 export const adminLog = (): AdminLogEntry[] => [
-  { t: '14:40', who: '보안관리자', act: '가입 승인', target: '이서준 · 영업', note: '회사 메일 확인 후 승인', tone: 'clean' },
   { t: '14:12', who: '박서연', act: '규칙 적용', target: '버전 14', note: '미공개 프로젝트 이름 단어 2개 추가 · 거래처 이름 규칙 새로 만듦', tone: 'accent' },
   { t: '13:58', who: '박서연', act: '예외 승인', target: '김민지 · 조성비', note: '1회 원문 전송 허용', tone: 'redact' },
-  { t: '11:20', who: '보안관리자', act: '가입 거절', target: 'minji.k@gmail.example', note: '회사 메일 아님 · 사유 전달', tone: 'block' },
   { t: '10:05', who: '보안관리자', act: '역할 변경', target: '박서연', note: '직원 → 보안 관리자', tone: 'accent' },
   { t: '어제 18:30', who: '보안관리자', act: '설정 변경', target: '기록 보관', note: '전송 기록 보관 기간 30일 → 90일', tone: 'muted' },
   { t: '어제 09:12', who: '박서연', act: '회사 코드', target: 'HANBIT-7Q2K', note: '새 코드 발급 · 이전 코드 중지', tone: 'muted' },
@@ -180,12 +173,6 @@ export const trainingCandidates = (): TrainingCandidate[] => [
   { id: 't1', user: 'lee.dy', dept: '개발', why: 'API 키 붙여넣기', n: 6 },
   { id: 't2', user: 'han.jh', dept: '영업', why: '계좌번호가 든 견적 요청', n: 4 },
   { id: 't3', user: 'oh.sr', dept: '고객지원', why: '주민번호가 든 상담 요약', n: 3 },
-];
-
-export const anomalies = (): Anomaly[] => [
-  { id: 'a1', sev: 'HIGH', t: '14:07', title: '동일 사용자 시크릿 반복 전송 시도', desc: 'lee.dy · 10분 내 API 키 차단 4회. 자동화 스크립트에서 키를 붙여넣는 패턴으로 보입니다.', primary: '사용자 일시 제한', acked: false },
-  { id: 'a2', sev: 'MEDIUM', t: '13:52', title: '조성비 가림 건수 평시 3배', desc: '연구소 부서 · 신제품 안정성 테스트 시즌. 정상 업무일 가능성이 높으나 확인 필요.', primary: '로그 보기', primaryHref: '/console/logs', acked: false },
-  { id: 'a3', sev: 'LOW', t: '13:40', title: 'Gemini 화면이 바뀌어 검사 보류 12건', desc: '입력창 위치가 바뀌어 일부 전송을 검사하지 못하고 보류했어요. 확장 업데이트가 필요해요.', primary: '기록 보기', primaryHref: '/console/logs', acked: false },
 ];
 
 export const deptHeatmap = (): DeptHeatmap => ({

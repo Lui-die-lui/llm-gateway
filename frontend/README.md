@@ -72,7 +72,7 @@ src/
 |---|---|---|
 | 사이드바 | `GET /health` (검사 서버 상태) | 회사 이름·코드·구성원 수, 대기 건수 배지 |
 | 01 개요 | `/v1/stats/summary` (오늘·어제 비교), `/v1/stats/timeseries` (시간대·일별, 14일 스파크라인), `/v1/audit/events` (실시간 이벤트) | "확인 대기" 카드, 상단 알림 3개 |
-| 02 실시간 | `/v1/audit/events` 이벤트 스트림 (5초/30초/일시정지), 분당 그래프 (`/v1/stats/timeseries?bucket=minute`) | 이상 징후 |
+| 02 실시간 | `/v1/audit/events` 이벤트 스트림 (5초/30초/일시정지), 분당 그래프 (`/v1/stats/timeseries?bucket=minute`), 이상 징후 (`/v1/anomalies`, 기록에서 계산) | |
 | 03 기록 | 전송 기록 = `/v1/audit/events` (limit·offset·label·status), CSV는 받은 메타데이터로 브라우저에서 생성 | 관리자 작업 탭, 오탐 신고(이 탭에서만 유지) |
 | 04 리포트 | 검사 수·차단률(`summary`), 일별 가림·차단(`timeseries`), 정보 종류별 집계(`summary.findings`), 규칙별 정확도(`/v1/eval`), 가림률·p95 (`summary`의 `redacted_requests`, `latency_p95_ms`) | 잘못 찾은 비율, 부서 × 정보 종류, 교육 대상 후보·Slack, 정기 리포트 |
 | 05 정책 엔진 | 규칙 목록·편집·새 규칙·켜고 끄기·삭제·승인 적용 (`/v1/policy/*`), 미리 시험하기 = `POST /v1/analyze` (초안 포함) | 부서별 적용(저장만 됨), 검토 창·예외·알림 옵션(저장만 됨) |
@@ -112,7 +112,7 @@ mock 숫자가 실제 숫자와 섞이는 카드에는 "예시 값" 배지를 �
 | 교육 대상·Slack | `GET /v1/training-candidates?since=`, `POST /v1/slack/messages {member_id, template}`, Slack 연동 설정 |
 | 관리자 작업 기록 | `GET /v1/admin-audit?since=` (로그인·승인·규칙 적용·설정 변경, 삭제 불가) |
 | 설정 | `GET/PATCH /v1/settings` (메일 제한, 잠금, 2단계 인증, 자동 로그아웃, 보호 사이트, 보관 기간), `POST /v1/protection:pause {minutes}`, `DELETE /v1/company` (30일 유예) |
-| 실시간 | 분 단위 버킷 `GET /v1/stats/timeseries?bucket=minute`, 이상 징후 `GET /v1/anomalies` |
+| 실시간 | 분 단위 버킷 `GET /v1/stats/timeseries?bucket=minute` (이상 징후 `GET /v1/anomalies`는 이미 연결됨) |
 | 포털 | `GET /v1/me/summary`, `GET /v1/me/events`, `POST /v1/me/events/{id}:flag`, `GET /v1/me/exceptions` (치환 기록 자세히는 확장의 기기 저장소에서 읽는 것이 맞음) |
 
 ## 개인정보 원칙

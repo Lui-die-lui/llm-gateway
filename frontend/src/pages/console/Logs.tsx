@@ -2,7 +2,8 @@
 // "관리자 작업" is a mock until the server keeps an admin audit trail.
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { errorMessage } from '../../api/client';
 import { consoleApi } from '../../api/console';
 import { gateway } from '../../api/gateway';
 import type { AuditEvent, AuditStatus } from '../../api/types';
@@ -61,7 +62,17 @@ function download(name: string, text: string) {
 export function LogsPage() {
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') === 'admin' ? 1 : 0;
-  const { toast } = useFeedback();
+  const { toast, confirm } = useFeedback();
+  const qc = useQueryClient();
+  // Admin only, no undo: empties the gateway's audit log (used before a demo).
+  const clearAudit = useMutation({
+    mutationFn: gateway.clearAudit,
+    onSuccess: (r) => {
+      qc.invalidateQueries();
+      toast(`전송 기록 ${r.deleted}건을 지웠어요`);
+    },
+    onError: (e) => toast(errorMessage(e), 'error'),
+  });
   const [q, setQ] = useState(params.get('q') ?? '');
   const [status, setStatus] = useState<AuditStatus | ''>('');
   const [label, setLabel] = useState('');
@@ -155,6 +166,17 @@ export function LogsPage() {
           >
             CSV 내보내기
           </button>
+          {tab === 0 && (
+            <button
+              type="button"
+              className="btn"
+              onClick={async () => {
+                if (await confirm({ title: '전송 기록 모두 지우기', body: '게이트웨이에 쌓인 전송 기록과 이상 징후 확인 표시가 모두 지워져요. 되돌릴 수 없어요. 발표 전에 테스트 기록을 비울 때 쓰세요.', ok: '모두 지우기', danger: true })) clearAudit.mutate();
+              }}
+            >
+              기록 비우기
+            </button>
+          )}
         </div>
       </header>
 
@@ -218,7 +240,7 @@ export function LogsPage() {
                   필터 지우기
                 </button>
               )}
-              <span className="t3" style={{ fontSize: 12, marginLeft: 'auto' }}>
+              <span className="t3" style={{ fontSize: 13, marginLeft: 'auto' }}>
                 {filtered ? `이 페이지 ${rows.length}건` : `결과 ${fmt(all.data?.requests)}건`}
               </span>
             </div>
@@ -256,11 +278,11 @@ export function LogsPage() {
                         return (
                           <tr key={e.id} className={on ? 'is-selected' : ''} onClick={() => setSelId(e.id)} style={{ cursor: 'pointer' }}>
                             <td>
-                              <button type="button" className="link-btn mono" style={{ color: 'var(--ink-3)', fontWeight: 400, fontSize: 11.5 }} aria-label={`${reqId(e)} 상세 보기`} aria-pressed={on} onClick={() => setSelId(e.id)}>
+                              <button type="button" className="link-btn mono" style={{ color: 'var(--ink-3)', fontWeight: 400, fontSize: 12.5 }} aria-label={`${reqId(e)} 상세 보기`} aria-pressed={on} onClick={() => setSelId(e.id)}>
                                 {hms(e.ts)}
                               </button>
                             </td>
-                            <td className="mono" style={{ fontSize: 11.5, color: 'var(--link)' }}>
+                            <td className="mono" style={{ fontSize: 12.5, color: 'var(--link)' }}>
                               {reqId(e)}
                               {e.exception_id && (
                                 <span className="badge b-accent" style={{ marginLeft: 6 }} title={`예외 승인 ${e.exception_id}로 그대로 보냄`}>
@@ -282,7 +304,7 @@ export function LogsPage() {
                             <td>
                               <span className={`badge ${b.cls}`}>{b.label}</span>
                             </td>
-                            <td className="t3" style={{ fontSize: 12 }}>
+                            <td className="t3" style={{ fontSize: 13 }}>
                               <div className="wrap-any" style={{ maxWidth: 220 }}>
                                 {e.industries ? `업종 ${industryText(e.industries)}` : '기본 규칙'}
                               </div>
@@ -295,7 +317,7 @@ export function LogsPage() {
                 </div>
               )}
               <nav aria-label="페이지" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 10px 4px', flexWrap: 'wrap', gap: 10 }}>
-                <span className="t3" style={{ fontSize: 12 }}>
+                <span className="t3" style={{ fontSize: 13 }}>
                   {events.data?.length ? `${page * PAGE + 1}–${page * PAGE + events.data.length}${filtered ? '' : ` / ${fmt(all.data?.requests)}`}` : '0건'}
                 </span>
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -362,13 +384,13 @@ export function LogsPage() {
                       {steps(sel).map((s, i) => (
                         <li key={i} style={{ display: 'grid', gridTemplateColumns: '14px minmax(0,1fr) auto', gap: 10, alignItems: 'start', paddingBottom: 10 }}>
                           <span style={{ width: 10, height: 10, borderRadius: '50%', marginTop: 4, background: s.color }} />
-                          <span style={{ fontSize: 12.5 }}>
+                          <span style={{ fontSize: 13.5 }}>
                             {s.name}
-                            <span className="t3 wrap-any" style={{ display: 'block', fontSize: 11.5 }}>
+                            <span className="t3 wrap-any" style={{ display: 'block', fontSize: 12.5 }}>
                               {s.note}
                             </span>
                           </span>
-                          <span className="mono t3" style={{ fontSize: 11 }}>
+                          <span className="mono t3" style={{ fontSize: 12 }}>
                             {i === steps(sel).length - 1 && sel.latency_ms != null ? `${Math.round(sel.latency_ms)}ms` : ''}
                           </span>
                         </li>
@@ -415,13 +437,13 @@ export function LogsPage() {
           <div className="ch" style={{ padding: '0 10px' }}>
             <h2 className="ct">
               관리자 작업{' '}
-              <span className="t3" style={{ fontWeight: 400, fontSize: 12.5 }}>
+              <span className="t3" style={{ fontWeight: 400, fontSize: 13.5 }}>
                 · 누가 언제 무엇을 바꿨나 · 지울 수 없어요
               </span>
             </h2>
             <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <MockBadge />
-              <span className="t3" style={{ fontSize: 12 }}>
+              <span className="t3" style={{ fontSize: 13 }}>
                 최근 7일 · {adminLog.data?.length ?? 0}건
               </span>
             </span>
@@ -441,7 +463,7 @@ export function LogsPage() {
               <tbody>
                 {adminLog.data?.map((a, i) => (
                   <tr key={i}>
-                    <td className="mono t3" style={{ fontSize: 11.5 }}>
+                    <td className="mono t3" style={{ fontSize: 12.5 }}>
                       {a.t}
                     </td>
                     <td style={{ fontWeight: 500 }}>{a.who}</td>
