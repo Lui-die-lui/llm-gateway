@@ -379,3 +379,17 @@ def test_console_is_served_after_the_api_and_cannot_read_outside_its_folder(tmp_
     r = c.get("/v1/nope")
     assert r.status_code == 404 and r.json()["error"]["type"] == "not_found"  # unknown API paths are not the console
     assert "secret" not in c.get("/..%2fsecret.txt").text
+
+
+def test_industries_show_what_each_rule_looks_for():
+    """The console shows a rule's keywords and an example taken from the template's own tests, not just a count."""
+    rows = {i["industry"]: i for i in client.get("/v1/industries").json()}
+    ratio = next(e for e in rows["cosmetics"]["entities"] if e["id"] == "formulation_ratio")
+    assert "배합" in ratio["keywords"]
+    assert ratio["example"]["text"] and ratio["example"]["detect"]
+    assert ratio["example"]["text"].count(ratio["example"]["detect"][0]) >= 1
+    assert "72.4%" in ratio["detected"]
+    # a rule defined only by a regex has no keywords, but still says what it blocked in the tests
+    batch = next(e for e in rows["cosmetics"]["entities"] if e["id"] == "batch_number")
+    assert batch["keywords"] == [] and "LOT240315A" in batch["detected"]
+    assert all("test_cases" in i for i in rows.values())

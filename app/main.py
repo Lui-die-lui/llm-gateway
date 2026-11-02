@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from . import audit, company_policy, exception_requests, policy, rules_catalog, sessions, upstream
-from .evaluate import evaluate
+from .evaluate import entity_examples, evaluate
 from .sanitizer import (
     ResponseBlocked,
     count_by_label,
@@ -174,17 +174,28 @@ def config():
 
 @app.get("/v1/industries")
 def list_industries():
+    """Templates with what each rule looks for: `keywords` (its context words), and `example`/`detected` taken from the
+    template's own tests, so a rule defined only by a regex still shows what it really blocks."""
     return [
         {
             "industry": i.industry,
             "entities": [
-                {"id": e.id, "label": e.label or e.id, "sensitivity": e.sensitivity, "action": e.action, "regulation": e.regulation}
+                {
+                    "id": e.id,
+                    "label": e.label or e.id,
+                    "sensitivity": e.sensitivity,
+                    "action": e.action,
+                    "regulation": e.regulation,
+                    "keywords": e.detection.context_keywords,
+                    **examples[e.id],
+                }
                 for e in i.entities
             ],
             "applies_to": i.applies_to,
             "test_cases": len(i.tests),
         }
         for i in industries.values()
+        for examples in [entity_examples(i)]
     ]
 
 
