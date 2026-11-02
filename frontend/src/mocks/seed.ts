@@ -19,7 +19,7 @@ import type {
 } from '../api/consoleTypes';
 
 export const company = (): Company => ({
-  name: '한빛코스메틱 (가상)',
+  name: '한빛코스메틱',
   code: 'HANBIT-7Q2K',
   industry: 'cosmetics',
   mailDomain: '@example.com',
@@ -28,7 +28,7 @@ export const company = (): Company => ({
 });
 
 export const settings = (): Settings => ({
-  companyName: '한빛코스메틱 (가상)',
+  companyName: '한빛코스메틱',
   industry: 'cosmetics',
   mailDomain: '@example.com',
   mailOnly: true,

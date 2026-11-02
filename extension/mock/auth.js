@@ -5,7 +5,7 @@
   "use strict";
   const $view = document.getElementById("view");
   const $badge = document.getElementById("badge");
-  const COMPANY = "한빛코스메틱 (가상)";
+  const COMPANY = "한빛코스메틱";
   const CODE = "HANBIT-7Q2K";
   const state = { v: "start", err: "", admin: false, codeOk: true, perm: false, copied: false };
 
