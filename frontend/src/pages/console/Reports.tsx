@@ -180,12 +180,12 @@ export function ReportsPage() {
         {kpis.map((k) => (
           <div key={k.label} className="card vz-card" style={{ padding: '16px 18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>{k.label}</span>
+              <span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{k.label}</span>
               {k.mock ? (
                 <MockBadge />
               ) : (
                 k.delta && (
-                  <span className="mono" style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, ...k.ds }}>
+                  <span className="mono" style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, ...k.ds }}>
                     {k.delta}
                   </span>
                 )
@@ -194,7 +194,7 @@ export function ReportsPage() {
             <div className="mono" style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-.02em', marginTop: 10 }}>
               {k.value}
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--ink-mute)', marginTop: 4 }}>{k.note}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-mute)', marginTop: 4 }}>{k.note}</div>
           </div>
         ))}
       </section>
@@ -258,7 +258,7 @@ export function ReportsPage() {
                 <span>가장 많은 칸 · {hmMax?.where ?? '—'}</span>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--ink-mute)' }} aria-hidden="true">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-mute)' }} aria-hidden="true">
               <span>적음</span>
               {RAMP.map((c) => (
                 <i key={c} style={{ width: 18, height: 10, borderRadius: 3, background: c }} />
@@ -294,7 +294,7 @@ export function ReportsPage() {
               </tbody>
             </table>
           )}
-          <p style={{ fontSize: 11.5, margin: '12px 0 0', color: 'var(--ink-mute)' }}>연구소의 조성비가 많은 건 정상 업무예요. 영업의 계좌번호가 늘고 있어 견적서 작성 방식을 확인해 볼 만해요.</p>
+          <p style={{ fontSize: 12.5, margin: '12px 0 0', color: 'var(--ink-mute)' }}>연구소의 조성비가 많은 건 정상 업무예요. 영업의 계좌번호가 늘고 있어 견적서 작성 방식을 확인해 볼 만해요.</p>
         </section>
 
         <section className="card vz-card" style={{ flex: '2 1 340px' }}>
@@ -336,7 +336,7 @@ export function ReportsPage() {
           </div>
           <QueryState isLoading={evalReport.isLoading} error={evalReport.error} onRetry={() => evalReport.refetch()} />
           {evalReport.data && (
-            <div style={{ display: 'grid', gridTemplateColumns: '150px minmax(0,1fr) minmax(0,1fr) 70px', gap: '8px 16px', alignItems: 'center', fontSize: 12.5 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '150px minmax(0,1fr) minmax(0,1fr) 70px', gap: '8px 16px', alignItems: 'center', fontSize: 13.5 }}>
               <span className="lbl">규칙</span>
               <span className="lbl">템플릿 재현율 %</span>
               <span className="lbl">기본 규칙 재현율 %</span>
@@ -350,7 +350,7 @@ export function ReportsPage() {
                   <div key={r.industry} style={{ display: 'contents' }}>
                     <span style={{ minWidth: 0 }}>
                       <span style={{ display: 'block', fontWeight: r.industry === '전체' ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.industry === '전체' ? '전체' : `업종 묶음 · ${industryName(r.industry)}`}</span>
-                      <span style={{ fontSize: 10.5, color: 'var(--ink-mute)' }}>정답 값 {r.expected}개</span>
+                      <span style={{ fontSize: 11.5, color: 'var(--ink-mute)' }}>정답 값 {r.expected}개</span>
                     </span>
                     {[
                       [tr, '#2a78d6'],
@@ -369,7 +369,7 @@ export function ReportsPage() {
               })}
             </div>
           )}
-          <p style={{ fontSize: 11.5, margin: '12px 0 0', color: 'var(--ink-mute)' }}>GET /v1/eval · 각 업종 템플릿의 tests를 정답으로 계산해요. 잘못 찾음 = 찾으면 안 되는 문장에서 잘못 찾은 수 / 그런 문장 수. 실제 사용 중 정밀도는 아니에요.</p>
+          <p style={{ fontSize: 12.5, margin: '12px 0 0', color: 'var(--ink-mute)' }}>GET /v1/eval · 각 업종 템플릿의 tests를 정답으로 계산해요. 잘못 찾음 = 찾으면 안 되는 문장에서 잘못 찾은 수 / 그런 문장 수. 실제 사용 중 정밀도는 아니에요.</p>
         </section>
 
         <section className="card vz-card" style={{ flex: '2 1 380px', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -378,7 +378,7 @@ export function ReportsPage() {
               <h2 className="ct">교육 대상 후보</h2>
               <MockBadge />
             </div>
-            <span className="t3" style={{ fontSize: 12 }}>
+            <span className="t3" style={{ fontSize: 13 }}>
               하루에 같은 이유로 3번 이상 막힌 사람
             </span>
           </div>
@@ -386,19 +386,19 @@ export function ReportsPage() {
             {cands.data?.map((c) => (
               <div key={c.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 12, alignItems: 'center', padding: '12px 14px', borderRadius: 14, background: 'rgba(255,255,255,.7)', border: '1px solid rgba(255,255,255,.95)' }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 600 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>
                     {c.user}{' '}
-                    <span className="t3" style={{ fontWeight: 400, fontSize: 12.5 }}>
+                    <span className="t3" style={{ fontWeight: 400, fontSize: 13.5 }}>
                       · {c.dept}
                     </span>
                   </div>
-                  <div className="t3" style={{ fontSize: 12, marginTop: 3 }}>
+                  <div className="t3" style={{ fontSize: 13, marginTop: 3 }}>
                     {c.why} · <b style={{ color: 'var(--danger)', fontWeight: 600 }}>{c.n}회</b>
                   </div>
                 </div>
                 {c.sentAt ? (
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#047857', textAlign: 'right' }}>
-                    보냄 ✓<span style={{ display: 'block', fontWeight: 400, color: 'var(--ink-mute)', fontSize: 11 }}>{c.sentAt}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#047857', textAlign: 'right' }}>
+                    보냄 ✓<span style={{ display: 'block', fontWeight: 400, color: 'var(--ink-mute)', fontSize: 12 }}>{c.sentAt}</span>
                   </span>
                 ) : (
                   <button type="button" className="btn btn-sm" style={{ gap: 6 }} disabled={!slackOn || (send.isPending && send.variables === c.id)} title={slackOn ? undefined : 'Slack이 연결돼 있지 않아요'} onClick={() => send.mutate(c.id)}>
@@ -417,16 +417,16 @@ export function ReportsPage() {
               <span style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--ink)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
                 <Icon name="shield" size={14} stroke="#fff" width={2.2} />
               </span>
-              <div style={{ fontSize: 12, lineHeight: 1.65, minWidth: 0 }}>
+              <div style={{ fontSize: 13, lineHeight: 1.65, minWidth: 0 }}>
                 <b>{settings.data?.slackAppName ?? 'Gateway 보안 알림'}</b>{' '}
-                <span className="t3" style={{ fontSize: 11 }}>
+                <span className="t3" style={{ fontSize: 12 }}>
                   앱
                 </span>
                 <div style={{ whiteSpace: 'pre-line', marginTop: 4 }}>{SLACK_MSG}</div>
               </div>
             </div>
           )}
-          <p className="t3" style={{ fontSize: 11.5, margin: 0, lineHeight: 1.6 }}>
+          <p className="t3" style={{ fontSize: 12.5, margin: 0, lineHeight: 1.6 }}>
             이 목록과 발송 기록은 보안 관리자에게만 보이고 인사 평가에 쓰지 않아요. Slack은 <Link to="/console/settings#notify">설정 › Slack 연동</Link>에서 연결해요.
           </p>
         </section>
@@ -446,8 +446,8 @@ export function ReportsPage() {
           {sched.data?.map((r) => (
             <div key={r.name} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,.5)', border: '1px solid var(--line)' }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{r.name}</div>
-                <div className="t3" style={{ fontSize: 11.5, marginTop: 3 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{r.name}</div>
+                <div className="t3" style={{ fontSize: 12.5, marginTop: 3 }}>
                   {r.when} · {r.to}
                 </div>
               </div>

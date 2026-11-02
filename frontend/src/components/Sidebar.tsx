@@ -64,7 +64,7 @@ export function Sidebar() {
         </span>
         <span style={{ display: 'flex', flexDirection: 'column' }}>
           <span style={{ fontWeight: 700, fontSize: 16, lineHeight: 1.2 }}>Gateway</span>
-          <span className="mono" style={{ fontSize: 9.5, letterSpacing: '.08em', color: 'var(--ink-3)' }}>
+          <span className="mono" style={{ fontSize: 10.5, letterSpacing: '.08em', color: 'var(--ink-3)' }}>
             SECURITY CONSOLE
           </span>
         </span>
@@ -79,14 +79,14 @@ export function Sidebar() {
       ))}
       <div style={{ flex: 1, minHeight: 24 }} />
       <div className="sb-company">
-        <div style={{ fontSize: 12.5, fontWeight: 600 }}>{company.data?.name ?? '…'}</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--ink-2)' }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600 }}>{company.data?.name ?? '…'}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--ink-2)' }}>
           <span>회사 코드</span>
           <span className="mono" style={{ color: 'var(--ink)' }}>
             {company.data?.code ?? '…'}
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--ink-2)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink-2)' }}>
           <span className="sb-dot" style={{ background: up ? '#047857' : health.isLoading ? '#8A94A3' : '#DC2626' }} />
           {healthText} · 구성원 {company.data?.members ?? '…'}명
         </div>
@@ -96,8 +96,8 @@ export function Sidebar() {
       <div className="sb-user">
         <span className="av">{session?.user.name.slice(0, 1) ?? '?'}</span>
         <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 600 }}>{session?.user.name}</span>
-          <span style={{ fontSize: 11, color: 'var(--ink-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session?.user.email}</span>
+          <span style={{ fontSize: 13.5, fontWeight: 600 }}>{session?.user.name}</span>
+          <span style={{ fontSize: 12, color: 'var(--ink-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session?.user.email}</span>
         </span>
         <button
           type="button"
@@ -105,7 +105,7 @@ export function Sidebar() {
             signOut();
             nav('/login');
           }}
-          style={{ marginLeft: 'auto', whiteSpace: 'nowrap', flex: '0 0 auto', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-2)', padding: '6px 8px', borderRadius: 8, background: 'rgba(15,26,43,.05)', border: 0, cursor: 'pointer' }}
+          style={{ marginLeft: 'auto', whiteSpace: 'nowrap', flex: '0 0 auto', fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)', padding: '6px 8px', borderRadius: 8, background: 'rgba(15,26,43,.05)', border: 0, cursor: 'pointer' }}
         >
           로그아웃
         </button>

@@ -20,7 +20,7 @@ export function GrantTime({ request }: { request: PortalRequest }) {
   const tone = g.kind === 'running' || g.kind === 'once-open' ? 'rgba(16,185,129,.12)' : 'rgba(15,26,43,.06)';
   const color = g.kind === 'running' || g.kind === 'once-open' ? '#047857' : '#4A5568';
   return (
-    <div data-testid="grant-time" style={{ padding: '10px 12px', borderRadius: 12, background: tone, color, fontSize: 12.5, lineHeight: 1.6 }}>
+    <div data-testid="grant-time" style={{ padding: '10px 12px', borderRadius: 12, background: tone, color, fontSize: 13.5, lineHeight: 1.6 }}>
       {g.kind === 'running' && (
         <>
           <b>남은 시간 {formatRemaining(g.remainingSeconds)}</b> · {hm(g.endsAt)}까지 원문 전송이 허용돼요

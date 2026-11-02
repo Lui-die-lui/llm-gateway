@@ -79,7 +79,7 @@ export function BasicRulesPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="t3" style={{ fontSize: 12.5 }}>
+          <span className="t3" style={{ fontSize: 13.5 }}>
             전체 {total}개 중 {onCount}개 사용
           </span>
           {changes.length > 0 && (
@@ -96,7 +96,7 @@ export function BasicRulesPage() {
       <section className="card" aria-label="검사 서버 상태" style={{ padding: '12px 16px', display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'center' }}>
         <span className="lbl">서버 상태 · GET /health · /v1/config</span>
         {status.map((s) => (
-          <span key={s.label} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12.5 }}>
+          <span key={s.label} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 13.5 }}>
             <span className="sb-dot" style={{ background: s.ok ? '#047857' : '#A9B6C8' }} aria-hidden="true" />
             <span className="t2">{s.label}</span>
             <b style={{ fontWeight: 600 }}>{s.value}</b>
@@ -106,7 +106,7 @@ export function BasicRulesPage() {
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <Seg label="분류" options={CATS} value={cat} onChange={setCat} />
-        <span className="t3" style={{ fontSize: 12, marginLeft: 'auto' }}>
+        <span className="t3" style={{ fontSize: 13, marginLeft: 'auto' }}>
           회색 줄은 꺼진 규칙 · 바꾼 줄은 파란 테두리
         </span>
       </div>
@@ -122,11 +122,11 @@ export function BasicRulesPage() {
                 <h2 className="ct" id={`grp-${g.id}`}>
                   {g.name}
                 </h2>
-                <div className="t3" style={{ fontSize: 12, marginTop: 3 }}>
+                <div className="t3" style={{ fontSize: 13, marginTop: 3 }}>
                   {g.desc}
                 </div>
               </div>
-              <span className="t3" style={{ fontSize: 12 }}>
+              <span className="t3" style={{ fontSize: 13 }}>
                 {g.rules.length}개 중 {g.rules.filter((r) => cur[r.id]).length}개 사용
               </span>
             </div>
@@ -145,13 +145,13 @@ export function BasicRulesPage() {
               return (
                 <label key={r.id} className={`p2row${on ? '' : ' off'}${changed ? ' changed' : ''}`}>
                   <input type="checkbox" checked={on} onChange={() => setCur({ ...cur, [r.id]: !on })} aria-label={`${r.name} 사용`} />
-                  <span className="nm" style={{ fontWeight: 600, fontSize: 13.5 }}>
+                  <span className="nm" style={{ fontWeight: 600, fontSize: 14 }}>
                     {r.name}
-                    {changed && <span style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--link)' }}>{on ? '켜기 · 적용 전' : '끄기 · 적용 전'}</span>}
+                    {changed && <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--link)' }}>{on ? '켜기 · 적용 전' : '끄기 · 적용 전'}</span>}
                   </span>
-                  <span style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+                  <span style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
                     {r.desc}
-                    <span className="mono" style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-mute)' }}>
+                    <span className="mono" style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-mute)' }}>
                       예: {r.example}
                     </span>
                   </span>

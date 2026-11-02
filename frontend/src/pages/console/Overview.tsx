@@ -106,7 +106,7 @@ export function OverviewPage() {
           <h1 style={{ margin: 0, fontSize: 28 }}>
             {greeting()}, {name}님
           </h1>
-          <div className="t2" style={{ fontSize: 13, marginTop: 4 }}>
+          <div className="t2" style={{ fontSize: 13.5, marginTop: 4 }}>
             {company.data?.name ?? '…'} · {periodWord} AI로 보낸 프롬프트 현황이에요
           </div>
         </div>
@@ -140,8 +140,8 @@ export function OverviewPage() {
           .map((a) => (
             <Link key={a.to + a.tag} to={a.to} style={{ flex: '1 1 260px', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,.55)', border: '1px solid var(--line)', textDecoration: 'none', color: 'var(--ink)' }}>
               <span className={`badge ${a.cls}`}>{a.tag}</span>
-              <span style={{ fontSize: 13, flex: 1, minWidth: 0 }}>{a.text}</span>
-              <span className="t3" style={{ fontSize: 12 }} aria-hidden="true">
+              <span style={{ fontSize: 13.5, flex: 1, minWidth: 0 }}>{a.text}</span>
+              <span className="t3" style={{ fontSize: 13 }} aria-hidden="true">
                 →
               </span>
             </Link>
@@ -156,8 +156,8 @@ export function OverviewPage() {
           return (
             <div key={k.label} className="card vz-card" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '16px 18px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>{k.label}</span>
-                <span className="mono" style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, ...dStyle }}>
+                <span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{k.label}</span>
+                <span className="mono" style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, ...dStyle }}>
                   {k.d?.text ?? '비교 없음'}
                 </span>
               </div>
@@ -166,7 +166,7 @@ export function OverviewPage() {
                   <div className="mono" style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1.1 }}>
                     {cur.isLoading ? '…' : fmt(k.value)}
                   </div>
-                  <div style={{ fontSize: 11.5, color: 'var(--ink-mute)', marginTop: 4 }}>{k.cap}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--ink-mute)', marginTop: 4 }}>{k.cap}</div>
                 </div>
                 <Sparkline values={k.spark} color={k.color} />
               </div>
@@ -175,8 +175,8 @@ export function OverviewPage() {
         })}
         <div className="card vz-card" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '16px 18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>확인 대기</span>
-            <span className="mono" style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: 'rgba(217,119,6,.12)', color: '#92400E' }}>
+            <span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>확인 대기</span>
+            <span className="mono" style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: 'rgba(217,119,6,.12)', color: '#92400E' }}>
               가입 {counts.joins} · 예외 {counts.exceptions}
             </span>
           </div>
@@ -185,7 +185,7 @@ export function OverviewPage() {
               <div className="mono" style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1.1 }}>
                 {counts.joins + counts.exceptions}
               </div>
-              <div style={{ fontSize: 11.5, color: 'var(--ink-mute)', marginTop: 4 }}>보안 관리자 처리 필요</div>
+              <div style={{ fontSize: 12.5, color: 'var(--ink-mute)', marginTop: 4 }}>보안 관리자 처리 필요</div>
             </div>
             <Sparkline values={[2, 2.4, 3.1, 2.9, 3.8, 4.4, 4.2, 5.1, 5.6, 5.4, 6.5, 7.1, 7.4, counts.joins + counts.exceptions]} color="#B45309" />
           </div>
@@ -238,7 +238,7 @@ export function OverviewPage() {
             </div>
           </div>
           <RankBars items={types} />
-          <p style={{ margin: '12px 0 0', fontSize: 11.5, color: 'var(--ink-mute)' }}>
+          <p style={{ margin: '12px 0 0', fontSize: 12.5, color: 'var(--ink-mute)' }}>
             막대 색: <span style={{ color: 'var(--c-redact)', fontWeight: 600 }}>파랑</span> 가림 · <span style={{ color: '#c53a3a', fontWeight: 600 }}>빨강</span> 차단 규칙
           </p>
         </section>
@@ -250,7 +250,7 @@ export function OverviewPage() {
             <h2 className="ct">실시간 이벤트</h2>
             <span className="badge b-block">LIVE</span>
           </div>
-          <Link to="/console/logs" style={{ fontSize: 12.5 }}>
+          <Link to="/console/logs" style={{ fontSize: 13.5 }}>
             전체 로그 →
           </Link>
         </div>
@@ -280,7 +280,7 @@ export function OverviewPage() {
                   const b = OUTCOME_BADGE[outcomeOf(e)];
                   return (
                     <tr key={e.id}>
-                      <td className="mono t3" style={{ fontSize: 12 }}>
+                      <td className="mono t3" style={{ fontSize: 13 }}>
                         {hms(e.ts)}
                       </td>
                       <td className="t3" title={e.caller ? '호출한 앱 (API 키 이름)' : '키를 쓰지 않았거나 사용자가 아직 없어요'}>
@@ -293,7 +293,7 @@ export function OverviewPage() {
                       <td>
                         <span className={`badge ${b.cls}`}>{b.label}</span>
                       </td>
-                      <td className="mono t3 num" style={{ fontSize: 12 }}>
+                      <td className="mono t3 num" style={{ fontSize: 13 }}>
                         {e.latency_ms == null ? '—' : `${Math.round(e.latency_ms)}ms`}
                       </td>
                     </tr>

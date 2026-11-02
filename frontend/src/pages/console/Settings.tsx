@@ -17,9 +17,9 @@ function Row({ title, sub, children }: { title: string; sub?: string; children: 
   return (
     <div className="row-line">
       <div>
-        <div style={{ fontSize: 13.5 }}>{title}</div>
+        <div style={{ fontSize: 14 }}>{title}</div>
         {sub && (
-          <div className="t3" style={{ fontSize: 12, marginTop: 2 }}>
+          <div className="t3" style={{ fontSize: 13, marginTop: 2 }}>
             {sub}
           </div>
         )}
