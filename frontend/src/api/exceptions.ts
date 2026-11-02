@@ -16,6 +16,7 @@ interface ServerException {
   memo: string;
   decided: number | null;
   used: boolean;
+  revoked: boolean;
 }
 
 const TTL_LABEL: Record<Ttl, string> = { '1x': '1회', '1h': '1시간', '24h': '24시간', '7d': '7일' };
@@ -76,20 +77,23 @@ function toException(s: ServerException): ExceptionRequest {
     requestedAt: when(s.created),
     decidedAt: s.decided ?? undefined,
     used: s.used,
+    revoked: s.revoked,
   };
 }
 
 const TTL_SECONDS: Partial<Record<Ttl, number>> = { '1h': 3600, '24h': 86400, '7d': 604800 };
+// A one-use approval nobody used lapses after a day (same number as ONCE_VALID_SECONDS on the server).
+const ONCE_SECONDS = 86400;
 
-/** When an approval stops (epoch seconds); null for a one-use approval. */
+/** When an approval stops (epoch seconds). A one-use approval that is still unused stops a day after it was given. */
 export const grantEnd = (e: ExceptionRequest): number | null => {
-  const secs = e.ttl ? TTL_SECONDS[e.ttl] : undefined;
+  const secs = e.ttl === '1x' ? ONCE_SECONDS : e.ttl ? TTL_SECONDS[e.ttl] : undefined;
   return secs && e.decidedAt ? e.decidedAt + secs : null;
 };
 
-/** A real approval that still lets something through: approved, not over, a one-use one not yet spent. */
+/** A real approval that still lets something through: approved, not taken back, not over, a one-use one not yet spent. */
 export const isActiveGrant = (e: ExceptionRequest, nowSeconds: number) => {
-  if (!isReal(e.id) || e.status !== 'approved' || e.used) return false;
+  if (!isReal(e.id) || e.status !== 'approved' || e.used || e.revoked) return false;
   const end = grantEnd(e);
   return end === null || end > nowSeconds;
 };
@@ -123,8 +127,12 @@ export type GrantTime =
 /** What an approved request lets the person do right now. null: not an approved, real request, so nothing to show. */
 export function grantTime(p: PortalRequest, nowSeconds: number): GrantTime | null {
   if (p.status !== 'APPROVED' || !isReal(p.id)) return null;
+  if (p.revoked) return { kind: 'ended' };
   const secs = p.ttl ? TTL_SECONDS[p.ttl] : undefined;
-  if (!secs) return p.used ? { kind: 'once-used' } : { kind: 'once-open' };
+  if (!secs) {
+    if (p.used) return { kind: 'once-used' };
+    return p.decidedAt != null && p.decidedAt + ONCE_SECONDS <= nowSeconds ? { kind: 'ended' } : { kind: 'once-open' };
+  }
   if (p.decidedAt == null) return null;
   const endsAt = p.decidedAt + secs;
   return endsAt > nowSeconds ? { kind: 'running', remainingSeconds: endsAt - nowSeconds, endsAt } : { kind: 'ended' };
@@ -152,6 +160,8 @@ export const realMine = () =>
 
 export const decideReal = (id: string, decision: Decision, ttl: Ttl, memo: string) =>
   request<ServerException>(`/v1/exceptions/${id}/decide`, { method: 'POST', body: { decision, ttl, memo } }).then(toException);
+
+export const revokeReal = (id: string) => request<ServerException>(`/v1/exceptions/${id}/revoke`, { method: 'POST' }).then(toException);
 
 export const createReal = (input: { reason: string; scope: '1회' | '1시간' | '24시간'; requester: string; entity: string; site: string }) =>
   request<ServerException>('/v1/exceptions', { method: 'POST', body: { ...input, client_id: clientId() } }).then(toPortal);

@@ -3,7 +3,7 @@
 // users, sessions, exceptions or settings yet); swapping one for a real endpoint means changing only that function's body.
 import * as mock from '../mocks/db';
 import { ApiError, request } from './client';
-import { createReal, decideReal, isReal, realExceptions, realMine } from './exceptions';
+import { createReal, decideReal, isReal, realExceptions, realMine, revokeReal } from './exceptions';
 import { gateway } from './gateway';
 import type { Anomaly, BasicRuleState, Decision, MinutePoint, MemberStatus, PolicyRule, PolicyState, RuleDraft, Settings, Ttl } from './consoleTypes';
 
@@ -60,6 +60,7 @@ export const consoleApi = {
   exceptions: () => Promise.all([realExceptions(), served(mock.listExceptions)]).then(([real, seed]) => [...real, ...seed]),
   decideException: (id: string, d: Decision, ttl: Ttl, memo: string) =>
     isReal(id) ? decideReal(id, d, ttl, memo) : served(() => mock.decideException(id, d, ttl, memo)),
+  revokeException: (id: string) => revokeReal(id),
   requestMoreInfo: (id: string) => served(() => mock.requestMoreInfo(id)),
 
   adminLog: () => served(mock.listAdminLog),

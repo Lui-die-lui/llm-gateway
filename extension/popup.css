@@ -57,7 +57,7 @@ h2{margin:0 0 10px;font-size:12px;font-weight:600;color:var(--ink3)}
 .ex{font-size:12px;line-height:1.5}
 .ex b{padding:1px 6px;border-radius:999px;background:rgba(15,26,43,.07)}
 .ex.approved b{background:rgba(16,185,129,.16);color:#047857}
-.ex.used b,.ex.expired b{background:rgba(100,116,139,.16);color:#475569}
+.ex.used b,.ex.expired b,.ex.revoked b{background:rgba(100,116,139,.16);color:#475569}
 .ex.rejected b{background:rgba(220,38,38,.12);color:#b91c1c}
 .ex.pending b{background:rgba(37,99,235,.12);color:#1d4ed8}
 .ex .left{margin-top:2px;font-variant-numeric:tabular-nums;font-weight:600;color:#047857}

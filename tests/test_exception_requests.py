@@ -172,3 +172,23 @@ def test_only_undecided_requests_count_towards_the_cap_and_old_decided_ones_are_
     monkeypatch.setattr(ex, "KEEP_DECIDED_DAYS", -1)  # everything decided counts as old
     submit.__globals__["client"].post(f"/v1/exceptions/{done}/decide", json={"decision": "rejected"})
     assert submit().status_code == 429 and all(x["status"] == "pending" for x in client.get("/v1/exceptions").json())
+
+
+def test_a_one_use_approval_nobody_used_lapses_after_a_day(monkeypatch):
+    from app import exception_requests as ex
+
+    approve(LABEL, "1x")
+    assert passes()
+    approve(LABEL, "1x")
+    monkeypatch.setattr(ex.time, "time", lambda: 10**10)
+    assert not passes()  # a day has long gone by
+
+
+def test_an_admin_can_take_an_approval_back():
+    rid = approve(LABEL, "1h")
+    assert client.post(f"/v1/exceptions/{rid}/revoke").json()["revoked"] is True
+    assert not passes()
+    assert client.post(f"/v1/exceptions/{rid}/revoke").status_code == 409  # already taken back
+    assert client.post("/v1/exceptions/REQ-9999/revoke").status_code == 404
+    pending = submit().json()["id"]
+    assert client.post(f"/v1/exceptions/{pending}/revoke").status_code == 409  # nothing to take back yet

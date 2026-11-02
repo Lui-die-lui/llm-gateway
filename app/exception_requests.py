@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS exception_requests (
   ttl TEXT,
   memo TEXT NOT NULL DEFAULT '',
   decided REAL,
-  used INTEGER NOT NULL DEFAULT 0            -- a one-use (1x) approval that has been spent
+  used INTEGER NOT NULL DEFAULT 0,           -- a one-use (1x) approval that has been spent
+  revoked INTEGER NOT NULL DEFAULT 0         -- an admin took the approval back
 );
 """
 
@@ -72,8 +73,10 @@ def configure(path: str) -> None:
         _db = sqlite3.connect(path, check_same_thread=False)
         _db.row_factory = sqlite3.Row
         _db.executescript(SCHEMA)
-        if "used" not in {r["name"] for r in _db.execute("PRAGMA table_info(exception_requests)")}:  # database from before grants
-            _db.execute("ALTER TABLE exception_requests ADD COLUMN used INTEGER NOT NULL DEFAULT 0")
+        have = {r["name"] for r in _db.execute("PRAGMA table_info(exception_requests)")}
+        for col in ("used", "revoked"):  # databases from before grants / revoking
+            if col not in have:
+                _db.execute(f"ALTER TABLE exception_requests ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
         _db.commit()
 
 
@@ -91,6 +94,7 @@ def _row(r: sqlite3.Row) -> dict:
         "memo": r["memo"],
         "decided": r["decided"],
         "used": bool(r["used"]),
+        "revoked": bool(r["revoked"]),
     }
 
 
@@ -120,10 +124,11 @@ def listing(client_id: str | None = None) -> list[dict]:
 
 
 TTL_SECONDS = {"1h": 3600, "24h": 86400, "7d": 604800}
+ONCE_VALID_SECONDS = 86400  # a one-use approval nobody used lapses after a day instead of staying open for ever
 
 
 def grants(client_id: str | None, site: str | None = None, now: float | None = None) -> list[dict]:
-    """Approvals in force for this browser: approved, not over, not spent, for this site. -> [{id, labels, once, left}] (`left`: seconds to go, None for a one-use approval).
+    """Approvals in force for this browser: approved, not over, not spent, for this site. -> [{id, labels, once, left}] (`left`: seconds to go, None for a one-use approval; one that is not used within a day lapses).
 
     `labels` is what the request named (the kinds of information the person asked to send as they are). The browser id is not a
     login: whoever has it can use the approval, so an approval is only as private as the id. It is limited to those kinds of
@@ -133,10 +138,11 @@ def grants(client_id: str | None, site: str | None = None, now: float | None = N
         return []
     now = time.time() if now is None else now
     with _lock:
-        rows = _db.execute("SELECT * FROM exception_requests WHERE client_id=? AND status='approved' AND used=0", (client_id,)).fetchall()
+        rows = _db.execute("SELECT * FROM exception_requests WHERE client_id=? AND status='approved' AND used=0 AND revoked=0", (client_id,)).fetchall()
     out = []
     for r in rows:
-        seconds = TTL_SECONDS.get(r["ttl"])
+        once = r["ttl"] == "1x"
+        seconds = TTL_SECONDS.get(r["ttl"]) or (ONCE_VALID_SECONDS if once else None)
         end = (r["decided"] or 0) + seconds if seconds else None
         if end and now >= end:
             continue  # over
@@ -144,7 +150,7 @@ def grants(client_id: str | None, site: str | None = None, now: float | None = N
             continue
         labels = {x.strip() for x in r["entity"].split(",") if x.strip()}
         if labels:
-            out.append({"id": f"REQ-{r['id']:04d}", "labels": labels, "once": r["ttl"] == "1x", "left": int(end - now) if end else None})
+            out.append({"id": f"REQ-{r['id']:04d}", "labels": labels, "once": once, "left": int(end - now) if end and not once else None})
     return out
 
 
@@ -155,6 +161,20 @@ def spend(public_id: str) -> None:
         with _lock:
             _db.execute("UPDATE exception_requests SET used=1 WHERE id=? AND ttl='1x'", (int(num),))
             _db.commit()
+
+
+def revoke(public_id: str) -> dict:
+    """An admin takes an approval back before it ends. It stops letting things through at once."""
+    num = public_id.removeprefix("REQ-")
+    with _lock:
+        r = _db.execute("SELECT * FROM exception_requests WHERE id=?", (int(num),)).fetchone() if num.isdigit() else None
+        if r is None:
+            raise PolicyError("없는 예외 요청이에요", 404, "not_found")
+        if r["status"] != "approved" or r["revoked"]:
+            raise PolicyError("승인돼 있지 않거나 이미 회수한 요청이에요", 409, "not_revocable")
+        _db.execute("UPDATE exception_requests SET revoked=1 WHERE id=?", (r["id"],))
+        _db.commit()
+        return _row(_db.execute("SELECT * FROM exception_requests WHERE id=?", (r["id"],)).fetchone())
 
 
 def decide(public_id: str, body: DecisionIn) -> dict:

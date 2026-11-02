@@ -580,6 +580,11 @@ def exception_decide(request_id: str, body: exception_requests.DecisionIn):
     return exception_requests.decide(request_id, body)
 
 
+@app.post("/v1/exceptions/{request_id}/revoke", dependencies=admin)
+def exception_revoke(request_id: str):
+    return exception_requests.revoke(request_id)
+
+
 @app.delete("/v1/exceptions", dependencies=admin)
 def exception_clear():
     """Empty the exception requests (before a demo). Admin only; there is no undo."""
