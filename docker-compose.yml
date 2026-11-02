@@ -17,7 +17,7 @@ services:
     volumes:
       - ollama:/root/.ollama
     # then: docker compose exec ollama ollama pull <model>
-    # and in .env: LOCAL_LLM_URL=http://ollama:11434  INTERNAL_BASE_URL=http://ollama:11434/v1
+    # and in .env: INTERNAL_BASE_URL=http://ollama:11434/v1  (the internal-model route, not a detector)
 
 volumes:
   ollama:

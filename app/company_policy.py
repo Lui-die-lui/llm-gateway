@@ -3,7 +3,7 @@
 Custom rule kinds (what the console's "무엇을 찾을까요" offers):
   words    one company word per line, matched literally
   pattern  a Python regular expression (a capture group, if present, is the sensitive part)
-  ai       a plain-language description, handed to the local LLM detector (does nothing without LOCAL_LLM_MODEL)
+  ai       no longer used: there is no local LLM. Rules of this kind saved earlier still load and are ignored
   builtin  not a new detector: changes the action for built-in labels ("이름, 이메일 -> 차단")
 Actions: redact (mask), block (refuse the request), log (let it through, record it in the audit log).
 
@@ -119,7 +119,6 @@ def _cond(r: dict) -> str:
 class Engine:
     words: tuple[tuple[re.Pattern[str], str, str], ...] = ()  # (regex, label, action)
     patterns: tuple[tuple[re.Pattern[str], str, str], ...] = ()
-    ai: tuple[tuple[str, str, str], ...] = ()  # (label, description, action)
     overrides: tuple[tuple[str, str], ...] = ()  # built-in label -> action
     skip_labels: frozenset[str] = frozenset()
     skip_entities: frozenset[tuple[str, str]] = frozenset()
@@ -143,7 +142,7 @@ class Engine:
 
 
 def compile_engine(rules: list[dict], builtin_enabled: dict[str, bool]) -> Engine:
-    words, patterns, ai, overrides = [], [], [], []
+    words, patterns, overrides = [], [], []
     for r in sorted(rules, key=lambda r: r["prio"]):
         if not r["enabled"]:
             continue
@@ -154,7 +153,7 @@ def compile_engine(rules: list[dict], builtin_enabled: dict[str, bool]) -> Engin
         elif r["kind"] == "pattern":
             patterns.append((re.compile(r["pattern"]), label, action))
         elif r["kind"] == "ai":
-            ai.append((label, r["ai"].strip(), action))
+            continue  # saved before the local LLM was dropped: nothing detects it any more
         else:
             for name in r["builtins"]:
                 for lab in rules_catalog.NAME_TO_LABELS.get(name, ()):
@@ -171,7 +170,7 @@ def compile_engine(rules: list[dict], builtin_enabled: dict[str, bool]) -> Engin
         parts = key.split(":", 2)
         if on is False and len(parts) == 3 and parts[0] == "i":
             skip_entities.add((parts[1], parts[2]))
-    return Engine(tuple(words), tuple(patterns), tuple(ai), tuple(overrides), frozenset(skip_labels), frozenset(skip_entities))
+    return Engine(tuple(words), tuple(patterns), tuple(overrides), frozenset(skip_labels), frozenset(skip_entities))
 
 
 # ---------------------------------------------------------------- store

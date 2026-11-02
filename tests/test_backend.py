@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from app import audit, llm_detector, main, upstream
+from app import audit, main, upstream
 from app.check_templates import check_industry
 from app.detector import Match, detect
 from app.evaluate import evaluate
@@ -57,35 +57,6 @@ def test_names_with_title(text):
 @pytest.mark.parametrize("text", ["고객 이메일을 알려줘", "고객 이름을 입력하세요", "김치찌개 레시피", "고객 정보를 요약해줘"])
 def test_common_words_are_not_names(text):
     assert not any(m.label == "사람" for m in detect(text, []))
-
-
-# ---- local LLM assist ------------------------------------------------------
-
-def test_llm_assist_adds_only_values_present_in_text(monkeypatch):
-    monkeypatch.setenv("LOCAL_LLM_MODEL", "fake")
-    monkeypatch.setattr(
-        llm_detector, "_chat", lambda prompt: json.dumps({"사람": ["박철민", "유령이름"], "공급처": ["한국콜마"]})
-    )
-    cosmetics = main.industries["cosmetics"]
-    ms = llm_detector.llm_matches("박철민 대리가 한국콜마 에서 받았다", [cosmetics])
-    assert sorted((m.label, "박철민 대리가 한국콜마 에서 받았다"[m.start : m.end]) for m in ms) == [
-        ("공급처", "한국콜마"),
-        ("사람", "박철민"),
-    ]
-
-
-def test_llm_assist_failure_falls_back_to_regex(monkeypatch):
-    monkeypatch.setenv("LOCAL_LLM_MODEL", "fake")
-
-    def down(prompt):
-        raise llm_detector.httpx.ConnectError("down")
-
-    monkeypatch.setattr(llm_detector, "_chat", down)
-    assert llm_detector.llm_matches("아무 텍스트", []) == []
-
-
-def test_llm_assist_is_off_by_default():
-    assert llm_detector.llm_matches("박철민", []) == []
 
 
 # ---- routing + response scan ----------------------------------------------

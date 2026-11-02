@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import audit, company_policy, exception_requests, llm_detector, policy, rules_catalog, sessions, upstream
+from . import audit, company_policy, exception_requests, policy, rules_catalog, sessions, upstream
 from .evaluate import evaluate
 from .sanitizer import (
     ResponseBlocked,
@@ -166,7 +166,6 @@ def config():
         "mock": upstream.mock(),
         "internal_route": upstream.internal_available(),
         "response_scan": response_scan_enabled(),
-        "local_llm_detector": llm_detector.enabled(),
         "streaming": True,
         "admin_protected": bool(os.getenv("GATEWAY_ADMIN_TOKEN")),
         "caller_auth": bool(api_keys()),

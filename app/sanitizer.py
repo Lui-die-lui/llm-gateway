@@ -7,7 +7,6 @@ from dataclasses import replace
 
 from . import company_policy, policy
 from .detector import RESPONSE_LABELS, Match, detect
-from .llm_detector import llm_matches
 from .taxonomy import Industry
 from .vault import Vault
 
@@ -95,7 +94,7 @@ def count_by_label(matches: list[Match]) -> dict[str, int]:
 def find_matches(text: str, industries: list[Industry], engine: company_policy.Engine | None = None) -> list[Match]:
     """Everything that applies to this text: built-ins, selected industry templates, then the company's own policy."""
     eng = engine or company_policy.active()
-    extra = eng.matches(text) + llm_matches(text, industries, eng.ai)
+    extra = eng.matches(text)
     matches = detect(text, industries, extra=extra, skip_labels=eng.skip_labels, skip_entities=eng.skip_entities)
     return eng.adjust(matches)
 

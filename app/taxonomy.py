@@ -11,7 +11,7 @@ Action = Literal["redact", "block", "internal_only", "log"]  # log: let it throu
 class Detection(BaseModel):
     patterns: list[str] = Field(default_factory=list)
     context_keywords: list[str] = Field(default_factory=list)
-    ner_hint: str | None = None  # description handed to the local LLM detector (LOCAL_LLM_MODEL)
+    ner_hint: str | None = None  # unused (the local LLM assist is gone); still read so older template files load
 
 
 class Entity(BaseModel):
