@@ -5,6 +5,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { portalApi } from '../../api/console';
 import { errorMessage } from '../../api/client';
+import { GrantTime } from '../../components/GrantTime';
 import { Icon } from '../../components/Icon';
 import { useFeedback } from '../../features/feedback';
 import { qk } from '../../features/queries';
@@ -43,6 +44,9 @@ export function RequestPage() {
   const len = reason.trim().length;
   const can = len >= 20 && agree;
   const done = submit.data;
+  // After sending, keep looking at the answer: the security admin decides in the console, and an approval shows how long it lasts.
+  const mine = useQuery({ queryKey: qk.portal('requests'), queryFn: portalApi.requests, refetchInterval: 5_000, enabled: !!done });
+  const current = done ? mine.data?.find((r) => r.id === done.id) ?? done : null;
 
   return (
     <div className="page-bg portal">
@@ -146,6 +150,13 @@ export function RequestPage() {
                   </span>
                 </span>
               </div>
+              {current && current.status !== 'PENDING' && (
+                <div role="status" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <b style={{ fontSize: 14 }}>{current.status === 'APPROVED' ? '허용됐어요' : '반려됐어요'}</b>
+                  <span className="t2" style={{ fontSize: 12.5 }}>{current.note}</span>
+                  <GrantTime request={current} />
+                </div>
+              )}
               <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {[
                   ['1', '요청 접수', '방금 · 사유와 막힌 항목 종류만 전달돼요', 'rgba(16,185,129,.16)', '#047857'],

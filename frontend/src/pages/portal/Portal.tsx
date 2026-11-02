@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { portalApi } from '../../api/console';
 import type { PortalRecent, PortalRequest } from '../../api/consoleTypes';
 import { Icon } from '../../components/Icon';
+import { GrantTime } from '../../components/GrantTime';
 import { QueryState } from '../../components/QueryState';
 import { qk } from '../../features/queries';
 import './portal.css';
@@ -210,6 +211,7 @@ export function PortalPage() {
                   <div className="t2" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
                     {q.note}
                   </div>
+                  <GrantTime request={q} />
                   <div className="t3" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11.5 }}>
                     <span>{q.when}</span>
                     <span>·</span>
