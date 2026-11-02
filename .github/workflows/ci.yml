@@ -67,3 +67,28 @@ jobs:
       - name: Container log
         if: always()
         run: docker logs gw
+
+  # Deploys main to Railway after every check above has passed. It runs as the owner of the Railway token, so Railway does not hold
+  # it for approval the way it does a deploy started by a push from someone who is not a member of the Railway project.
+  # Needs the repository secret RAILWAY_TOKEN (a project token for the production environment); without it this job only says so.
+  deploy:
+    needs: [backend, frontend, extension, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: railway-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "::notice::RAILWAY_TOKEN is not set, so nothing was deployed (see docs/DEPLOY.md)"
+            exit 0
+          fi
+          npx --yes @railway/cli up --ci --service gateway

@@ -30,6 +30,18 @@ Railway, Render, Fly.io처럼 Docker 이미지를 올리고 디스크(볼륨)를
 | `GATEWAY_ADMIN_TOKEN` | 길고 아무도 모르는 문자열. 콘솔에서 입력할 비밀번호가 됩니다 |
 | `GATEWAY_API_KEYS` | 앱·확장이 쓸 접속 키. `python -m app.keys 앱이름`으로 만든 줄을 쉼표로 이어 붙입니다 (아래 "실제 LLM을 연결할 때") |
 
+### main이 바뀌면 자동으로 배포되게 하기
+
+Railway가 GitHub 저장소와 연결돼 있으면 `main`에 push가 올 때마다 배포를 시작합니다. 그런데 push한 사람이 **Railway 프로젝트 멤버가 아니면 Railway가 배포를 멈춰 두고 멤버의 "허용"을 기다립니다.** 팀원이 PR을 병합할 때마다 프로젝트 주인이 직접 눌러야 하는 이유입니다.
+
+이를 피하려고 CI(`.github/workflows/ci.yml`)의 마지막 `deploy` 단계가 시험 4개를 모두 통과한 뒤 Railway 토큰 주인의 이름으로 배포합니다. 한 번만 설정하면 됩니다.
+
+1. Railway 프로젝트 → Settings → **Tokens**에서 production 환경용 **Project Token**을 만듭니다.
+2. GitHub 저장소 → Settings → Secrets and variables → Actions → **New repository secret**에 이름 `RAILWAY_TOKEN`, 값은 그 토큰으로 저장합니다. 토큰은 코드나 채팅에 적지 마세요.
+3. Railway 서비스 → Settings → Source에서 **Disconnect**로 GitHub 연결을 끊습니다. 연결을 두면 같은 push에 Railway가 자체 배포를 하나 더 시작해서 "허용" 대기가 또 생깁니다. 끊어도 `deploy` 단계가 코드를 직접 올리므로 배포는 계속됩니다.
+
+`RAILWAY_TOKEN`이 없으면 `deploy` 단계는 알림만 남기고 건너뜁니다. 시험이 하나라도 실패하면 배포하지 않습니다.
+
 7. Settings → Networking → **Generate Domain**을 눌러 `https://○○.up.railway.app` 주소를 받습니다.
 8. 그 주소 뒤에 `/health`를 붙여 열어서 `{"status":"ok"}`가 나오면 서버는 성공입니다. 주소 뒤에 아무것도 안 붙여 열면 콘솔 로그인 화면이 나옵니다.
 
