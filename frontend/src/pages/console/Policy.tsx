@@ -1,4 +1,4 @@
-// 05 정책 엔진 (Policy.dc.html). Rule list / editor / versions are mocks (the gateway has no rule-editing API).
+// 05 정책 엔진 (Policy.dc.html). Rules, drafts and applying them all go through /v1/policy.
 // "미리 시험하기" calls the real POST /v1/analyze.
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,10 +9,10 @@ import type { PolicyRule, RuleAction, RuleDraft, RuleKind } from '../../api/cons
 import type { AnalyzeResult } from '../../api/types';
 import { Help, Seg, Toggle } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
-import { industryName, useBuiltinGroups, useIndustries } from '../../features/catalog';
+import { useBuiltinGroups, useIndustries } from '../../features/catalog';
 import { useFeedback } from '../../features/feedback';
 import { ACTION_KO, splitByCodepoints } from '../../features/format';
-import { qk, useSettings } from '../../features/queries';
+import { qk } from '../../features/queries';
 
 const ACT_CLS: Record<RuleAction, string> = { redact: 'b-redact', block: 'b-block', log: 'b-clean' };
 const KINDS = [
@@ -72,7 +72,6 @@ export function PolicyPage() {
   const qc = useQueryClient();
   const { toast, confirm } = useFeedback();
   const policy = useQuery({ queryKey: qk.policy, queryFn: consoleApi.policy });
-  const settings = useSettings();
   const industries = useIndustries();
   const BUILTINS = useBuiltinGroups()?.flatMap((g) => g.rules.map((r) => r.name)) ?? [];
 
@@ -117,7 +116,7 @@ export function PolicyPage() {
     },
     onError: fail,
   });
-  const apply = useMutation({ mutationFn: consoleApi.applyPolicy, onSuccess: (r) => (refresh(), toast(`버전 ${r.version}를 적용했어요 · 관리자 작업 기록에 남김`)), onError: fail });
+  const apply = useMutation({ mutationFn: consoleApi.applyPolicy, onSuccess: (r) => (refresh(), toast(`버전 ${r.version}를 적용했어요 · 직원 확장이 몇 분 안에 받아요`)), onError: fail });
 
   const pending = policy.data?.pending.length ?? 0;
   const isNew = mode === 'new';
@@ -125,8 +124,8 @@ export function PolicyPage() {
   // ---- playground (real /v1/analyze)
   const [sample, setSample] = useState(SAMPLE);
   const [tplOn, setTplOn] = useState(true);
-  const companyIndustry = settings.data?.industry ?? 'cosmetics';
-  const run = useMutation({ mutationFn: (text: string) => gateway.analyze({ text, use_draft: true, industries: tplOn && industries.data?.some((i) => i.industry === companyIndustry) ? [companyIndustry] : [] }) });
+  const allIndustries = (industries.data ?? []).map((i) => i.industry); // no company setting exists: try every industry bundle
+  const run = useMutation({ mutationFn: (text: string) => gateway.analyze({ text, use_draft: true, industries: tplOn ? allIndustries : [] }) });
   const result: AnalyzeResult | undefined = run.data;
   const pieces = useMemo(() => (result && run.variables ? splitByCodepoints(run.variables, result.spans) : []), [result, run.variables]);
 
@@ -182,7 +181,7 @@ export function PolicyPage() {
               <li>규칙을 고치고 "변경으로 저장" · 아직 적용 안 됨</li>
               <li>보안 관리자가 "승인하고 적용"을 누름</li>
               <li>직원 확장이 몇 분 안에 새 규칙을 받음</li>
-              <li>문제가 있으면 "변경 이력"에서 이전 버전으로 되돌리기</li>
+              <li>문제가 있으면 그 규칙을 끄거나 고쳐서 다시 승인하고 적용해요</li>
             </ol>
           </Help>
         </div>
@@ -294,9 +293,6 @@ export function PolicyPage() {
                 }}
               >
                 복제해서 새로 만들기
-              </button>
-              <button type="button" className="btn btn-sm" onClick={() => toast(`현재 버전 ${policy.data?.version} · 이력 조회는 기록 › 관리자 작업에서 볼 수 있어요`)}>
-                변경 이력
               </button>
               <button type="button" className="btn btn-sm btn-d" onClick={onDelete}>
                 삭제
@@ -471,7 +467,7 @@ export function PolicyPage() {
             </label>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginTop: 8 }} className="t2">
               <input type="checkbox" checked={tplOn} onChange={(e) => setTplOn(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
-              업종 묶음({industryName(companyIndustry)}) 규칙도 같이 시험
+              업종 묶음 규칙(전체 업종)도 같이 시험
             </label>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '12px 0 10px', flexWrap: 'wrap', gap: 8 }}>
               <span className="lbl">결과</span>

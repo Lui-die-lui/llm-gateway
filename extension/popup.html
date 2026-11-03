@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=340">
+  <meta name="viewport" content="width=360">
   <title>Gateway</title>
   <link rel="stylesheet" href="popup.css">
 </head>
@@ -10,7 +10,7 @@
   <main class="pop">
     <header class="top">
       <span class="brand">
-        <span class="logo" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6zM9 12l2 2 4-4"/></svg></span>
+        <span class="logo" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6zM9 12l2 2 4-4"/></svg></span>
         <span><b>Gateway</b><small id="ver"></small></span>
       </span>
       <button type="button" id="enabled" class="tog" role="switch" aria-checked="true" aria-label="보호 켜기"></button>
@@ -21,29 +21,29 @@
       <span><b id="status-title">확인 중…</b><small id="status-sub"></small></span>
     </div>
 
-    <section class="sec" aria-labelledby="ind-h">
-      <h2 id="ind-h">산업 템플릿</h2>
-      <div id="industries" class="inds">불러오는 중…</div>
-      <p class="hint">공통 개인정보 · 시크릿은 항상 켜져 있어요</p>
-    </section>
-
-    <section class="sec nums" aria-label="오늘 현황">
+    <section class="card nums" aria-label="오늘 현황">
       <div><b id="n-checked" class="mono">0</b><small>오늘 검사</small></div>
       <div><b id="n-redacted" class="mono warn">0</b><small>가림</small></div>
       <div><b id="n-blocked" class="mono bad">0</b><small>차단</small></div>
     </section>
 
-    <section class="sec" aria-labelledby="ex-h">
+    <section class="card" aria-labelledby="ind-h">
+      <h2 id="ind-h">산업 템플릿</h2>
+      <div id="industries" class="inds">불러오는 중…</div>
+      <p class="hint">공통 개인정보 · 시크릿은 항상 켜져 있어요</p>
+    </section>
+
+    <section class="card" aria-labelledby="ex-h">
       <h2 id="ex-h">내 예외 요청</h2>
       <div id="exceptions" class="exlist hint">확인 중…</div>
     </section>
 
-    <section class="sec links">
-      <a class="btn" id="open-portal" href="#" target="_blank" rel="noopener">전체 보기</a>
+    <section class="links">
+      <a class="btn" id="open-portal" href="#" target="_blank" rel="noopener">자세히 보기</a>
       <a class="btn dark" id="open-console" href="#" target="_blank" rel="noopener">관리자 콘솔 ↗</a>
     </section>
 
-    <details class="sec adv">
+    <details class="card adv">
       <summary>연결 설정</summary>
       <form id="gw">
         <label for="gw-url">게이트웨이 주소</label>
@@ -53,11 +53,7 @@
         </div>
         <label for="gw-key">접속 키 (회사에서 받은 경우)</label>
         <input id="gw-key" type="password" placeholder="gw_..." autocomplete="off" spellcheck="false">
-        <label for="portal-url">전체 보기 화면 주소 (비우면 자동)</label>
-        <input id="portal-url" type="url" placeholder="http://localhost:3000" spellcheck="false">
-        <label class="chk"><input type="checkbox" id="hint"> 가린 자리 안내 문장 붙이기 <small>없으면 AI가 [사람_1]을 빈칸으로 읽고 되물을 수 있어요</small></label>
-        <label class="chk"><input type="checkbox" id="demo-files"> 파일 검사 데모 켜기 <small>실제 검사가 아니며 파일이 사이트에 올라가지 않아요</small></label>
-        <a class="link" id="open-auth" href="auth.html" target="_blank" rel="noopener">회사 계정 가입·로그인 화면 보기 (데모)</a>
+        <label class="opt"><input type="checkbox" id="hint"><span>가린 자리 안내 문장 붙이기<small>없으면 AI가 [사람_1]을 빈칸으로 읽고 되물을 수 있어요</small></span></label>
         <div class="lbl-s">이 탭 상태</div>
         <div id="page" class="hint" role="status">확인 중…</div>
         <div id="gw-msg" class="hint" role="status"></div>

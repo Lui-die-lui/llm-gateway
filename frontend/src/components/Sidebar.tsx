@@ -1,7 +1,7 @@
 // Console navigation (Sidebar.dc.html). Active item comes from the route.
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth';
-import { useCompany, useHealth, usePendingCounts } from '../features/queries';
+import { useHealth, usePendingCounts } from '../features/queries';
 import { Icon, type IconName } from './Icon';
 
 interface Item {
@@ -29,7 +29,6 @@ export function Sidebar() {
   const { session, signOut } = useAuth();
   const nav = useNavigate();
   const counts = usePendingCounts();
-  const company = useCompany();
   const health = useHealth();
 
   const groups: { label: string; items: Item[] }[] = [
@@ -50,7 +49,6 @@ export function Sidebar() {
         { to: '/console/exceptions', label: '예외 요청', icon: 'exceptions', count: counts.exceptions },
       ],
     },
-    { label: 'COMPANY', items: [{ to: '/console/users', label: '구성원 · 가입 승인', icon: 'users', count: counts.joins }] },
   ];
 
   const up = health.isSuccess;
@@ -79,20 +77,11 @@ export function Sidebar() {
       ))}
       <div style={{ flex: 1, minHeight: 24 }} />
       <div className="sb-company">
-        <div style={{ fontSize: 13.5, fontWeight: 600 }}>{company.data?.name ?? '…'}</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--ink-2)' }}>
-          <span>회사 코드</span>
-          <span className="mono" style={{ color: 'var(--ink)' }}>
-            {company.data?.code ?? '…'}
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink-2)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: 'var(--ink-2)' }}>
           <span className="sb-dot" style={{ background: up ? '#047857' : health.isLoading ? '#8A94A3' : '#DC2626' }} />
-          {healthText} · 구성원 {company.data?.members ?? '…'}명
+          {healthText}
         </div>
       </div>
-      <div style={{ height: 8 }} />
-      <NavItem item={{ to: '/console/settings', label: '설정', icon: 'settings' }} />
       <div className="sb-user">
         <span className="av">{session?.user.name.slice(0, 1) ?? '?'}</span>
         <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>

@@ -10,7 +10,7 @@ import { QueryState } from '../../components/QueryState';
 import { RankBars, Sparkline, StackedBars, type RankItem } from '../../components/charts';
 import { useAuth } from '../../features/auth';
 import { daysAgo, delta, findingsText, fmt, hms, OUTCOME_BADGE, outcomeOf, pct, providerName, startOfToday } from '../../features/format';
-import { qk, useCompany, usePendingCounts } from '../../features/queries';
+import { qk, usePendingCounts } from '../../features/queries';
 import { useLabelCategory } from '../../features/catalog';
 
 const RANGES = [
@@ -33,7 +33,6 @@ export function OverviewPage() {
   const [search, setSearch] = useState('');
   const nav = useNavigate();
   const { session } = useAuth();
-  const company = useCompany();
   const counts = usePendingCounts();
   const category = useLabelCategory();
 
@@ -107,7 +106,7 @@ export function OverviewPage() {
             {greeting()}, {name}님
           </h1>
           <div className="t2" style={{ fontSize: 13.5, marginTop: 4 }}>
-            {company.data?.name ?? '…'} · {periodWord} AI로 보낸 프롬프트 현황이에요
+            {periodWord} AI로 보낸 프롬프트 현황이에요
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -132,9 +131,8 @@ export function OverviewPage() {
 
       <section aria-label="주의 필요" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {[
-          { tag: `PENDING ${counts.exceptions}`, cls: 'b-accent', text: `예외 요청 ${counts.exceptions}건 대기 · ${counts.exceptionsUrgent}건은 SLA 1시간 이내`, to: '/console/exceptions', show: counts.exceptions > 0 },
-          { tag: `가입 대기 ${counts.joins}`, cls: 'b-redact', text: `회사 코드로 들어온 가입 요청 ${counts.joins}건${counts.joinsWarn ? ` · ${counts.joinsWarn}건은 회사 메일 아님` : ''}`, to: '/console/users', show: counts.joins > 0 },
-          { tag: '확인 필요', cls: 'b-block', text: 'Gemini 화면이 바뀌어 일부 전송을 검사하지 못하고 보류함', to: '/console/logs', show: true },
+          { tag: `PENDING ${counts.exceptions}`, cls: 'b-accent', text: `예외 요청 ${counts.exceptions}건이 관리자 결정을 기다려요`, to: '/console/exceptions', show: counts.exceptions > 0 },
+          { tag: `이상 징후 ${counts.anomalies}`, cls: 'b-block', text: `확인하지 않은 이상 징후 ${counts.anomalies}건이 있어요`, to: '/console/live', show: counts.anomalies > 0 },
         ]
           .filter((a) => a.show)
           .map((a) => (
@@ -177,17 +175,16 @@ export function OverviewPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>확인 대기</span>
             <span className="mono" style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: 'rgba(217,119,6,.12)', color: '#92400E' }}>
-              가입 {counts.joins} · 예외 {counts.exceptions}
+              예외 {counts.exceptions} · 이상 징후 {counts.anomalies}
             </span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 10 }}>
             <div>
               <div className="mono" style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1.1 }}>
-                {counts.joins + counts.exceptions}
+                {counts.anomalies + counts.exceptions}
               </div>
               <div style={{ fontSize: 12.5, color: 'var(--ink-mute)', marginTop: 4 }}>보안 관리자 처리 필요</div>
             </div>
-            <Sparkline values={[2, 2.4, 3.1, 2.9, 3.8, 4.4, 4.2, 5.1, 5.6, 5.4, 6.5, 7.1, 7.4, counts.joins + counts.exceptions]} color="#B45309" />
           </div>
         </div>
       </section>

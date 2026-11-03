@@ -1,7 +1,7 @@
 (() => {
 "use strict";
 const DEFAULT_GATEWAY = "http://localhost:8000";
-const DEFAULTS = { enabled: true, industries: [], portalUrl: "", demoFiles: false, hint: true };
+const DEFAULTS = { enabled: true, industries: [], hint: true };
 const INDUSTRY_KO = { cosmetics: "화장품", medical: "의료", manufacturing: "제조", finance: "금융", hr: "인사", legal: "법무", it_dev: "IT 개발", ecommerce: "이커머스", logistics: "물류" };
 const $ = (id) => document.getElementById(id);
 
@@ -45,8 +45,7 @@ async function saveGateway(e) {
     msg.textContent = "이 주소로 연결하는 권한을 허용해야 저장돼요";
     return;
   }
-  const portal = $("portal-url").value.trim();
-  await chrome.storage.local.set({ gatewayUrl: url.origin, portalUrl: portal ? new URL(portal).origin : "", gatewayKey: $("gw-key").value.trim() });
+  await chrome.storage.local.set({ gatewayUrl: url.origin, gatewayKey: $("gw-key").value.trim() });
   msg.textContent = "저장했어요";
   location.reload();
 }
@@ -100,17 +99,13 @@ async function init() {
   const setTog = (on) => tog.setAttribute("aria-checked", String(on));
   setTog(settings.enabled);
   $("gw-url").value = gatewayUrl;
-  $("portal-url").value = settings.portalUrl || "";
   $("gw-key").value = (await chrome.storage.local.get({ gatewayKey: "" })).gatewayKey;
   $("gw").addEventListener("submit", saveGateway);
-  if (chrome.runtime.getURL) $("open-auth").href = chrome.runtime.getURL("auth.html");
   showPage();
   $("hint").checked = settings.hint !== false;
   $("hint").addEventListener("change", (e) => chrome.storage.local.set({ hint: e.target.checked }));
-  $("demo-files").checked = !!settings.demoFiles;
-  $("demo-files").addEventListener("change", (e) => chrome.storage.local.set({ demoFiles: e.target.checked }));
 
-  const base = Gw.portalBase(gatewayUrl, settings.portalUrl);
+  const base = Gw.portalBase(gatewayUrl);
   const { id: cid } = await chrome.runtime.sendMessage({ type: "clientId" });
   $("open-portal").href = `${base}/me?cid=${encodeURIComponent(cid)}`;
   showExceptions();

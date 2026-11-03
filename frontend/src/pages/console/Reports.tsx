@@ -1,22 +1,17 @@
 // 04 분석 리포트 (Reports.dc.html).
 // Real: totals and daily lines (/v1/stats/*), info-type totals (summary.findings), rule accuracy (/v1/eval),
 //       redaction rate and p95 latency from the server (summary); older servers fall back to the latest 500 audit events.
-// Mock: false-positive rate, department heatmap, training candidates + Slack, scheduled reports.
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { consoleApi } from '../../api/console';
-import { errorMessage } from '../../api/client';
+import { useQuery } from '@tanstack/react-query';
 import { gateway } from '../../api/gateway';
 import type { TimeseriesPoint } from '../../api/types';
-import { MockBadge, Seg } from '../../components/Controls';
-import { Icon } from '../../components/Icon';
+import { Seg } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
 import { LineChart, RankBars, type RankItem } from '../../components/charts';
 import { industryName, useLabelCategory } from '../../features/catalog';
 import { useFeedback } from '../../features/feedback';
 import { daysAgo, fmt } from '../../features/format';
-import { qk, useSettings } from '../../features/queries';
+import { qk } from '../../features/queries';
 
 type Range = '7D' | '30D' | '90D' | 'Q';
 const RANGES = [
@@ -49,17 +44,10 @@ function daily(points: TimeseriesPoint[], days: number, offsetDays: number, pick
   return out;
 }
 
-const RAMP = ['var(--ramp-1)', 'var(--ramp-2)', 'var(--ramp-3)', 'var(--ramp-4)', 'var(--ramp-5)'];
-const bin = (v: number) => (v < 50 ? 0 : v < 150 ? 1 : v < 300 ? 2 : v < 450 ? 3 : 4);
-const SLACK_MSG = '[이름]님, 안녕하세요. 정보보호팀이에요.\n오늘 AI에 보낸 글에서 [정보 종류]이(가) [n]번 막혔어요.\n막힌 부분은 지우거나 "[API 키]"처럼 바꿔서 보내 주세요. 업무상 꼭 필요하면 확장에서 예외 요청을 보낼 수 있어요.';
-
 export function ReportsPage() {
   const [range, setRange] = useState<Range>('30D');
-  const [preview, setPreview] = useState(false);
-  const qc = useQueryClient();
   const { toast } = useFeedback();
   const category = useLabelCategory();
-  const settings = useSettings();
 
   const days = rangeDays(range);
   const since = daysAgo(days - 1);
@@ -73,19 +61,6 @@ export function ReportsPage() {
   const ts = useQuery({ queryKey: qk.timeseries('day', prevSince), queryFn: () => gateway.timeseries('day', prevSince) });
   const sample = useQuery({ queryKey: qk.audit({ limit: 500 }), queryFn: () => gateway.auditEvents({ limit: 500 }) });
   const evalReport = useQuery({ queryKey: qk.evalReport, queryFn: gateway.evalReport, staleTime: 5 * 60_000 });
-  const heat = useQuery({ queryKey: qk.heatmap, queryFn: consoleApi.deptHeatmap });
-  const cands = useQuery({ queryKey: qk.candidates, queryFn: consoleApi.trainingCandidates });
-  const sched = useQuery({ queryKey: qk.schedules, queryFn: consoleApi.schedules });
-
-  const send = useMutation({
-    mutationFn: (id: string) => consoleApi.sendSlack(id),
-    onSuccess: (c) => {
-      qc.invalidateQueries({ queryKey: qk.candidates });
-      qc.invalidateQueries({ queryKey: qk.adminLog });
-      toast(`${c.user}님에게 Slack 메시지를 보냈어요 · 관리자 작업에 기록`);
-    },
-    onError: (e) => toast(errorMessage(e), 'error'),
-  });
 
   const s = cur.data;
   const prev = both.data && s ? { requests: both.data.requests - s.requests, blocked: (both.data.by_status.blocked ?? 0) - (s.by_status.blocked ?? 0) } : null;
@@ -135,9 +110,6 @@ export function ReportsPage() {
     return [...m.entries()].sort((a, b) => b[1].value - a[1].value).map(([name, v]) => ({ name, tag: category(name), value: v.value, color: v.block ? 'var(--c-block)' : 'var(--c-redact)' }));
   }, [s, category]);
 
-  const hm = heat.data;
-  const hmMax = hm ? hm.rows.flatMap((r) => r.values.map((v, i) => ({ v, where: `${r.dept} · ${hm.cols[i]}` }))).sort((a, b) => b.v - a.v)[0] : undefined;
-
   const okStyle = { background: 'rgba(16,185,129,.12)', color: '#047857' };
   const neutral = { background: 'rgba(15,26,43,.06)', color: 'var(--ink)' };
   const dpct = (a: number | null, b: number | null) => (a == null || b == null ? null : `${a - b >= 0 ? '+' : ''}${(a - b).toFixed(1)}p`);
@@ -147,11 +119,8 @@ export function ReportsPage() {
     { label: '검사한 프롬프트', value: fmt(s?.requests), delta: reqDelta, ds: neutral, note: s ? `하루 평균 ${fmt(Math.round((s.requests / days) * 10) / 10)}` : '…' },
     { label: '가림률', value: redactRate == null ? '—' : `${redactRate.toFixed(1)}%`, delta: null, ds: neutral, note: '1건 이상 가린 전송 비율' },
     { label: '차단률', value: blockRate == null ? '—' : `${blockRate.toFixed(1)}%`, delta: dpct(blockRate, prevBlockRate), ds: blockRate != null && prevBlockRate != null && blockRate <= prevBlockRate ? okStyle : neutral, note: blockTop.length ? blockTop.map((f) => `${f.label} ${Math.round((f.count / (blockTotal || 1)) * 100)}%`).join(' · ') : '차단 없음' },
-    { label: '잘못 찾은 비율', value: '3.1%', delta: '-0.9p', ds: okStyle, note: '직원 신고 · 관리자 확인 기준', mock: true },
     { label: '검사 시간 p95', value: p95 == null ? '—' : `${Math.round(p95)}ms`, delta: null, ds: neutral, note: '목표 80ms 이내 · 외부 LLM 시간 포함' },
   ];
-
-  const slackOn = settings.data?.slackConnected ?? true;
 
   return (
     <>
@@ -181,14 +150,10 @@ export function ReportsPage() {
           <div key={k.label} className="card vz-card" style={{ padding: '16px 18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{k.label}</span>
-              {k.mock ? (
-                <MockBadge />
-              ) : (
-                k.delta && (
-                  <span className="mono" style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, ...k.ds }}>
-                    {k.delta}
-                  </span>
-                )
+              {k.delta && (
+                <span className="mono" style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, ...k.ds }}>
+                  {k.delta}
+                </span>
               )}
             </div>
             <div className="mono" style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-.02em', marginTop: 10 }}>
@@ -246,56 +211,6 @@ export function ReportsPage() {
       </div>
 
       <div className="row-wrap vz">
-        <section className="card vz-card" style={{ flex: '3 1 600px' }}>
-          <div className="vz-head">
-            <div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <h2 className="vz-title">부서 × 정보 종류 · 30일</h2>
-                <MockBadge />
-              </div>
-              <div className="vz-hero">
-                <b>{fmt(hmMax?.v)}</b>
-                <span>가장 많은 칸 · {hmMax?.where ?? '—'}</span>
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-mute)' }} aria-hidden="true">
-              <span>적음</span>
-              {RAMP.map((c) => (
-                <i key={c} style={{ width: 18, height: 10, borderRadius: 3, background: c }} />
-              ))}
-              <span>많음</span>
-            </div>
-          </div>
-          {hm && (
-            <table style={{ tableLayout: 'fixed', borderCollapse: 'separate', borderSpacing: 6, margin: '-6px' }} aria-label="부서별 정보 종류 건수 (예시 값)">
-              <thead>
-                <tr>
-                  <th style={{ width: 80, border: 0, padding: 0 }} />
-                  {hm.cols.map((c) => (
-                    <th key={c} scope="col" style={{ textAlign: 'center', border: 0, padding: '0 0 4px', font: '12px var(--font-sans)', color: 'var(--ink-2)', letterSpacing: 0, whiteSpace: 'normal' }}>
-                      {c}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {hm.rows.map((r) => (
-                  <tr key={r.dept}>
-                    <th scope="row" style={{ border: 0, padding: 0, font: '500 12.5px var(--font-sans)', color: 'var(--ink-body)', letterSpacing: 0 }}>
-                      {r.dept}
-                    </th>
-                    {r.values.map((v, i) => (
-                      <td key={i} style={{ padding: 0, border: 0, height: 44, textAlign: 'center', borderRadius: 8, font: '500 12.5px var(--font-mono)', background: v ? RAMP[bin(v)] : 'rgba(15,26,43,.04)', color: v ? (bin(v) >= 3 ? '#fff' : 'var(--ink)') : '#A1A1AA' }}>
-                        {v ? fmt(v) : '–'}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <p style={{ fontSize: 12.5, margin: '12px 0 0', color: 'var(--ink-mute)' }}>연구소의 조성비가 많은 건 정상 업무예요. 영업의 계좌번호가 늘고 있어 견적서 작성 방식을 확인해 볼 만해요.</p>
-        </section>
 
         <section className="card vz-card" style={{ flex: '2 1 340px' }}>
           <div className="vz-head" style={{ marginBottom: 10 }}>
@@ -372,90 +287,8 @@ export function ReportsPage() {
           <p style={{ fontSize: 12.5, margin: '12px 0 0', color: 'var(--ink-mute)' }}>GET /v1/eval · 각 업종 템플릿의 tests를 정답으로 계산해요. 잘못 찾음 = 찾으면 안 되는 문장에서 잘못 찾은 수 / 그런 문장 수. 실제 사용 중 정밀도는 아니에요.</p>
         </section>
 
-        <section className="card vz-card" style={{ flex: '2 1 380px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="ch" style={{ margin: 0 }}>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <h2 className="ct">교육 대상 후보</h2>
-              <MockBadge />
-            </div>
-            <span className="t3" style={{ fontSize: 13 }}>
-              하루에 같은 이유로 3번 이상 막힌 사람
-            </span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {cands.data?.map((c) => (
-              <div key={c.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 12, alignItems: 'center', padding: '12px 14px', borderRadius: 14, background: 'rgba(255,255,255,.7)', border: '1px solid rgba(255,255,255,.95)' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>
-                    {c.user}{' '}
-                    <span className="t3" style={{ fontWeight: 400, fontSize: 13.5 }}>
-                      · {c.dept}
-                    </span>
-                  </div>
-                  <div className="t3" style={{ fontSize: 13, marginTop: 3 }}>
-                    {c.why} · <b style={{ color: 'var(--danger)', fontWeight: 600 }}>{c.n}회</b>
-                  </div>
-                </div>
-                {c.sentAt ? (
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#047857', textAlign: 'right' }}>
-                    보냄 ✓<span style={{ display: 'block', fontWeight: 400, color: 'var(--ink-mute)', fontSize: 12 }}>{c.sentAt}</span>
-                  </span>
-                ) : (
-                  <button type="button" className="btn btn-sm" style={{ gap: 6 }} disabled={!slackOn || (send.isPending && send.variables === c.id)} title={slackOn ? undefined : 'Slack이 연결돼 있지 않아요'} onClick={() => send.mutate(c.id)}>
-                    <Icon name="send" size={13} width={2} />
-                    Slack 보내기
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          <button type="button" className="link-btn" style={{ alignSelf: 'flex-start' }} aria-expanded={preview} onClick={() => setPreview(!preview)}>
-            {preview ? '메시지 접기' : '보내는 메시지 보기'}
-          </button>
-          {preview && (
-            <div style={{ display: 'flex', gap: 10, padding: 12, borderRadius: 12, background: '#F8F8F8', border: '1px solid #EEE' }}>
-              <span style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--ink)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                <Icon name="shield" size={14} stroke="#fff" width={2.2} />
-              </span>
-              <div style={{ fontSize: 13, lineHeight: 1.65, minWidth: 0 }}>
-                <b>{settings.data?.slackAppName ?? 'Gateway 보안 알림'}</b>{' '}
-                <span className="t3" style={{ fontSize: 12 }}>
-                  앱
-                </span>
-                <div style={{ whiteSpace: 'pre-line', marginTop: 4 }}>{SLACK_MSG}</div>
-              </div>
-            </div>
-          )}
-          <p className="t3" style={{ fontSize: 12.5, margin: 0, lineHeight: 1.6 }}>
-            이 목록과 발송 기록은 보안 관리자에게만 보이고 인사 평가에 쓰지 않아요. Slack은 <Link to="/console/settings#notify">설정 › Slack 연동</Link>에서 연결해요.
-          </p>
-        </section>
       </div>
 
-      <section className="card" style={{ maxWidth: 'calc(50% - 8px)', minWidth: 'min(420px, 100%)' }}>
-        <div className="ch">
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <h2 className="ct">정기 리포트</h2>
-            <MockBadge />
-          </div>
-          <button type="button" className="btn btn-sm" onClick={() => toast('정기 리포트 추가는 서버에 예약 API가 생기면 저장돼요')}>
-            추가
-          </button>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {sched.data?.map((r) => (
-            <div key={r.name} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,.5)', border: '1px solid var(--line)' }}>
-              <div>
-                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{r.name}</div>
-                <div className="t3" style={{ fontSize: 12.5, marginTop: 3 }}>
-                  {r.when} · {r.to}
-                </div>
-              </div>
-              <span className={`badge ${r.on ? 'b-clean' : 'b-muted'}`}>{r.on ? 'ON' : 'DRAFT'}</span>
-            </div>
-          ))}
-        </div>
-      </section>
     </>
   );
 }

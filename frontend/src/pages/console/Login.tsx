@@ -1,12 +1,11 @@
 // P2 관리자 콘솔 로그인 (AdminLogin.dc.html). Mock account: admin@example.com / test1234.
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { consoleApi } from '../../api/console';
 import { errorMessage } from '../../api/client';
 import { Icon } from '../../components/Icon';
 import { useAuth } from '../../features/auth';
 import { useFeedback } from '../../features/feedback';
-import { useJoinRequests } from '../../features/queries';
 import './login.css';
 
 type View = 'form' | 'otp' | 'done' | 'expired';
@@ -34,8 +33,6 @@ export function LoginPage() {
   const nav = useNavigate();
   const { session, signIn, expired } = useAuth();
   const { toast } = useFeedback();
-  const joins = useJoinRequests();
-  const pendingJoins = joins.data?.filter((j) => !j.decision).length ?? 0;
   const from = (loc.state as { from?: string } | null)?.from ?? '/console';
 
   const [view, setView] = useState<View>(params.get('expired') || expired ? 'expired' : 'form');
@@ -47,7 +44,6 @@ export function LoginPage() {
   const [ticket, setTicket] = useState('');
   const [code, setCode] = useState('');
   const [otpErr, setOtpErr] = useState(false);
-  const [lastLogin, setLastLogin] = useState('');
   const otpInput = useRef<HTMLInputElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -76,7 +72,6 @@ export function LoginPage() {
       }
       if (r.kind === 'ok') {
         setErr(null);
-        setLastLogin(r.lastLogin);
         signIn(r.user, r.lastLogin);
         setView('done');
       } else if (r.kind === 'otp') {
@@ -102,7 +97,6 @@ export function LoginPage() {
     }
     const r = await consoleApi.verifyOtp(ticket, code);
     if (r.kind === 'ok') {
-      setLastLogin(r.lastLogin);
       signIn(r.user, r.lastLogin);
       setView('done');
     } else {
@@ -259,7 +253,7 @@ export function LoginPage() {
                 확인하고 콘솔 열기
               </button>
               <div className="t3" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-                설정 › 로그인 · 보안 › "관리자 2단계 인증"이 꺼져 있으면 이 화면은 나오지 않고 바로 콘솔로 가요.
+                2단계 인증이 꺼져 있으면 이 화면은 나오지 않고 바로 콘솔로 가요.
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
                 <button type="button" className="link-btn" style={{ fontSize: 13.5, padding: '6px 0' }} onClick={back}>
@@ -282,18 +276,11 @@ export function LoginPage() {
                 확인됐어요 · {session?.user.name ?? '보안관리자'}
               </h2>
               <p className="t2" style={{ margin: 0, fontSize: 13.5, lineHeight: 1.7 }}>
-                마지막 로그인: {lastLogin || session?.lastLogin}
-                <br />
-                이번 로그인은 감사 로그에 기록됐어요.
+                환영해요. 아래 버튼으로 콘솔을 열어 주세요.
               </p>
               <button type="button" className="btn btn-p login-btn" onClick={() => nav(from, { replace: true })}>
                 관리자 콘솔 열기 →
               </button>
-              {pendingJoins > 0 && (
-                <Link to="/console/users" style={{ fontSize: 13.5, fontWeight: 600 }}>
-                  가입 승인 대기 {pendingJoins}건 보기 →
-                </Link>
-              )}
             </div>
           )}
 
@@ -325,7 +312,7 @@ export function LoginPage() {
           <span>
             <b>로그인이 두 개인 이유</b>
             <br />
-            확장 로그인은 보호를 켜는 용도, 콘솔 로그인은 정책·구성원을 바꾸는 용도예요. 콘솔은 권한이 커서 따로 확인해요.
+            확장은 직원이 쓰는 보호 도구이고, 콘솔은 정책과 예외 요청을 다루는 관리자용이에요. 콘솔은 권한이 커서 따로 확인해요.
           </span>
         </div>
         <div className="note">

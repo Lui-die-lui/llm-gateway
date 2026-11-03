@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>frame (dev)</title></head>
+<body>
+  <!-- A sandboxed card the way a site draws one in an iframe. The extension's content script runs here too (all_frames); in this
+       dev page it talks to the parent page's shim, which stands in for the extension's background. -->
+  <div id="inframe"></div>
+  <script>
+    window.chrome = window.parent.chrome;
+    const ph = (new URLSearchParams(location.search).get("ph") || "").split(",").filter(Boolean);
+    document.getElementById("inframe").textContent = "iframe 카드 · 수신: " + (ph[1] || "") + " · 고객 " + (ph[0] || "");
+  </script>
+  <script src="../lib.js"></script>
+  <script src="../content.js"></script>
+</body>
+</html>

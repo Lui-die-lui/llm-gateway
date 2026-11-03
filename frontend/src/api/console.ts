@@ -3,9 +3,9 @@
 // users, sessions, exceptions or settings yet); swapping one for a real endpoint means changing only that function's body.
 import * as mock from '../mocks/db';
 import { ApiError, request } from './client';
-import { createReal, decideReal, isReal, realExceptions, realMine, revokeReal } from './exceptions';
+import { createReal, decideReal, realExceptions, realMine, revokeReal } from './exceptions';
 import { gateway } from './gateway';
-import type { Anomaly, BasicRuleState, Decision, MinutePoint, MemberStatus, PolicyRule, PolicyState, RuleDraft, Settings, Ttl } from './consoleTypes';
+import type { Anomaly, BasicRuleState, Decision, MinutePoint, PolicyRule, PolicyState, RuleDraft, Ttl } from './consoleTypes';
 
 /** The gateway's policy view, with the "new" flag the editor shows for rules that exist only in the draft. */
 interface ServerPolicy extends Omit<PolicyState, 'rules'> {
@@ -34,13 +34,6 @@ export const consoleApi = {
   login: (email: string, password: string) => served(() => mock.login(email, password)),
   verifyOtp: (ticket: string, code: string) => served(() => mock.verifyOtp(ticket, code)),
 
-  company: () => served(mock.getCompany),
-  joinRequests: () => served(mock.listJoinRequests),
-  decideJoin: (id: string, d: Decision) => served(() => mock.decideJoin(id, d)),
-  members: () => served(mock.listMembers),
-  setMemberRole: (id: string, role: 'admin' | 'member') => served(() => mock.setMemberRole(id, role)),
-  setMemberStatus: (id: string, s: MemberStatus) => served(() => mock.setMemberStatus(id, s)),
-  regenerateCode: () => served(mock.regenerateCode),
 
   policy: () => request<ServerPolicy>('/v1/policy').then(withNewFlag),
   toggleRule: (id: string) => request<ServerPolicy>(`/v1/policy/rules/${id}/toggle`, { method: 'POST' }).then(withNewFlag),
@@ -57,15 +50,10 @@ export const consoleApi = {
     request<BasicRuleState>('/v1/policy/builtin', { method: 'PUT', body: { enabled: next } }),
 
   // Requests really sent to the gateway (REQ-) come first, then the mock seed (EXC-).
-  exceptions: () => Promise.all([realExceptions(), served(mock.listExceptions)]).then(([real, seed]) => [...real, ...seed]),
-  decideException: (id: string, d: Decision, ttl: Ttl, memo: string) =>
-    isReal(id) ? decideReal(id, d, ttl, memo) : served(() => mock.decideException(id, d, ttl, memo)),
+  exceptions: () => realExceptions(),
+  decideException: (id: string, d: Decision, ttl: Ttl, memo: string) => decideReal(id, d, ttl, memo),
   revokeException: (id: string) => revokeReal(id),
-  requestMoreInfo: (id: string) => served(() => mock.requestMoreInfo(id)),
 
-  adminLog: () => served(mock.listAdminLog),
-  trainingCandidates: () => served(mock.listCandidates),
-  sendSlack: (id: string) => served(() => mock.sendSlack(id)),
   /** Real: computed by the gateway from its audit log. */
   anomalies: (): Promise<Anomaly[]> =>
     gateway.anomalies().then((l) => l.map((a) => ({ id: a.id, sev: a.sev, t: a.t, title: a.title, desc: a.desc, primary: a.primary, primaryHref: a.primary_href, acked: a.acked }))),
@@ -82,23 +70,11 @@ export const consoleApi = {
       return { t: `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`, total: p?.requests ?? 0, redact: p?.redacted_requests ?? 0, block: p?.blocked ?? 0 };
     });
   },
-  deptHeatmap: () => served(mock.deptHeatmap),
-  schedules: () => served(mock.schedules),
 
   settings: () => served(mock.getSettings),
-  saveSettings: (s: Settings) => served(() => mock.saveSettings(s)),
-  pauseProtection: () => served(mock.pauseProtection),
-  scheduleCompanyDelete: () => served(mock.scheduleCompanyDelete),
 };
 
 export const portalApi = {
-  profile: () => served(mock.portalProfile),
-  recent: () => served(mock.portalRecent),
-  flagRecent: (id: string) => served(() => mock.flagRecent(id)),
-  requests: () => Promise.all([realMine(), served(mock.portalRequests)]).then(([real, seed]) => [...real, ...seed]),
+  requests: () => realMine(),
   createException: (input: { reason: string; scope: '1회' | '1시간' | '24시간'; requester: string; entity: string; site: string }) => createReal(input),
-  lastBlocked: () => served(mock.lastBlockedSend),
-  history: () => served(mock.history),
-  clearHistory: () => served(mock.clearHistory),
-  aliases: () => served(mock.aliases),
 };

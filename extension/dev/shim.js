@@ -29,7 +29,6 @@
     enabled: q.get("enabled") !== "0",
     industries: (q.get("industries") || "").split(",").filter(Boolean),
     gatewayUrl: q.get("gateway") || "http://localhost:8000",
-    demoFiles: q.get("demoFiles") === "1",
   });
   local.area = "local";
   const session = mem({});
