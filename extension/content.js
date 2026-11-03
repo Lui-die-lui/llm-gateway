@@ -40,7 +40,33 @@
   let busy = false;
   let cfg = { enabled: true, gatewayUrl: "", portalUrl: "", requestUrl: "" };
 
-  const bg = (type, fields) => chrome.runtime.sendMessage({ type, ...fields });
+  // When the extension is reloaded or updated, the copy of this script already open in a tab is cut off from it: every call throws
+  // "Extension context invalidated" and nothing it does can reach the gateway any more. It cannot be revived from inside the page,
+  // so it says so once, keeps holding sends (a prompt it cannot check must not go out) and waits for the tab to be reloaded.
+  let gone = false;
+  const GONE = { ok: false, status: 0, gone: true, enabled: true, gatewayUrl: "", data: null };
+  const GONE_TEXT = "확장 프로그램이 다시 로드됐어요 · 이 탭을 새로고침해야 보호가 다시 시작돼요";
+  const lost = (e) => /context invalidated|receiving end does not exist|message port closed|extension context/i.test(String(e?.message ?? e));
+  function retire() {
+    if (gone) return;
+    gone = true;
+    if (window.top !== window) return; // an iframe has no screens of its own: the page's copy speaks for the tab
+    ui.strip("gone", { tone: "danger", text: `${GONE_TEXT} · 그 전까지 보내는 글은 막혀요`, action: { label: "새로고침", onClick: () => location.reload() } });
+    ui.chip(null);
+  }
+  const bg = async (type, fields) => {
+    if (gone || !chrome.runtime?.id) {
+      if (!gone) retire();
+      return GONE;
+    }
+    try {
+      return await chrome.runtime.sendMessage({ type, ...fields });
+    } catch (e) {
+      if (!lost(e)) throw e;
+      retire();
+      return GONE;
+    }
+  };
 
   // Sites draw some of their cards in iframes (ChatGPT's sandboxed renderer). The same script runs there, but only to put the
   // originals back: no prompt box, no send guard, no screens. The tab (and so the tab's vault) is the same, so the background
@@ -205,7 +231,7 @@
   }
 
   async function pollDecisions() {
-    if (document.hidden) return;
+    if (document.hidden || gone) return;
     let r;
     try {
       r = await bg("exceptionNews");
@@ -218,7 +244,7 @@
       showNearestGrant();
     }
   }
-  setInterval(showNearestGrant, 1000);
+  setInterval(() => !gone && showNearestGrant(), 1000);
   setTimeout(pollDecisions, 2500);
   setInterval(pollDecisions, 15_000);
   document.addEventListener("visibilitychange", pollDecisions);
@@ -237,6 +263,10 @@
   async function checked(type, fields) {
     for (;;) {
       const r = await bg(type, fields);
+      if (r.gone) {
+        toast(`${GONE_TEXT} · 이번 전송은 막았어요`);
+        return null;
+      }
       if (r.status === 401) {
         // The gateway wants an access key and ours is missing or wrong: nothing is sent, and the person is told why.
         toast("접속 키가 없거나 맞지 않아 전송을 막았어요 · 확장 팝업의 연결 설정에서 키를 확인해 주세요");
@@ -281,6 +311,7 @@
   };
 
   function resend() {
+    scanSeq++; // a scan still in flight for the text that is leaving must not paint a chip over the emptied box
     ui.chip(null);
     setTimeout(() => {
       bypass = true;
@@ -524,11 +555,13 @@
     const text = box ? readText(box) : "";
     const seq = ++scanSeq;
     if (!text) return ui.chip(null);
+    if (gone) return;
     cfg = await bg("settings");
     if (!cfg.enabled) return ui.chip(null);
     if (text.length > LONG_TEXT) return ui.chip({ text: "긴 글이에요 · 보낼 때 검사해요", tone: "info" });
     const a = await bg("analyze", { text });
     if (seq !== scanSeq) return;
+    if (a.gone) return;
     if (a.status === 0) return ui.chip({ text: "검사 서버에 연결할 수 없어요 · 보내기는 보류돼요", tone: "danger" });
     if (a.passthrough) return ui.chip(null);
     if (!a.ok) return ui.chip({ text: `미리 검사하지 못했어요 (${a.status}) · 보낼 때 다시 검사해요`, tone: "info" });

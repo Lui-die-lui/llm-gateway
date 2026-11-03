@@ -37,6 +37,7 @@
 
   window.chrome = {
     runtime: {
+      id: "dev-extension-id", // real Chrome drops this when the extension is reloaded under a page
       getManifest: () => ({ version: "dev" }),
       onMessage: { addListener: (fn) => onMessage.push(fn) },
       sendMessage(msg) {
