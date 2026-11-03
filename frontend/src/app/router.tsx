@@ -9,6 +9,7 @@ import { LogsPage } from '../pages/console/Logs';
 import { ReportsPage } from '../pages/console/Reports';
 import { PolicyPage } from '../pages/console/Policy';
 import { BasicRulesPage } from '../pages/console/BasicRules';
+import { SettingsPage } from '../pages/console/Settings';
 import { ExceptionsPage } from '../pages/console/Exceptions';
 import { PortalPage } from '../pages/portal/Portal';
 import { RequestPage } from '../pages/portal/Request';
@@ -31,6 +32,7 @@ export const routes = [
       { path: 'policy', element: <PolicyPage /> },
       { path: 'policy/basic', element: <BasicRulesPage /> },
       { path: 'exceptions', element: <ExceptionsPage /> },
+      { path: 'settings', element: <SettingsPage /> },
       { path: 'token', element: <TokenPage /> },
     ],
   },

@@ -49,6 +49,10 @@ export function Sidebar() {
         { to: '/console/exceptions', label: '예외 요청', icon: 'exceptions', count: counts.exceptions },
       ],
     },
+    {
+      label: 'SYSTEM',
+      items: [{ to: '/console/settings', label: '설정', icon: 'settings' }],
+    },
   ];
 
   const up = health.isSuccess;
