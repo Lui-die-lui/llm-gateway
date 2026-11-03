@@ -16,6 +16,7 @@ function renderAt(path: string, extra?: (url: string, init?: RequestInit) => Res
         const rule = { id: 'b:이메일', name: '이메일', desc: '메일 주소', example: 'name@example.com', labels: ['이메일'], action: 'redact' };
         return new Response(JSON.stringify({ groups: [{ id: 'basic', name: '기본 정보', desc: '', rules: [rule] }] }), { status: 200 });
       }
+      if (/\/v1\/members$/.test(url) && (init?.method ?? 'GET') === 'GET') return new Response(JSON.stringify({ members: [], pending: [] }), { status: 200 });
       if (url.includes('/v1/policy/builtin')) return new Response(JSON.stringify({ version: 0, applied: {} }), { status: 200 });
       const body = url.includes('/v1/audit/events') || url.includes('/timeseries') || url.includes('/v1/industries') ? [] : url.includes('/summary') ? { requests: 0, by_status: {}, by_route: {}, by_industry: {}, findings: [], redacted_items: 0, response_redacted_items: 0 } : { status: 'ok' };
       return new Response(JSON.stringify(body), { status: 200 });
@@ -43,20 +44,19 @@ describe('console', () => {
     expect(await screen.findByRole('heading', { name: '예외 요청' })).toBeInTheDocument();
   });
 
-  it('has no pages for made-up data: members and the personal portal history are gone', async () => {
+  it('an address that no longer exists goes back to the overview', async () => {
     sessionStorage.setItem('gw.console.session', JSON.stringify({ user: { name: '보안관리자', email: 'admin@example.com', role: 'admin', owner: true }, lastLogin: '', lastActive: Date.now() }));
     const router = renderAt('/console/users');
     await waitFor(() => expect(router.state.location.pathname).toBe('/console'));
-    expect(screen.queryByText('구성원 · 가입 승인')).not.toBeInTheDocument();
   });
 
   const SESSION = JSON.stringify({ user: { name: '보안관리자', email: 'admin@example.com', role: 'admin', owner: true }, lastLogin: '', lastActive: Date.now() });
   const baseServer = (): Record<string, unknown> => ({
-    values: { response_scan: true, vault_ttl_minutes: 30, once_valid_hours: 24, keep_decided_days: 180, notify_new_exception: true },
+    values: { response_scan: true, vault_ttl_minutes: 30, once_valid_hours: 24, keep_decided_days: 180, notify_new_exception: true, notify_new_member: true },
     limits: { vault_ttl_minutes: { min: 5, max: 240 }, once_valid_hours: { min: 1, max: 168 }, keep_decided_days: { min: 7, max: 730 } },
     slack: { configured: false, host: null, source: null, console_link: false },
     keys: { env_keys: 0, required: false, list: [] },
-    data: { audit_events: 12, exception_requests: 3 },
+    data: { audit_events: 12, exception_requests: 3, members: 8 },
     log: [{ t: 1_700_000_000, what: '답변 검사', detail: '꺼짐 → 켜짐' }],
     environment: { provider: 'openai', mock: false, admin_protected: true, max_text: 200000, cors_origins: ['http://localhost:3000'], stores_prompt_text: false },
   });
@@ -203,6 +203,89 @@ describe('console', () => {
     await user.selectOptions(await screen.findByLabelText('자동 로그아웃'), '60');
     expect(localStorage.getItem('gw.console.idleMinutes')).toBe('60');
     localStorage.removeItem('gw.console.idleMinutes');
+  });
+
+  const PEOPLE = {
+    members: [
+      { id: 'M-0001', name: '김서연', email: 'seoyeon.kim@example.com', dept: '마케팅', status: 'active', created: 1_700_000_000, decided: 1_700_003_600 },
+      { id: 'M-0002', name: '이도윤', email: 'doyoon.lee@example.com', dept: '개발', status: 'active', created: 1_700_000_000, decided: 1_700_003_600 },
+    ],
+    pending: [{ id: 'M-0007', name: '오준서', email: 'junseo.oh@example.com', dept: '개발', status: 'pending', created: Math.floor(Date.now() / 1000) - 7200, decided: null }],
+  };
+  function membersServer() {
+    const state = structuredClone(PEOPLE);
+    const calls: { method: string; path: string }[] = [];
+    const handler = (url: string, init?: RequestInit) => {
+      const path = url.replace(/^https?:\/\/[^/]+/, '').replace(/^\/gw(?=\/)/, '');
+      if (!path.startsWith('/v1/members')) return undefined;
+      const method = init?.method ?? 'GET';
+      if (method !== 'GET') calls.push({ method, path });
+      const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
+      if (method === 'POST' && path.endsWith('/approve')) {
+        const m = state.pending.shift()!;
+        state.members.push({ ...m, status: 'active', decided: 1_700_009_999 });
+        return ok(m);
+      }
+      if (method === 'POST' && path.endsWith('/reject')) return ok(state.pending.shift());
+      if (method === 'DELETE') return ok(state.members.pop());
+      return ok(state);
+    };
+    return { handler, calls, state };
+  }
+
+  it('members: waiting requests come first, approve calls the real endpoint and the person moves to the members', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    window.history.replaceState(null, '', '#');
+    const user = userEvent.setup();
+    const srv = membersServer();
+    renderAt('/console/members', srv.handler);
+    expect(await screen.findByRole('tab', { name: /가입 승인/, selected: true })).toBeInTheDocument();
+    expect(screen.getByText('junseo.oh@example.com')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '오준서 가입 승인' }));
+    await waitFor(() => expect(srv.calls).toEqual([{ method: 'POST', path: '/v1/members/M-0007/approve' }]));
+    expect(await screen.findByText('기다리는 가입 신청이 없어요')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /구성원/ }));
+    expect(await screen.findByText('junseo.oh@example.com')).toBeInTheDocument();
+    window.history.replaceState(null, '', '#');
+  });
+
+  it('members: rejecting asks first; the member list can be searched and a person removed after a confirmation', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    window.history.replaceState(null, '', '#');
+    const user = userEvent.setup();
+    const srv = membersServer();
+    renderAt('/console/members', srv.handler);
+    await user.click(await screen.findByRole('button', { name: '오준서 가입 반려' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '반려' }));
+    await waitFor(() => expect(srv.calls.at(-1)).toEqual({ method: 'POST', path: '/v1/members/M-0007/reject' }));
+    await user.click(await screen.findByRole('tab', { name: /구성원/ }));
+    await user.type(await screen.findByLabelText('이름·메일 검색'), '도윤');
+    expect(screen.queryByText('seoyeon.kim@example.com')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '이도윤 구성원에서 빼기' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '빼기' }));
+    await waitFor(() => expect(srv.calls.at(-1)?.method).toBe('DELETE'));
+    window.history.replaceState(null, '', '#');
+  });
+
+  it('join: the public form sends name, mail and department and says it was received; a refusal is shown', async () => {
+    const user = userEvent.setup();
+    let body: unknown;
+    let fail = false;
+    renderAt('/join', (url, init) => {
+      if (!url.endsWith('/v1/members/join')) return undefined;
+      body = JSON.parse(String(init?.body));
+      return fail ? new Response(JSON.stringify({ error: { message: '이미 신청했거나 가입된 메일 주소예요' } }), { status: 409 }) : new Response(JSON.stringify({ id: 'M-0009', status: 'pending' }), { status: 200 });
+    });
+    await user.type(await screen.findByLabelText('이름'), '윤지아');
+    await user.type(screen.getByLabelText('회사 메일'), 'jia.yoon@example.com');
+    await user.type(screen.getByLabelText(/부서/), '마케팅');
+    fail = true;
+    await user.click(screen.getByRole('button', { name: '가입 신청' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('이미 신청했거나');
+    fail = false;
+    await user.click(screen.getByRole('button', { name: '가입 신청' }));
+    expect(await screen.findByText('신청했어요')).toBeInTheDocument();
+    expect(body).toEqual({ name: '윤지아', email: 'jia.yoon@example.com', dept: '마케팅' });
   });
 
   it('enables "변경 n건 적용" only after a basic rule changes', async () => {

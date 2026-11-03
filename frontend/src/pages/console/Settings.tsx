@@ -79,7 +79,7 @@ export function SettingsPage() {
   const unsaved: Partial<Record<TabId, boolean>> = useMemo(() => {
     if (!s || !draft) return {};
     const changed = (k: keyof SettingsValues) => s.values[k] !== draft[k];
-    return { general: (['response_scan', 'vault_ttl_minutes', 'once_valid_hours', 'keep_decided_days'] as const).some(changed), alerts: changed('notify_new_exception') };
+    return { general: (['response_scan', 'vault_ttl_minutes', 'once_valid_hours', 'keep_decided_days'] as const).some(changed), alerts: changed('notify_new_exception') || changed('notify_new_member') };
   }, [s, draft]);
   const refresh = (next: ServerSettings) => qc.setQueryData(qk.serverSettings, next);
   const fail = (e: unknown) => toast(errorMessage(e), 'error');
@@ -90,7 +90,7 @@ export function SettingsPage() {
   const makeKey = useMutation({ mutationFn: (name: string) => consoleApi.createKey(name), onError: fail });
   const revoke = useMutation({ mutationFn: (id: number) => consoleApi.revokeKey(id), onSuccess: () => (qc.invalidateQueries({ queryKey: qk.serverSettings }), toast('키를 폐기했어요')), onError: fail });
   const wipe = useMutation({
-    mutationFn: (which: 'audit' | 'exceptions') => (which === 'audit' ? gateway.clearAudit() : gateway.clearExceptions()),
+    mutationFn: (which: 'audit' | 'exceptions' | 'members') => (which === 'audit' ? gateway.clearAudit() : which === 'exceptions' ? gateway.clearExceptions() : gateway.clearMembers()),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['gw'] });
       toast(`${r.deleted}건을 지웠어요`);
@@ -155,12 +155,12 @@ export function SettingsPage() {
     if (ok) revoke.mutate(id);
   }
 
-  async function onWipe(which: 'audit' | 'exceptions') {
+  async function onWipe(which: 'audit' | 'exceptions' | 'members') {
     if (!s) return;
-    const n = which === 'audit' ? s.data.audit_events : s.data.exception_requests;
+    const n = which === 'audit' ? s.data.audit_events : which === 'exceptions' ? s.data.exception_requests : s.data.members;
     const ok = await confirm({
-      title: which === 'audit' ? '전송 기록 모두 지우기' : '예외 요청 모두 지우기',
-      body: `${n}건이 지워지고 되돌릴 수 없어요.${which === 'exceptions' ? ' 승인돼 있던 예외도 함께 사라져요.' : ''}`,
+      title: which === 'audit' ? '전송 기록 모두 지우기' : which === 'exceptions' ? '예외 요청 모두 지우기' : '구성원·가입 신청 모두 지우기',
+      body: `${n}건이 지워지고 되돌릴 수 없어요.${which === 'exceptions' ? ' 승인돼 있던 예외도 함께 사라져요.' : ''}${which === 'members' ? ' 가입 승인을 기다리던 신청도 함께 사라져요.' : ''}`,
       ok: '모두 지우기',
       danger: true,
     });
@@ -247,7 +247,7 @@ export function SettingsPage() {
             {show('slack') && (
             <section id="slack" className="card set-sec">
               <h2 className="ct">Slack 알림</h2>
-              <p className="sub">직원이 새 예외 요청을 보내면 Slack 채널로 알려 드려요. 요청 번호·항목·사이트·기간·사유만 가고, 입력한 글은 가지 않아요.</p>
+              <p className="sub">직원이 새 예외 요청이나 가입 신청을 보내면 Slack 채널로 알려 드려요. 번호·이름·항목·사이트·기간·사유처럼 처리에 필요한 것만 가고, 입력한 글은 가지 않아요.</p>
               <Row
                 title="연결 상태"
                 sub={s.slack.configured ? `보낼 곳: ${s.slack.host} · ${s.slack.source === 'console' ? '여기서 저장한 주소' : '서버 환경변수의 주소'} (주소 자체는 보안상 보여 드리지 않아요)` : 'Slack의 Incoming Webhook 주소를 넣으면 연결돼요'}
@@ -267,6 +267,9 @@ export function SettingsPage() {
               </Row>
               <Row title="새 예외 요청 알림" sub="끄면 주소는 그대로 두고 알림만 멈춰요 · 위쪽 '변경 저장'으로 적용돼요">
                 <Toggle on={draft.notify_new_exception} label="새 예외 요청 알림" onChange={(v) => setDraft({ ...draft, notify_new_exception: v })} />
+              </Row>
+              <Row title="새 가입 신청 알림" sub="직원이 가입을 신청하면 알려 줘요 · 위쪽 '변경 저장'으로 적용돼요">
+                <Toggle on={draft.notify_new_member} label="새 가입 신청 알림" onChange={(v) => setDraft({ ...draft, notify_new_member: v })} />
               </Row>
               <Row title="테스트 메시지" sub={s.slack.console_link ? '알림에 예외 요청 화면 링크가 함께 들어가요' : '연결이 잘 됐는지 채널에 한 줄 보내 봐요'}>
                 <button type="button" className="btn" disabled={!s.slack.configured || slackTest.isPending} onClick={() => slackTest.mutate()}>
@@ -332,6 +335,11 @@ export function SettingsPage() {
               </Row>
               <Row title="예외 요청" sub={`지금 ${s.data.exception_requests.toLocaleString('ko-KR')}건 · 승인돼 있던 예외도 함께 사라져요`}>
                 <button type="button" className="btn btn-d" disabled={s.data.exception_requests === 0 || wipe.isPending} onClick={() => onWipe('exceptions')}>
+                  모두 지우기
+                </button>
+              </Row>
+              <Row title="구성원 · 가입 신청" sub={`지금 ${s.data.members.toLocaleString('ko-KR')}건 · 승인을 기다리는 신청도 함께 사라져요`}>
+                <button type="button" className="btn btn-d" disabled={s.data.members === 0 || wipe.isPending} onClick={() => onWipe('members')}>
                   모두 지우기
                 </button>
               </Row>

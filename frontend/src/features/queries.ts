@@ -13,7 +13,7 @@ export const qk = {
   timeseries: (bucket: string, since: number) => ['gw', 'timeseries', bucket, since] as const,
   audit: (q: object) => ['gw', 'audit', q] as const,
   company: ['mock', 'company'] as const,
-  members: ['mock', 'members'] as const,
+  members: ['gw', 'members'] as const,
   policy: ['gw', 'policy'] as const,
   basicRules: ['gw', 'basicRules'] as const,
   exceptions: ['mock', 'exceptions'] as const,
@@ -33,13 +33,16 @@ export const useHealth = () =>
 export const useExceptions = () => useQuery({ queryKey: qk.exceptions, queryFn: consoleApi.exceptions, refetchInterval: 5_000 });
 export const useServerSettings = () => useQuery({ queryKey: qk.serverSettings, queryFn: consoleApi.serverSettings, retry: false });
 
+export const useMembers = () => useQuery({ queryKey: qk.members, queryFn: consoleApi.members, refetchInterval: 10_000 });
 export const useAnomalies = () => useQuery({ queryKey: qk.anomalies, queryFn: consoleApi.anomalies, refetchInterval: 15_000 });
 
 /** Counts for the sidebar badge and the overview: real exception requests waiting, and anomalies nobody has acknowledged. */
 export function usePendingCounts() {
   const exc = useExceptions();
   const anomalies = useAnomalies();
+  const members = useMembers();
   return {
+    members: members.data?.pending?.length ?? 0,
     exceptions: exc.data?.filter((e) => e.status === 'pending').length ?? 0,
     anomalies: anomalies.data?.filter((a) => !a.acked).length ?? 0,
   };

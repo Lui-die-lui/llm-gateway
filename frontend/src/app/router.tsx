@@ -9,6 +9,8 @@ import { LogsPage } from '../pages/console/Logs';
 import { ReportsPage } from '../pages/console/Reports';
 import { PolicyPage } from '../pages/console/Policy';
 import { BasicRulesPage } from '../pages/console/BasicRules';
+import { MembersPage } from '../pages/console/Members';
+import { JoinPage } from '../pages/portal/Join';
 import { SettingsPage } from '../pages/console/Settings';
 import { ExceptionsPage } from '../pages/console/Exceptions';
 import { PortalPage } from '../pages/portal/Portal';
@@ -32,10 +34,12 @@ export const routes = [
       { path: 'policy', element: <PolicyPage /> },
       { path: 'policy/basic', element: <BasicRulesPage /> },
       { path: 'exceptions', element: <ExceptionsPage /> },
+      { path: 'members', element: <MembersPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'token', element: <TokenPage /> },
     ],
   },
+  { path: '/join', element: <JoinPage /> },
   { path: '/me', element: <PortalPage /> },
   { path: '/me/request', element: <RequestPage /> },
   { path: '*', element: <Navigate to="/console" replace /> },
