@@ -192,3 +192,12 @@ const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
 | `POST /v1/anomalies/ack` `{id}` | 확인 처리. 같은 시간 구간의 같은 징후는 계속 확인됨으로 보입니다 |
 | `DELETE /v1/audit/events` | 전송 기록을 모두 지웁니다 → `{deleted}`. 되돌릴 수 없고 번호가 처음부터 다시 시작합니다 |
 | `DELETE /v1/exceptions` | 예외 요청을 모두 지웁니다 → `{deleted}`. 되돌릴 수 없습니다 |
+
+## 8. 서버 설정 보기와 Slack 알림 (관리자 토큰 필요)
+
+| 호출 | 설명 |
+|---|---|
+| `GET /v1/settings` | 서버의 실제 설정 상태(읽기 전용). `{upstream, protection, retention, slack}`. 접속 키·토큰·웹훅 주소는 내려가지 않고 있음/없음과 개수, 웹훅의 호스트 이름만 나갑니다 |
+| `POST /v1/settings/slack/test` | `SLACK_WEBHOOK_URL`로 테스트 한 줄을 보냅니다 → `{ok, message}`. 설정이 없으면 `ok:false` |
+
+새 예외 요청(`POST /v1/exceptions`)이 만들어지면 `SLACK_WEBHOOK_URL`이 있을 때 Slack으로 알림이 갑니다. 보내는 일은 요청과 따로 진행돼서 Slack이 느리거나 꺼져 있어도 요청은 그대로 성공합니다. 웹훅 주소는 `https://`만 받고, 이 PC에서 도는 수신 서버(`http://localhost`)만 예외로 받습니다.
