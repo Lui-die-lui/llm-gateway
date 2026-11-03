@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import audit, company_policy, exception_requests, policy, rules_catalog, sessions, upstream
+from . import audit, company_policy, exception_requests, notify, policy, rules_catalog, sessions, upstream
 from .evaluate import entity_examples, evaluate
 from .sanitizer import (
     ResponseBlocked,
@@ -170,6 +170,36 @@ def config():
         "admin_protected": bool(os.getenv("GATEWAY_ADMIN_TOKEN")),
         "caller_auth": bool(api_keys()),
     }
+
+
+@app.get("/v1/settings", dependencies=[Depends(require_admin)])
+def settings_view():
+    """The real state of this server, read-only, for the console's settings page. Names and yes/no only: never a key, token or address."""
+    return {
+        "upstream": {"provider": upstream.provider_name("external"), "mock": upstream.mock(), "internal_route": upstream.internal_available()},
+        "protection": {
+            "caller_auth": bool(api_keys()),
+            "caller_keys": len(api_keys()),
+            "admin_protected": bool(os.getenv("GATEWAY_ADMIN_TOKEN")),
+            "response_scan": response_scan_enabled(),
+            "max_text": MAX_TEXT,
+            "cors_origins": [o for o in os.getenv("GATEWAY_CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o],
+        },
+        "retention": {
+            "vault_ttl_seconds": sessions.TTL,
+            "once_valid_seconds": exception_requests.ONCE_VALID_SECONDS,
+            "decided_keep_days": exception_requests.KEEP_DECIDED_DAYS,
+            "stores_prompt_text": False,
+        },
+        "slack": {"configured": notify.configured(), "host": notify.host(), "console_link": bool(os.getenv("GATEWAY_CONSOLE_URL"))},
+    }
+
+
+@app.post("/v1/settings/slack/test", dependencies=[Depends(require_admin)])
+def slack_test():
+    """Send one test line to the configured Slack webhook, so the admin sees at once whether it works."""
+    ok, message = notify.send(":white_check_mark: Gateway 연동 테스트 · 이 메시지가 보이면 새 예외 요청이 이 채널로 와요")
+    return {"ok": ok, "message": message}
 
 
 @app.get("/v1/industries")
@@ -562,7 +592,9 @@ def policy_builtin_put(body: BuiltinIn):
 
 @app.post("/v1/exceptions")
 def exception_create(body: exception_requests.ExceptionIn):
-    return exception_requests.create(body)
+    created = exception_requests.create(body)
+    notify.send_later(notify.new_exception_text(created))  # the admin hears about it in Slack when a webhook is set
+    return created
 
 
 @app.get("/v1/exceptions/mine")
