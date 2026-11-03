@@ -9,6 +9,8 @@
     "128": "icons/icon128.png"
   },
   "permissions": [
+    "alarms",
+    "notifications",
     "storage"
   ],
   "host_permissions": [
@@ -32,17 +34,18 @@
   "content_scripts": [
     {
       "matches": [
-        "https://chatgpt.com/*",
+        "https://*.oaiusercontent.com/*",
         "https://chat.openai.com/*",
+        "https://chatgpt.com/*",
         "https://claude.ai/*"
       ],
       "js": [
         "lib.js",
         "ui.js",
-        "mock/files.js",
         "content.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ]
 }

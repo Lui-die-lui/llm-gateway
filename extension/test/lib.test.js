@@ -181,3 +181,44 @@ test("a one-use approval nobody used lapses after a day; one an admin took back 
   assert.deepEqual(second.used, ["REQ-0010"]);
   assert.deepEqual(second.active, []);
 });
+
+/* ---------- the approval that is running (the countdown on the left of the prompt box) ---------- */
+const R = (over) => ({ id: "REQ-0001", status: "approved", entity: "이름표", site: "chatgpt.com", ttl: "1h", memo: "업무 확인", decided: NOW / 1000 - 60, used: false, revoked: false, ...over });
+
+test("activeGrant: a timed approval runs until its deadline, a one-use one until it is used or a day has passed", () => {
+  const timed = Gw.activeGrant(R(), NOW);
+  assert.equal(timed.end, (NOW / 1000 - 60 + 3600) * 1000);
+  assert.deepEqual([timed.once, timed.label, timed.entity, timed.site, timed.note], [false, "1시간", "이름표", "chatgpt.com", "업무 확인"]);
+  const once = Gw.activeGrant(R({ ttl: "1x" }), NOW);
+  assert.equal(once.once, true);
+  assert.equal(once.end, (NOW / 1000 - 60 + 86400) * 1000);
+});
+
+test("activeGrant: used, taken back, over, rejected and pending ones have no clock", () => {
+  assert.equal(Gw.activeGrant(R({ ttl: "1x", used: true }), NOW), null); // the clock goes away once it is used
+  assert.equal(Gw.activeGrant(R({ revoked: true }), NOW), null);
+  assert.equal(Gw.activeGrant(R({ decided: NOW / 1000 - 7200 }), NOW), null); // 1h approval decided 2h ago
+  assert.equal(Gw.activeGrant(R({ ttl: "1x", decided: NOW / 1000 - 90000 }), NOW), null); // one-use, unused for over a day
+  assert.equal(Gw.activeGrant(R({ status: "rejected" }), NOW), null);
+  assert.equal(Gw.activeGrant(R({ status: "pending", decided: null }), NOW), null);
+});
+
+test("nearestGrant: with several rules running, only the one that ends first is shown, and it says how many others there are", () => {
+  const list = [R({ id: "A", ttl: "24h" }), R({ id: "B", ttl: "1h" }), R({ id: "C", ttl: "1x" })];
+  const { active } = Gw.exceptionNews(list, { A: "approved", B: "approved", C: "approved" }, NOW);
+  assert.equal(active.length, 3);
+  const one = Gw.nearestGrant(active, NOW);
+  assert.equal(one.id, "B");
+  assert.equal(one.others, 2);
+  assert.equal(Gw.nearestGrant([], NOW), null);
+  // when the nearest one is used up, the next one takes over
+  const after = Gw.exceptionNews([R({ id: "A", ttl: "24h" }), R({ id: "B", ttl: "1x", used: true })], { A: "approved", B: "approved" }, NOW).active;
+  assert.equal(Gw.nearestGrant(after, NOW).id, "A");
+});
+
+test("restorePlaceholders: puts back what this tab sent and leaves unknown placeholders alone", () => {
+  const map = { "[사람_1]": "홍길동", "[이메일_1]": "kim@corp.co.kr" };
+  assert.equal(Gw.restorePlaceholders("받는 사람: [이메일_1] / [사람_1] 님 / [사람_9]", map), "받는 사람: kim@corp.co.kr / 홍길동 님 / [사람_9]");
+  assert.equal(Gw.restorePlaceholders("그대로", map), "그대로");
+  assert.equal(Gw.restorePlaceholders("[constructor_1] [toString_1]", map), "[constructor_1] [toString_1]"); // not fooled by object property names
+});

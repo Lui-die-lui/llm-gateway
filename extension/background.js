@@ -5,7 +5,7 @@
 if (typeof importScripts === "function") importScripts("lib.js"); // the dev page loads lib.js with a <script> tag instead
 
 const DEFAULT_GATEWAY = "http://localhost:8000";
-const DEFAULTS = { enabled: true, industries: [], portalUrl: "", demoFiles: false, hint: true };
+const DEFAULTS = { enabled: true, industries: [], hint: true };
 
 async function gatewayUrl() {
   const { gatewayUrl: url } = await chrome.storage.local.get({ gatewayUrl: DEFAULT_GATEWAY });
@@ -51,6 +51,8 @@ const siteOf = (url) => {
 const vaultKey = (tabId) => `vault:${tabId}`;
 const countKey = (tabId) => `count:${tabId}`;
 const aliasKey = (tabId) => `alias:${tabId}`;
+const origKey = (tabId) => `orig:${tabId}`;
+const ORIG_TTL = 60 * 60 * 1000; // the originals of what this tab sent are kept for an hour (session storage: memory only)
 
 /* ---------- toolbar badge: count when connected, "!" when the gateway is down, "OFF" when switched off ---------- */
 async function paintBadge(tabId) {
@@ -123,12 +125,31 @@ function exceptionNews() {
   return run;
 }
 
+// A chat page that is in front checks for answers every few seconds and shows them as a popup in the page. When none is (the
+// person is in another tab or window), the same answers arrive as a system notification instead, so they are never missed.
+let lastPagePoll = 0;
+const NOTE_TITLE = { approved: "예외 요청이 승인됐어요", rejected: "예외 요청이 반려됐어요", revoked: "예외 승인이 회수됐어요" };
+async function notifyInBackground() {
+  if (Date.now() - lastPagePoll < 45_000) return; // a visible page will show it
+  const r = await exceptionNews();
+  for (const n of r.news ?? []) {
+    chrome.notifications?.create(`exc-${n.id}-${Date.now()}`, {
+      type: "basic",
+      iconUrl: "icons/icon128.png",
+      title: NOTE_TITLE[n.kind] || "예외 요청 결과",
+      message: n.note ? `${n.text}\n관리자 메모: ${n.note}` : n.text,
+    });
+  }
+}
+chrome.alarms?.create("exception-answers", { periodInMinutes: 0.5 });
+chrome.alarms?.onAlarm.addListener((a) => a.name === "exception-answers" && notifyInBackground().catch(() => {}));
+
 async function settings(tabId) {
   const s = await chrome.storage.local.get(DEFAULTS);
   const gw = await gatewayUrl();
-  const base = Gw.portalBase(gw, s.portalUrl);
+  const base = Gw.portalBase(gw);
   const cid = encodeURIComponent(await clientId());
-  return { enabled: s.enabled, industries: s.industries, gatewayUrl: gw, portalUrl: `${base}/me?cid=${cid}`, requestUrl: `${base}/me/request?cid=${cid}`, demoFiles: !!s.demoFiles, hint: s.hint !== false, tabId };
+  return { enabled: s.enabled, industries: s.industries, gatewayUrl: gw, portalUrl: `${base}/me?cid=${cid}`, requestUrl: `${base}/me/request?cid=${cid}`, hint: s.hint !== false, tabId };
 }
 
 async function analyze(text, site) {
@@ -163,12 +184,30 @@ async function sanitize(text, tabId, site) {
 // Registered replacement words are swapped back here first, then the gateway restores the [유형_n] placeholders.
 async function restore(text, tabId) {
   const aliasMap = (await chrome.storage.session.get(aliasKey(tabId)))[aliasKey(tabId)] || {};
-  const withAliases = Gw.restoreAliases(text, aliasMap);
+  // 1) what this tab remembers (works without the gateway), 2) registered replacement words, 3) the gateway's vault for the rest
+  const local = Gw.restorePlaceholders(Gw.restoreAliases(text, aliasMap), await originals(tabId));
+  if (!Gw.PLACEHOLDER.test(local)) return local !== text ? { ok: true, status: 200, data: { text: local } } : { ok: false, status: 404, data: {} };
   const vaultId = (await chrome.storage.session.get(vaultKey(tabId)))[vaultKey(tabId)];
-  if (!vaultId) return withAliases !== text ? { ok: true, status: 200, data: { text: withAliases } } : { ok: false, status: 404, data: {} };
-  const res = await call("/v1/restore", { vault_id: vaultId, text: withAliases });
-  if (res.status === 404) return { ok: false, status: 404, data: { text: withAliases } }; // 30 minutes passed
+  if (!vaultId) return local !== text ? { ok: true, status: 200, data: { text: local } } : { ok: false, status: 404, data: {} };
+  const res = await call("/v1/restore", { vault_id: vaultId, text: local });
+  if (res.status === 404) return local !== text ? { ok: true, status: 200, data: { text: local } } : { ok: false, status: 404, data: {} }; // vault gone
   return res;
+}
+
+// What this tab replaced, so the answer can be restored even when the gateway has forgotten the vault (restart, 30 min idle).
+// Memory only (chrome.storage.session): never written to disk, gone when the browser closes, never handed to the web page.
+async function rememberOriginals(map, tabId) {
+  const now = Date.now();
+  const cur = (await chrome.storage.session.get(origKey(tabId)))[origKey(tabId)] || {};
+  const fresh = Object.fromEntries(Object.entries(cur).filter(([, v]) => now - v.t < ORIG_TTL));
+  for (const [ph, original] of Object.entries(map)) fresh[ph] = { o: original, t: now };
+  await chrome.storage.session.set({ [origKey(tabId)]: fresh });
+  return { ok: true };
+}
+async function originals(tabId) {
+  const now = Date.now();
+  const cur = (await chrome.storage.session.get(origKey(tabId)))[origKey(tabId)] || {};
+  return Object.fromEntries(Object.entries(cur).filter(([, v]) => now - v.t < ORIG_TTL).map(([ph, v]) => [ph, v.o]));
 }
 
 async function rememberAliases(map, tabId) {
@@ -194,12 +233,13 @@ async function handle(msg, tabId, site) {
     case "sanitize": return sanitize(msg.text, tabId, site);
     case "restore": return restore(msg.text, tabId);
     case "rememberAliases": return rememberAliases(msg.map || {}, tabId);
+    case "rememberOriginals": return rememberOriginals(msg.map || {}, tabId);
     case "industries": return call("/v1/industries");
     case "rules": return call("/v1/rules/builtin");
     case "status": return status();
     case "clientId": return { id: await clientId() };
     case "exceptions": return call(await mineUrl());
-    case "exceptionNews": return exceptionNews();
+    case "exceptionNews": lastPagePoll = Date.now(); return exceptionNews();
     case "stats": return getStats();
     case "statsAdd": await bumpStats(msg.delta || {}); return { ok: true };
     case "historyAdd": await addHistory({ site, ...msg.entry }); return { ok: true };
@@ -214,7 +254,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  chrome.storage.session.remove([vaultKey(tabId), countKey(tabId), aliasKey(tabId)]);
+  chrome.storage.session.remove([vaultKey(tabId), countKey(tabId), aliasKey(tabId), origKey(tabId)]);
 });
 
 chrome.storage.onChanged?.addListener((changes, area) => {

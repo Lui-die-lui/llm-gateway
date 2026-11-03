@@ -22,7 +22,8 @@
        ?industries=cosmetics  &enabled=0  &reply=echo|plain|fuzzy|newpii  &layout=changed (composer selector no longer matches) | arrow (send arrow selector no longer matches) -->
   <div id="app">
     <div id="log"></div>
-    <pre id="sent" data-gw-skip aria-label="외부로 나가는 문장"></pre>
+    <pre id="mailsent" data-gw-skip></pre>
+  <pre id="sent" data-gw-skip aria-label="외부로 나가는 문장"></pre>
   </div>
   <div id="composer-wrap">
     <div id="composer" contenteditable="true" role="textbox" aria-label="메시지"></div>
@@ -39,7 +40,6 @@
   <script src="../lib.js"></script>
   <script src="../background.js"></script>
   <script src="../ui.js"></script>
-  <script src="../mock/files.js"></script>
   <script>
     (() => {
     const reply = new URLSearchParams(location.search).get("reply") || "echo";
@@ -58,6 +58,7 @@
       composer.textContent = "";
       if (reply === "chatgpt") return chatgptReply(text);
       if (reply === "dil") return dilReply(text);
+      if (reply === "mail") return mailReply(text);
       setTimeout(() => {
         const bot = document.createElement("div");
         bot.className = "bot";
@@ -69,6 +70,35 @@
           : "답변: " + text; // a model that echoes what it was sent
         document.getElementById("log").append(bot);
       }, 200);
+    }
+    // A connected-app card (a mail draft): placeholders in plain text AND in text boxes, plus the card's own send button, and an
+    // iframe the way a sandboxed renderer draws one (?reply=mail&frame=1).
+    function mailReply(text) {
+      const ph = text.match(/\[[^\[\]\s]+_\d+\]/g) || [];
+      const root = document.createElement("div");
+      root.id = "mail";
+      const intro = document.createElement("p");
+      intro.textContent = "고객 " + (ph[0] || "") + "에게 보낼 메일을 준비했어요.";
+      const card = document.createElement("div");
+      card.className = "mailcard";
+      card.dataset.testid = "mailcard";
+      card.innerHTML = '<label>받는 사람 <input id="to" type="text"></label><div id="greet"></div><button id="mail-send" type="button">보내기</button>';
+      card.querySelector("#to").value = ph[1] || "";
+      card.querySelector("#greet").textContent = "안녕하세요, " + (ph[0] || "") + " 고객님.";
+      let sentCount = 0;
+      card.querySelector("#mail-send").addEventListener("click", () => {
+        sentCount++;
+        document.getElementById("mailsent").textContent = "SENT#" + sentCount + " to=" + card.querySelector("#to").value;
+      });
+      root.append(intro, card);
+      document.getElementById("log").append(root);
+      if (new URLSearchParams(location.search).has("frame")) {
+        const f = document.createElement("iframe");
+        f.id = "cardframe";
+        f.src = "frame.html?ph=" + encodeURIComponent(ph.join(","));
+        f.style.cssText = "width:420px;height:90px;border:1px solid #ccc";
+        root.append(f);
+      }
     }
     // Newer ChatGPT markup: the answer sits in a separate renderer root (no author-role attribute) and placeholders are in <code>.
     function dilReply(text) {
@@ -124,7 +154,6 @@
     });
     })();
   </script>
-  <input type="file" id="fake-file" multiple aria-label="파일 첨부" style="position:fixed;left:8px;bottom:8px">
   <script src="../content.js"></script>
 </body>
 </html>

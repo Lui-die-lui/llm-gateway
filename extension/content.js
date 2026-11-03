@@ -41,6 +41,49 @@
   let cfg = { enabled: true, gatewayUrl: "", portalUrl: "", requestUrl: "" };
 
   const bg = (type, fields) => chrome.runtime.sendMessage({ type, ...fields });
+
+  // Sites draw some of their cards in iframes (ChatGPT's sandboxed renderer). The same script runs there, but only to put the
+  // originals back: no prompt box, no send guard, no screens. The tab (and so the tab's vault) is the same, so the background
+  // answers as usual. Whether a given site's iframe is reachable depends on the site; the page-level restore does not depend on it.
+  if (window.top !== window) {
+    const seen = new WeakMap();
+    let busy = false;
+    const FRAME_FIELDS = "input:not([type=password]):not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=file]),textarea";
+    const restoreFrame = async () => {
+      if (busy || !document.body) return;
+      busy = true;
+      try {
+        const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        for (let n = w.nextNode(); n; n = w.nextNode()) if (PLACEHOLDER.test(n.nodeValue) && !n.parentElement?.closest("script,style,noscript")) nodes.push(n);
+        for (const n of nodes) {
+          const v = n.nodeValue;
+          if (seen.get(n) === v) continue;
+          seen.set(n, v);
+          const r = await bg("restore", { text: v });
+          if (r?.ok && r.data.text !== v) (n.nodeValue = r.data.text), seen.set(n, n.nodeValue), n.parentElement?.setAttribute("data-gw-restored", "1");
+        }
+        for (const el of document.querySelectorAll(FRAME_FIELDS)) {
+          if (!PLACEHOLDER.test(el.value) || seen.get(el) === el.value) continue;
+          seen.set(el, el.value);
+          const r = await bg("restore", { text: el.value });
+          if (r?.ok && r.data.text !== el.value) {
+            Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value").set.call(el, r.data.text);
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            seen.set(el, el.value);
+          }
+        }
+      } catch {
+        /* the extension was reloaded under this frame */
+      } finally {
+        busy = false;
+      }
+    };
+    let t;
+    new MutationObserver(() => (clearTimeout(t), (t = setTimeout(restoreFrame, 300)))).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    restoreFrame();
+    return;
+  }
   const find = (selectors) => {
     for (const s of selectors) {
       const el = document.querySelector(s);
@@ -144,8 +187,23 @@
   const toast = (t) => ui.toast(t);
 
   /* ---------- answers to exception requests ---------- */
-  // The person asks for an exception on the portal, an admin decides in the console, and the answer shows up here, on the chat
-  // page, with the time it lasts until. The background decides what is new, so each answer appears once.
+  // The person asks for an exception on the portal, an admin decides in the console, and the answer comes back here as a popup.
+  // The background decides what is new, so each answer appears once. While an approval is running, one chip on the LEFT of the
+  // prompt box counts down (the status chip is on the right): of all running approvals the one that ends first, and it goes away
+  // as soon as a one-use approval is used.
+  let active = []; // from the background: { id, entity, site, end (ms), once, label, note }
+  let shownGrant = null; // the approval the chip is showing: { id, end }
+  const TITLE = { approved: "예외 요청이 승인됐어요", rejected: "예외 요청이 반려됐어요", revoked: "예외 승인이 회수됐어요" };
+
+  function showNearestGrant() {
+    const now = Date.now();
+    if (shownGrant && shownGrant.end <= now && active.some((a) => a.id === shownGrant.id)) toast("예외로 허용된 시간이 끝났어요");
+    active = active.filter((a) => a.end > now);
+    const g = Gw.nearestGrant(active, now);
+    shownGrant = g ? { id: g.id, end: g.end } : null;
+    ui.grant(g);
+  }
+
   async function pollDecisions() {
     if (document.hidden) return;
     let r;
@@ -154,40 +212,15 @@
     } catch {
       return; // the extension was reloaded under this page
     }
-    for (const n of r?.news ?? []) {
-      ui.strip(`exception-${n.id}`, { tone: n.kind === "approved" ? "ok" : "warn", text: `예외 요청 · ${n.text}`, note: n.note }, 45_000);
-    }
-    for (const id of r?.used ?? []) ui.strip(`exception-${id}`, null); // spent: "1회만 허용돼요" must not stay up
+    for (const n of r?.news ?? []) ui.notify(`exception-${n.id}`, { tone: n.kind === "approved" ? "ok" : "warn", title: TITLE[n.kind] || "예외 요청 결과", text: n.text, note: n.note });
     if (r?.ok) {
       active = r.active ?? [];
-      renderActive();
+      showNearestGrant();
     }
   }
-
-  // Approvals that are running show a line that counts down, so the person always sees how long it lasts.
-  let active = []; // { id, entity, end (ms), note }
-  const shownActive = new Set();
-  function renderActive() {
-    if (document.hidden && !shownActive.size) return;
-    const now = Date.now();
-    const live = active.filter((a) => a.end > now);
-    for (const id of [...shownActive]) {
-      if (live.some((a) => `active-${a.id}` === id)) continue;
-      shownActive.delete(id);
-      ui.strip(id, null);
-      toast("예외로 허용된 시간이 끝났어요");
-    }
-    for (const a of live) {
-      const id = `active-${a.id}`;
-      const text = `예외 승인 중${a.entity ? ` · ${a.entity}` : ""} · 남은 시간 ${Gw.remaining(a.end - now)} (${Gw.clock(a.end, now)}까지)`;
-      if (shownActive.has(id) && ui.stripText(id, text)) continue;
-      shownActive.add(id);
-      ui.strip(id, { tone: "ok", text, note: a.note, sticky: true });
-    }
-  }
-  setInterval(renderActive, 1000);
+  setInterval(showNearestGrant, 1000);
   setTimeout(pollDecisions, 2500);
-  setInterval(pollDecisions, 20_000);
+  setInterval(pollDecisions, 15_000);
   document.addEventListener("visibilitychange", pollDecisions);
 
   /* ---------- state of the last sent message (for the change pill and the reply notes) ---------- */
@@ -219,7 +252,18 @@
   // submit button or is named send / submit / 보내기 / 전송. A button we do not recognise would let text out unchecked.
   const composerArea = () => {
     const c = findComposer();
-    return c ? c.closest("form") || c.parentElement?.parentElement?.parentElement || null : null;
+    if (!c) return null;
+    const form = c.closest("form");
+    if (form) return form;
+    // No form: the box and the few levels around it, but never a level that also holds the conversation (that is the whole page).
+    const conversation = [...site.reply, ...(site.mine || []), ...(site.around || [])].join(",");
+    let area = c.parentElement;
+    for (let i = 0; i < 2 && area?.parentElement; i++) {
+      const up = area.parentElement;
+      if (["BODY", "MAIN", "HTML"].includes(up.tagName) || up.querySelector(conversation)) break;
+      area = up;
+    }
+    return area;
   };
   const sendish = (b) => {
     if (!b || b.disabled === undefined || inOurUi(b)) return false;
@@ -256,10 +300,14 @@
   /** The gateway let something through under an approved exception: say that it was used, and what is left. */
   function noteExceptions(s) {
     for (const e of s?.data?.exceptions ?? []) {
-      ui.strip(`exception-${e.id}`, null);
+      if (e.once) {
+        active = active.filter((a) => a.id !== e.id); // used up: its clock goes away right now, not at the next check
+        showNearestGrant();
+      }
       const text = e.once ? `예외 ${e.id} · 1회 허용을 사용했어요 · 이 승인은 끝났어요` : `예외 ${e.id} · 허용된 항목을 그대로 보냈어요 · 남은 시간 ${Gw.remaining((e.left ?? 0) * 1000)}`;
       ui.strip(`exception-used-${e.id}`, { tone: "ok", text }, 8000);
     }
+    if (s?.data?.exceptions?.length) setTimeout(pollDecisions, 1200);
   }
 
   const kindOf = (label, keepable) => (keepable.has(label) ? "공통 개인정보" : Gw.CRITICAL.has(label) ? "보안 정보" : "영업기밀");
@@ -355,6 +403,11 @@
       outText = out.text;
       changed = out.changed;
       if (Object.keys(out.aliasMap).length) await bg("rememberAliases", { map: out.aliasMap });
+      const orig = {};
+      paired.forEach((it, i) => {
+        if (choices[i] === "ph" && it.placeholder) orig[it.placeholder] = it.original;
+      });
+      if (Object.keys(orig).length) await bg("rememberOriginals", { map: orig });
       const shown = out.parts.filter((p) => p.how);
       entries = paired.map((it, i) => ({
         masked: Gw.maskValue(it.original, it.label),
@@ -364,6 +417,7 @@
         st: shown[i].how === "keep" ? "원문 전송" : "전송됨",
       }));
     } else if (paired) {
+      await bg("rememberOriginals", { map: Object.fromEntries(paired.filter((it) => it.placeholder).map((it) => [it.placeholder, it.original])) });
       entries = paired.map((it) => ({ masked: Gw.maskValue(it.original, it.label), to: it.placeholder, how: "ph", meta: `${it.label} · 자리표시자`, st: "전송됨" }));
     }
 
@@ -436,6 +490,32 @@
     true,
   );
 
+  /* ---------- sending from a card that shows restored values (a mail draft, a form) ---------- */
+  // Showing the originals on screen does not change what the site itself holds behind the card. Before a card's own send button
+  // goes through, say so once and let the person check the recipient and the text.
+  let cardBypass = false;
+  const CARD_SEND = /보내기|발송|전송|전달|\bsend\b|\bsubmit\b/i;
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (cardBypass || inOurUi(e.target)) return;
+      const btn = e.target.closest?.('button,[role="button"]');
+      if (!btn || sendish(btn) || !CARD_SEND.test(`${btn.textContent} ${btn.getAttribute("aria-label") ?? ""}`)) return;
+      let card = btn.parentElement;
+      for (let i = 0; card && i < 8 && !card.querySelector("[data-gw-restored]"); i++) card = card.parentElement;
+      if (!card?.querySelector("[data-gw-restored]") || card.querySelector(site.composer.join(","))) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      ui.cardSend().then((answer) => {
+        if (answer !== "go") return;
+        cardBypass = true;
+        btn.click();
+        cardBypass = false;
+      });
+    },
+    true,
+  );
+
   /* ---------- live check while typing (chip above the composer) ---------- */
   let scanTimer;
   let scanSeq = 0;
@@ -492,39 +572,8 @@
   bg("settings").then((s) => {
     cfg = s;
     offStrip(s.enabled);
-    if (s.demoFiles) startFileDemo();
   });
 
-  // DEMO ONLY (mock/files.js): with the flag on, files are held back from the site and a made-up inspection is shown.
-  // Without the flag none of this runs and files go to the site as before.
-  function startFileDemo() {
-    if (!self.GwMockFiles) return;
-    const demo = self.GwMockFiles.install(ui);
-    const take = (files) => {
-      const list = [...files];
-      if (list.length) demo.inspect(list);
-    };
-    const stop = (e) => (e.preventDefault(), e.stopPropagation(), e.stopImmediatePropagation());
-    document.addEventListener("dragover", (e) => e.dataTransfer?.types?.includes("Files") && e.preventDefault(), true);
-    document.addEventListener("drop", (e) => {
-      if (!e.dataTransfer?.files?.length) return;
-      stop(e);
-      take(e.dataTransfer.files);
-    }, true);
-    document.addEventListener("change", (e) => {
-      const t = e.target;
-      if (!(t instanceof HTMLInputElement) || t.type !== "file" || !t.files.length) return;
-      stop(e);
-      const files = [...t.files];
-      t.value = "";
-      take(files);
-    }, true);
-    document.addEventListener("paste", (e) => {
-      if (!e.clipboardData?.files?.length) return;
-      stop(e);
-      take(e.clipboardData.files);
-    }, true);
-  }
   document.addEventListener(
     "focusin",
     (e) => {
@@ -553,6 +602,34 @@
   };
   const skipEl = (el) => !el || inOurUi(el) || !!el.closest("textarea,[contenteditable=true],script,style,noscript,[data-gw-skip]");
 
+  // Cards the site draws (a mail draft, a form) can hold the placeholders in text boxes instead of plain text. Fill those with the
+  // originals too, the way a person would have typed them, so what they see (and what the card sends from its own fields) is real.
+  const FIELDS = "input:not([type=password]):not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=file]),textarea";
+  const askedField = new WeakMap();
+  function setFieldValue(el, value) {
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value").set.call(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  async function restoreFields() {
+    let n = 0;
+    const form = findComposer()?.closest("form"); // the prompt box's own form only: the looser "area" would swallow the whole page
+    for (const el of document.querySelectorAll(FIELDS)) {
+      const v = el.value;
+      if (!v || !PLACEHOLDER.test(v) || askedField.get(el) === v) continue;
+      if (inOurUi(el) || el.matches?.(site.composer.join(",")) || el.closest(site.composer.join(",")) || form?.contains(el) || el.closest("[data-gw-skip]")) continue;
+      askedField.set(el, v);
+      const res = await bg("restore", { text: v });
+      if (res.ok && res.data.text !== v) {
+        setFieldValue(el, res.data.text);
+        askedField.set(el, res.data.text);
+        el.setAttribute("data-gw-restored", "1");
+        n++;
+      }
+    }
+    return n;
+  }
+
   async function restoreReplies() {
     let restored = 0;
     let expired = false;
@@ -577,10 +654,14 @@
           node.nodeValue = res.data.text;
           asked.set(node, node.nodeValue);
           wrote.add(node);
-          if (isReply) restored++;
+          if (isReply) {
+            restored++;
+            el.setAttribute("data-gw-restored", "1"); // a card showing originals the site itself still holds as placeholders
+          }
         } else if (res.status === 404 && isReply) expired = true;
       }
     }
+    restored += await restoreFields();
     // Misspelled placeholders are only looked for inside answers we can positively identify.
     for (const root of document.querySelectorAll([...site.reply, ...(site.around || [])].join(","))) {
       const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);

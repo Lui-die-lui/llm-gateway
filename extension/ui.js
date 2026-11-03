@@ -11,6 +11,8 @@
     wifiOff: '<path d="M2 8.8a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 20h.01M3 3l18 18"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
     close: '<path d="M18 6 6 18M6 6l12 12"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"/>',
   };
   const icon = (name, size = 16) => {
     const span = document.createElement("span");
@@ -73,6 +75,32 @@ button{font:inherit;color:inherit}
 .drawer a{font-size:12.5px;font-weight:600;color:#1D4ED8}
 .ok-st{color:#047857;font-weight:600;font-size:11px}.warn-st{color:#B45309;font-weight:600;font-size:11px}
 
+/* left of the prompt box: how long an approved exception still lasts (the status chip lives on the right) */
+.dockL{position:fixed;display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-width:min(380px,calc(100vw - 24px));pointer-events:none}
+.dockL>*{pointer-events:auto}
+.gchip{display:flex;align-items:center;gap:8px;border:1px solid #fff;border-radius:999px;padding:6px 14px 6px 8px;min-height:36px;font-size:12.5px;font-weight:600;cursor:pointer;background:rgba(236,253,245,.96);color:#065F46;box-shadow:0 10px 26px -14px rgba(15,26,43,.5)}
+.gchip:hover{border-color:rgba(15,26,43,.25)}
+.gchip.warn{background:rgba(255,247,237,.98);color:#92400E}
+.gchip .gi{width:22px;height:22px;border-radius:50%;background:rgba(4,120,87,.14);display:grid;place-items:center;flex:0 0 auto}
+.gchip.warn .gi{background:rgba(180,83,9,.16)}
+.gchip .gt{font-variant-numeric:tabular-nums}
+.gcard{width:min(340px,calc(100vw - 24px));border-radius:20px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;background:rgba(255,255,255,.97);box-shadow:0 24px 50px -22px rgba(15,26,43,.5);animation:rise .18s cubic-bezier(.22,1,.36,1)}
+.gcard h3{margin:0;font-size:14px;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.gcard dl{margin:0;display:grid;grid-template-columns:76px minmax(0,1fr);gap:6px 10px;font-size:12.5px}
+.gcard dt{color:#5F6B7D}.gcard dd{margin:0;overflow-wrap:anywhere}
+.gcard .why{font-size:12px;line-height:1.6;color:#4A5568;background:#F7F8FB;border-radius:12px;padding:8px 10px}
+.gcard .more{font-size:11.5px;color:#5F6B7D}
+
+/* popups for answers to exception requests (top right of the page) */
+.notices{position:fixed;top:16px;right:16px;display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 32px));pointer-events:none}
+.notices>*{pointer-events:auto}
+.ncard{display:flex;gap:12px;align-items:flex-start;border-radius:18px;padding:14px 12px 14px 14px;background:rgba(255,255,255,.97);border:1px solid #fff;box-shadow:0 24px 50px -22px rgba(15,26,43,.55);animation:rise .22s cubic-bezier(.22,1,.36,1)}
+.ncard .ni{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;flex:0 0 auto}
+.ncard.tone-ok .ni{background:rgba(16,185,129,.14);color:#047857}.ncard.tone-warn .ni{background:rgba(217,119,6,.14);color:#B45309}.ncard.tone-info .ni{background:rgba(37,99,235,.12);color:#1D4ED8}
+.ncard .nb{flex:1;min-width:0}.ncard b{display:block;font-size:14px;margin-bottom:2px}
+.ncard p{margin:0;font-size:12.5px;line-height:1.6;color:#4A5568}.ncard .nn{margin-top:6px;padding:6px 10px;border-radius:10px;background:#F7F8FB;color:#0F1A2B}
+@media (prefers-reduced-motion:reduce){.gcard,.ncard{animation:none}}
+
 /* chips inside text */
 .ph{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-size:.92em;color:#1D4ED8;background:rgba(37,99,235,.09);border-radius:5px;padding:0 4px}
 .al{color:#065F46;background:rgba(16,185,129,.12);border-radius:5px;padding:0 4px;font-weight:600}
@@ -121,7 +149,9 @@ button{font:inherit;color:inherit}
     shadow.append(h("style", { text: CSS }));
     const layer = h("div", { class: "layer" });
     const dock = h("div", { class: "dock", "data-testid": "gw-dock" });
-    layer.append(dock);
+    const dockL = h("div", { class: "dockL", "data-testid": "gw-dock-left" });
+    const notices = h("div", { class: "notices", "data-testid": "gw-notices", "aria-live": "polite" });
+    layer.append(dock, dockL, notices);
     shadow.append(layer);
     // Keys typed inside our screens must not reach the page's own shortcuts.
     for (const ev of ["keydown", "keyup", "keypress"]) layer.addEventListener(ev, (e) => e.stopPropagation());
@@ -139,11 +169,13 @@ button{font:inherit;color:inherit}
       const bottom = r ? Math.max(12, window.innerHeight - r.top + 10) : 96;
       dock.style.right = `${right}px`;
       dock.style.bottom = `${bottom}px`;
+      dockL.style.left = `${r ? Math.max(12, r.left + 4) : 20}px`;
+      dockL.style.bottom = `${bottom}px`;
     }
     place();
     const tick = setInterval(() => {
       mount();
-      if (dock.childElementCount) place();
+      if (dock.childElementCount || dockL.childElementCount) place();
     }, 400);
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
@@ -198,6 +230,85 @@ button{font:inherit;color:inherit}
       const main = slots.strips.get(id)?.querySelector(".main");
       if (main && main.textContent !== text) main.textContent = text;
       return !!main;
+    }
+
+    /* ---------- approved exception: one chip on the left, the one that ends first ---------- */
+    let grantNow = null;
+    let grantOpen = false;
+    let grantTimer;
+    const grantLine = (g, now) => `${g.once ? "1회 허용 · " : ""}남은 시간 ${root.Gw.remaining(g.end - now)}`;
+    function renderGrant() {
+      if (!grantNow) {
+        clearInterval(grantTimer);
+        grantTimer = null;
+        grantOpen = false;
+        return dockL.replaceChildren();
+      }
+      const g = grantNow;
+      const now = Date.now();
+      const warn = g.end - now < 5 * 60_000;
+      const chip = h(
+        "button",
+        { type: "button", class: `gchip${warn ? " warn" : ""}`, "aria-expanded": String(grantOpen), "aria-label": "예외 승인 남은 시간, 눌러서 자세히 보기", "data-testid": "gw-grant-chip", onclick: () => ((grantOpen = !grantOpen), renderGrant()) },
+        h("span", { class: "gi" }, icon("clock", 13)),
+        h("span", { class: "gt", "data-testid": "gw-grant-time", text: grantLine(g, now) }),
+      );
+      const nodes = [chip];
+      if (grantOpen) {
+        const row = (k, v) => [h("dt", { text: k }), h("dd", { text: v })];
+        nodes.unshift(
+          h(
+            "section",
+            { class: "gcard", role: "region", "aria-label": "예외 승인 자세히", "data-testid": "gw-grant-card" },
+            h("h3", {}, "예외 승인 중", h("button", { type: "button", class: "xbtn", "aria-label": "닫기", onclick: () => ((grantOpen = false), renderGrant()) }, icon("close", 14))),
+            h(
+              "dl",
+              {},
+              row("허용 항목", g.entity || "항목 미지정"),
+              row("적용 사이트", g.site || "모든 사이트"),
+              row("허용 기간", g.once ? "1회만" : `${g.label} · ${root.Gw.clock(g.end, now)}까지`),
+              g.once ? row("안 쓰면", `${root.Gw.clock(g.end, now)}에 끝나요`) : null,
+              g.note ? row("관리자 메모", g.note) : null,
+            ),
+            h("p", { class: "why", text: `이 항목은 위 사이트에서 가려지지 않고 그대로 보내져요. ${g.once ? "한 번 쓰면 바로 사라지고" : "시간이 끝나면"} 자동으로 다시 보호돼요.` }),
+            g.others ? h("p", { class: "more", text: `다른 승인 ${g.others}건이 더 있어요 · 가장 먼저 끝나는 것만 보여 드려요` }) : null,
+          ),
+        );
+      }
+      dockL.replaceChildren(...nodes);
+      place();
+    }
+    /** Show the approval that ends first (null hides it). The second counts down by itself. */
+    function grant(g) {
+      const changed = !g || !grantNow || g.id !== grantNow.id || g.end !== grantNow.end || g.others !== grantNow.others;
+      grantNow = g || null;
+      if (!grantNow) return renderGrant();
+      if (changed) renderGrant();
+      grantTimer ??= setInterval(() => {
+        if (!grantNow) return;
+        if (grantNow.end <= Date.now()) return grant(null);
+        const t = dockL.querySelector("[data-testid=gw-grant-time]");
+        if (t) t.textContent = grantLine(grantNow, Date.now());
+        const warn = grantNow.end - Date.now() < 5 * 60_000;
+        dockL.querySelector(".gchip")?.classList.toggle("warn", warn);
+      }, 1000);
+    }
+
+    /* ---------- popup for an answer to an exception request ---------- */
+    const noticeTimers = new Map();
+    function notify(id, spec, ms = 60_000) {
+      clearTimeout(noticeTimers.get(id));
+      notices.querySelector(`[data-nid="${id}"]`)?.remove();
+      if (!spec) return;
+      const card = h(
+        "div",
+        { class: `ncard tone-${spec.tone || "info"}`, role: spec.tone === "warn" ? "alert" : "status", "data-nid": id, "data-testid": `gw-notice-${id}` },
+        h("span", { class: "ni" }, icon(spec.tone === "ok" ? "check" : spec.tone === "warn" ? "shieldAlert" : "bell", 18)),
+        h("div", { class: "nb" }, h("b", { text: spec.title }), h("p", { text: spec.text }), spec.note ? h("p", { class: "nn", text: `관리자 메모 · ${spec.note}` }) : null),
+        h("button", { type: "button", class: "xbtn", "aria-label": "닫기", onclick: () => notify(id, null) }, icon("close", 14)),
+      );
+      notices.prepend(card);
+      if (ms) noticeTimers.set(id, setTimeout(() => notify(id, null), ms));
     }
 
     /* ---------- toast ---------- */
@@ -420,6 +531,30 @@ button{font:inherit;color:inherit}
       );
     }
 
+    /* ---------- a card (mail draft, form) that shows restored values is about to send ---------- */
+    function cardSend() {
+      return modal(
+        (done) =>
+          h(
+            "section",
+            { class: "dlg sm", role: "alertdialog", "aria-modal": "true", "aria-labelledby": "gw-card-title", "aria-describedby": "gw-card-desc", "data-testid": "gw-cardsend" },
+            h(
+              "div",
+              { class: "head" },
+              h("span", { class: "badge warn" }, icon("shieldAlert", 20)),
+              h("div", {}, h("h2", { id: "gw-card-title", text: "보내기 전에 한 번만 확인해 주세요" }), h("p", { id: "gw-card-desc", text: "이 카드에는 가려 둔 값을 원래대로 보여 주고 있어요. 서비스에 따라 실제로는 [이메일_1] 같은 가려진 값이 그대로 나갈 수 있어요. 받는 사람과 내용을 확인해 주세요." })),
+            ),
+            h(
+              "div",
+              { class: "btns" },
+              h("button", { type: "button", class: "btn p", "data-autofocus": "1", text: "확인했어요, 보내기", onclick: () => done("go") }),
+              h("button", { type: "button", class: "btn", text: "취소", onclick: () => done("cancel") }),
+            ),
+          ),
+        { onEscape: "cancel" },
+      );
+    }
+
     /* ---------- U2-B gateway unreachable (fail closed) ---------- */
     function connection({ detail }) {
       return modal(
@@ -452,7 +587,7 @@ button{font:inherit;color:inherit}
       host.remove();
     }
 
-    return { chip, strip, stripText, toast, history, review, blocked, connection, place, destroy, host, shadow, h, icon, modal };
+    return { chip, strip, stripText, grant, notify, toast, history, review, blocked, cardSend, connection, place, destroy, host, shadow, h, icon, modal };
   }
 
   root.GwUI = { create, h, icon };

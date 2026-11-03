@@ -122,6 +122,11 @@
     return out;
   }
 
+  /** Put originals back for the placeholders this tab sent ([사람_1] -> 홍길동). Unknown placeholders stay as they are. */
+  function restorePlaceholders(text, map) {
+    return text.replace(PLACEHOLDER_ALL, (m) => (Object.prototype.hasOwnProperty.call(map, m) ? map[m] : m));
+  }
+
   /** Placeholders a model re-spelled: [{ raw: "[이메일 1]", fixed: "[이메일_1]" }]. */
   function findFuzzy(text) {
     const seen = new Set();
@@ -227,6 +232,24 @@
   }
 
   /**
+   * An approval that is letting something through right now, or null. A timed one ends at its deadline; a one-use one ends when it
+   * is used or, unused, a day after it was approved. Used, taken back and over ones are not active.
+   */
+  function activeGrant(req, now = Date.now()) {
+    if (req.status !== "approved" || req.revoked || req.used || !req.decided) return null;
+    const timed = approvalEnd(req);
+    const end = timed ?? Math.round((req.decided + ONCE_SECONDS) * 1000);
+    if (end <= now) return null;
+    return { id: req.id, entity: req.entity || "", site: req.site || "", end, once: timed === null, label: TTL_LABEL[req.ttl] ?? "1회", note: req.memo || "", decided: req.decided };
+  }
+
+  /** The one approval to show: of all that are running, the one that ends first. */
+  function nearestGrant(active, now = Date.now()) {
+    const live = (active || []).filter((a) => a.end > now).sort((a, b) => a.end - b.end);
+    return live.length ? { ...live[0], others: live.length - 1 } : null;
+  }
+
+  /**
    * From the list of my requests: what has not been told yet (`news`), the approvals still running (`active`), and the
    * updated record of what has been told (`told`: id -> status). Pure, so the background worker and the tests share it.
    */
@@ -240,12 +263,12 @@
       const d = describeDecision(r, now);
       if (d.kind !== "expired" && d.kind !== "used") news.push({ id: r.id, kind: d.kind, text: d.text, note: d.note }); // over before it was seen: nothing to say
     }
-    const active = list.map((r) => ({ id: r.id, entity: r.entity, end: approvalEnd(r), note: r.memo || "" })).filter((a) => a.end && a.end > now);
+    const active = list.map((r) => activeGrant(r, now)).filter(Boolean);
     const used = list.filter((r) => r.used || r.revoked).map((r) => r.id); // spent one-use approvals: the "1회만 허용돼요" line must go
     return { news, active, used, told };
   }
 
-  const api = { exceptionNews, makeClientId, approvalEnd, clock, remaining, describeDecision, TTL_LABEL, PLACEHOLDER, PLACEHOLDER_ALL, cps, maskValue, pairSpans, ALIASES, hasAlias, buildOutgoing, restoreAliases, findFuzzy, CRITICAL, keepableLabels, canKeep, dayKey, portalBase };
+  const api = { exceptionNews, activeGrant, nearestGrant, makeClientId, approvalEnd, clock, remaining, describeDecision, TTL_LABEL, PLACEHOLDER, PLACEHOLDER_ALL, cps, maskValue, pairSpans, ALIASES, hasAlias, buildOutgoing, restoreAliases, restorePlaceholders, findFuzzy, CRITICAL, keepableLabels, canKeep, dayKey, portalBase };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Gw = api;
 })(typeof self !== "undefined" ? self : this);
