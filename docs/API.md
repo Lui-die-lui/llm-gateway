@@ -209,3 +209,19 @@ const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
 설정은 `SETTINGS_DB`(기본 `data/settings.db`)에 저장됩니다. 접속 키는 환경변수 키와 콘솔에서 만든 키가 함께 유효합니다. 예외 요청의 응답에는 `once_seconds`(승인 뒤 쓰지 않은 1회 허용이 열려 있는 시간)가 들어 있어 확장이 서버와 같은 시간으로 셉니다.
 
 새 예외 요청(`POST /v1/exceptions`)이 만들어지면 웹훅이 있고 알림이 켜져 있을 때 Slack으로 알림이 갑니다(번호·요청자·항목·사이트·기간·사유만, 입력한 글은 아님). 알림은 요청과 따로 보내져서 Slack이 느리거나 꺼져 있어도 요청은 성공합니다.
+
+## 9. 구성원과 가입 신청
+
+회사 구성원 명단과 가입 승인입니다. 명단은 관리자가 관리하는 기록이고, 게이트웨이는 이것으로 사람을 구별하거나 막지 않습니다(게이트웨이가 아는 것은 브라우저뿐입니다). 비밀번호나 키는 받지도 저장하지도 않습니다.
+
+| 호출 | 설명 |
+|---|---|
+| `POST /v1/members/join` `{name, email, dept}` | **누구나** 가입을 신청합니다 → `{id, status:"pending"}`. 메일은 소문자로 비교하며 같은 메일은 409, 대기 100건이 넘으면 429. Slack 웹훅이 있고 알림이 켜져 있으면 알립니다 |
+| `GET /v1/members` | (관리자) `{members:[…], pending:[…]}` |
+| `POST /v1/members/{id}/approve` | (관리자) 가입 승인 |
+| `POST /v1/members/{id}/reject` | (관리자) 반려. 신청은 지워지고 다시 신청할 수 있습니다 |
+| `DELETE /v1/members/{id}` | (관리자) 구성원에서 뺍니다 |
+| `DELETE /v1/members` | (관리자) 구성원·신청을 모두 지웁니다(시연 전 정리). 되돌릴 수 없습니다 |
+
+승인·반려·삭제는 설정 화면의 변경 내역에 남습니다. 저장소는 `MEMBERS_DB`(기본 `data/members.db`)입니다. 시연 데이터(구성원 6명 + 대기 2명)는 `scripts/seed_presentation.py`가 이 경로로 만듭니다. 공개 신청 화면은 `/join`입니다.
+
