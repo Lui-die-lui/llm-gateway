@@ -5,7 +5,7 @@
 if (typeof importScripts === "function") importScripts("lib.js"); // the dev page loads lib.js with a <script> tag instead
 
 const DEFAULT_GATEWAY = "http://localhost:8000";
-const DEFAULTS = { enabled: true, industries: [], hint: true };
+const DEFAULTS = { enabled: true, industries: [], hint: true, timeFormat: "clock" };
 
 async function gatewayUrl() {
   const { gatewayUrl: url } = await chrome.storage.local.get({ gatewayUrl: DEFAULT_GATEWAY });
@@ -149,7 +149,22 @@ async function settings(tabId) {
   const gw = await gatewayUrl();
   const base = Gw.portalBase(gw);
   const cid = encodeURIComponent(await clientId());
-  return { enabled: s.enabled, industries: s.industries, gatewayUrl: gw, portalUrl: `${base}/me?cid=${cid}`, requestUrl: `${base}/me/request?cid=${cid}`, hint: s.hint !== false, tabId };
+  return { enabled: s.enabled, industries: s.industries, gatewayUrl: gw, portalUrl: `${base}/me?cid=${cid}`, requestUrl: `${base}/me/request?cid=${cid}`, hint: s.hint !== false, timeFormat: Gw.timeFormat(s.timeFormat), tabId };
+}
+
+/** An exception request sent from the in-page form: same record the console's request page makes. */
+async function requestException(r, site) {
+  const body = {
+    client_id: await clientId(),
+    requester: "",
+    entity: String(r.entity || "").slice(0, 100),
+    site: String(r.site || site || "").slice(0, 100),
+    reason: String(r.reason || "").trim(),
+    scope: ["1회", "1시간", "24시간"].includes(r.scope) ? r.scope : "1시간",
+  };
+  const res = await call("/v1/exceptions", body);
+  if (res.status === 401) return { ...res, message: "접속 키가 없거나 맞지 않아요 · 확장 팝업의 연결 설정에서 키를 확인해 주세요" };
+  return res;
 }
 
 async function analyze(text, site) {
@@ -240,6 +255,7 @@ async function handle(msg, tabId, site) {
     case "status": return status();
     case "clientId": return { id: await clientId() };
     case "exceptions": return call(await mineUrl());
+    case "requestException": return requestException(msg.request || {}, site);
     case "exceptionNews": lastPagePoll = Date.now(); return exceptionNews();
     case "stats": return getStats();
     case "statsAdd": await bumpStats(msg.delta || {}); return { ok: true };

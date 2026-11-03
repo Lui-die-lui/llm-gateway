@@ -38,7 +38,7 @@
   let armed = null; // text already checked and left in the box because there was no button to click: the next Enter passes untouched
   let armedAt = 0; // ...but only for 20 seconds and only while that exact text is still in the box
   let busy = false;
-  let cfg = { enabled: true, gatewayUrl: "", portalUrl: "", requestUrl: "" };
+  let cfg = { enabled: true, gatewayUrl: "", portalUrl: "", requestUrl: "", timeFormat: "clock" };
 
   // When the extension is reloaded or updated, the copy of this script already open in a tab is cut off from it: every call throws
   // "Extension context invalidated" and nothing it does can reach the gateway any more. It cannot be revived from inside the page,
@@ -221,13 +221,14 @@
   let shownGrant = null; // the approval the chip is showing: { id, end }
   const TITLE = { approved: "예외 요청이 승인됐어요", rejected: "예외 요청이 반려됐어요", revoked: "예외 승인이 회수됐어요" };
 
+  const timeFmt = () => Gw.timeFormat(cfg.timeFormat);
   function showNearestGrant() {
     const now = Date.now();
     if (shownGrant && shownGrant.end <= now && active.some((a) => a.id === shownGrant.id)) toast("예외로 허용된 시간이 끝났어요");
     active = active.filter((a) => a.end > now);
-    const g = Gw.nearestGrant(active, now);
-    shownGrant = g ? { id: g.id, end: g.end } : null;
-    ui.grant(g);
+    const list = Gw.liveGrants(active, now);
+    shownGrant = list.length ? { id: list[0].id, end: list[0].end } : null;
+    ui.grant(list, timeFmt());
   }
 
   async function pollDecisions() {
@@ -238,7 +239,7 @@
     } catch {
       return; // the extension was reloaded under this page
     }
-    for (const n of r?.news ?? []) ui.notify(`exception-${n.id}`, { tone: n.kind === "approved" ? "ok" : "warn", title: TITLE[n.kind] || "예외 요청 결과", text: n.text, note: n.note });
+    for (const n of r?.news ?? []) ui.notify(`exception-${n.id}`, { tone: n.kind === "approved" ? "ok" : "warn", title: TITLE[n.kind] || "예외 요청 결과", text: n.text, note: n.note }, n.kind === "approved" ? 7000 : 10_000);
     if (r?.ok) {
       active = r.active ?? [];
       showNearestGrant();
@@ -257,6 +258,25 @@
     const r = await bg("rules");
     keepableCache = { at: Date.now(), set: r.ok ? Gw.keepableLabels(r.data.groups) : new Set() };
     return keepableCache.set;
+  }
+
+  /** The exception request, made in a window on this page: the answer comes back through the same notices as ever. */
+  async function requestFlow(labels) {
+    const answer = await ui.requestForm({
+      labels,
+      site: location.hostname,
+      send: async (request) => {
+        const r = await bg("requestException", { request });
+        if (r.gone) return { ok: false, message: GONE_TEXT };
+        if (r.ok) return { ok: true };
+        if (r.message) return { ok: false, message: r.message };
+        if (r.status === 0) return { ok: false, message: "요청 서버에 연결할 수 없어요 · 잠시 뒤 다시 시도해 주세요" };
+        const detail = r.data?.error?.message || r.data?.detail?.[0]?.msg;
+        return { ok: false, message: `요청을 보내지 못했어요 (${r.status})${detail ? ` · ${String(detail).slice(0, 80)}` : ""}` };
+      },
+    });
+    if (answer === "sent") setTimeout(pollDecisions, 800);
+    return "close"; // back to the box with the text still in it
   }
 
   /** Gateway call that never silently continues: when it cannot be reached the user decides (retry / cancel). */
@@ -335,7 +355,7 @@
         active = active.filter((a) => a.id !== e.id); // used up: its clock goes away right now, not at the next check
         showNearestGrant();
       }
-      const text = e.once ? `예외 ${e.id} · 1회 허용을 사용했어요 · 이 승인은 끝났어요` : `예외 ${e.id} · 허용된 항목을 그대로 보냈어요 · 남은 시간 ${Gw.remaining((e.left ?? 0) * 1000)}`;
+      const text = e.once ? `예외 ${e.id} · 1회 허용을 사용했어요 · 이 승인은 끝났어요` : `예외 ${e.id} · 허용된 항목을 그대로 보냈어요 · 남은 시간 ${Gw.remaining((e.left ?? 0) * 1000, timeFmt())}`;
       ui.strip(`exception-used-${e.id}`, { tone: "ok", text }, 8000);
     }
     if (s?.data?.exceptions?.length) setTimeout(pollDecisions, 1200);
@@ -351,7 +371,8 @@
     if (!s) return;
     if (s.status === 403) {
       const labels = Object.keys(s.data?.error?.findings || {});
-      const choice = await ui.blocked({ labels, requestUrl: cfg.requestUrl, canSelect: false });
+      let choice = await ui.blocked({ labels, canRequest: true, canSelect: false });
+      if (choice === "request") choice = await requestFlow(labels);
       return choice === "close" ? box.focus() : undefined;
     }
     if (!s.ok) return toast(failText(s));
@@ -389,7 +410,9 @@
     if (stop.length || a.data.route === "block") {
       await bg("sanitize", { text }); // records the block in the audit log
       const first = stop.find((s) => s.action === "block") || stop[0];
-      const choice = await ui.blocked({ labels: [...new Set(stop.map((s) => s.label))], requestUrl: cfg.requestUrl, canSelect: !!first });
+      const kinds = [...new Set(stop.map((s) => s.label))];
+      let choice = await ui.blocked({ labels: kinds, canRequest: true, canSelect: !!first });
+      if (choice === "request") choice = await requestFlow(kinds);
       if (choice === "select" && first) selectRange(box, first.start, first.end);
       else box.focus();
       return;
@@ -600,6 +623,10 @@
     });
   }
   chrome.storage?.onChanged?.addListener((changes, area) => {
+    if (area === "local" && changes.timeFormat) {
+      cfg.timeFormat = Gw.timeFormat(changes.timeFormat.newValue);
+      showNearestGrant();
+    }
     if (area === "local" && changes.enabled) offStrip(changes.enabled.newValue !== false);
   });
   bg("settings").then((s) => {

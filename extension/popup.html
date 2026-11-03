@@ -54,6 +54,11 @@
         <label for="gw-key">접속 키 (회사에서 받은 경우)</label>
         <input id="gw-key" type="password" placeholder="gw_..." autocomplete="off" spellcheck="false">
         <label class="opt"><input type="checkbox" id="hint"><span>가린 자리 안내 문장 붙이기<small>없으면 AI가 [사람_1]을 빈칸으로 읽고 되물을 수 있어요</small></span></label>
+        <div class="lbl-s" id="tf-l">예외 승인 남은 시간 표시</div>
+        <div class="seg" role="radiogroup" aria-labelledby="tf-l">
+          <label><input type="radio" name="timeFormat" value="clock"><span>59:03</span></label>
+          <label><input type="radio" name="timeFormat" value="text"><span>59분 03초</span></label>
+        </div>
         <div class="lbl-s">이 탭 상태</div>
         <div id="page" class="hint" role="status">확인 중…</div>
         <div id="gw-msg" class="hint" role="status"></div>
