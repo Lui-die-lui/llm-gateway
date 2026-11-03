@@ -250,7 +250,7 @@
     if (req.used) return { kind: "used", text: `${what}요청의 ${label || "1회"} 허용은 사용을 마쳤어요`, note, end: null };
     if (end === null) {
       // one use, and a day to use it: after that it lapses (same as ONCE_VALID_SECONDS on the gateway)
-      const lapses = req.decided ? Math.round((req.decided + ONCE_SECONDS) * 1000) : null;
+      const lapses = req.decided ? Math.round((req.decided + (req.once_seconds || ONCE_SECONDS)) * 1000) : null;
       if (lapses !== null && lapses <= now) return { kind: "expired", text: `${what}요청은 승인됐지만 쓰지 않아 ${clock(lapses, now)}에 끝났어요`, note, end: lapses };
       return { kind: "approved", text: `${what}요청이 승인됐어요 · ${label || "1회"}만 허용돼요${lapses ? ` (${clock(lapses, now)}까지 안 쓰면 끝)` : ""}`, note, end: null };
     }
@@ -265,7 +265,7 @@
   function activeGrant(req, now = Date.now()) {
     if (req.status !== "approved" || req.revoked || req.used || !req.decided) return null;
     const timed = approvalEnd(req);
-    const end = timed ?? Math.round((req.decided + ONCE_SECONDS) * 1000);
+    const end = timed ?? Math.round((req.decided + (req.once_seconds || ONCE_SECONDS)) * 1000);
     if (end <= now) return null;
     return { id: req.id, entity: req.entity || "", site: req.site || "", end, once: timed === null, label: TTL_LABEL[req.ttl] ?? "1회", note: req.memo || "", decided: req.decided };
   }
