@@ -6,16 +6,22 @@ Vaults here expire after TTL seconds of inactivity and are never written to disk
 import secrets
 import time
 
+from . import settings
 from .vault import Vault
 
-TTL = 30 * 60
+TTL = 30 * 60  # the default; the admin can change it in the console
+
+
+def _ttl() -> int:
+    v = settings.override("vault_ttl_minutes")
+    return TTL if v is None else v * 60
 
 _store: dict[str, tuple[Vault, float]] = {}
 
 
 def create(vault: Vault) -> str:
     vault_id = secrets.token_urlsafe(16)
-    _store[vault_id] = (vault, time.monotonic() + TTL)
+    _store[vault_id] = (vault, time.monotonic() + _ttl())
     return vault_id
 
 
@@ -26,5 +32,5 @@ def get(vault_id: str) -> Vault | None:
     entry = _store.get(vault_id)
     if entry is None:
         return None
-    _store[vault_id] = (entry[0], now + TTL)  # sliding expiry
+    _store[vault_id] = (entry[0], now + _ttl())  # sliding expiry
     return entry[0]

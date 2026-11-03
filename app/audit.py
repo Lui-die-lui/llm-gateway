@@ -244,6 +244,11 @@ def events(
     return out, total
 
 
+def count() -> int:
+    with _lock:
+        return _db.execute("SELECT COUNT(*) FROM requests").fetchone()[0]
+
+
 def clear() -> int:
     """Delete every audit record (and the acknowledgements that refer to them). Returns how many requests were deleted."""
     with _lock:

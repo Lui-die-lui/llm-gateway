@@ -3,15 +3,16 @@ import os
 os.environ["AUDIT_DB"] = ":memory:"  # before app.main is imported
 os.environ["POLICY_DB"] = ":memory:"
 os.environ["EXCEPTIONS_DB"] = ":memory:"
+os.environ["SETTINGS_DB"] = ":memory:"
 
 import pytest
 
-from app import audit, company_policy, exception_requests
+from app import audit, company_policy, exception_requests, settings
 
 ENV_KEYS = [
     "UPSTREAM_MODE", "UPSTREAM_PROVIDER", "UPSTREAM_MODEL", "UPSTREAM_API_KEY", "UPSTREAM_BASE_URL",
     "INTERNAL_MODEL", "INTERNAL_BASE_URL", "RESPONSE_SCAN", "GATEWAY_ADMIN_TOKEN", "GATEWAY_API_KEYS", "SENSITIVE_KEYS",
-    "SLACK_WEBHOOK_URL", "GATEWAY_CONSOLE_URL",
+    "SLACK_WEBHOOK_URL", "GATEWAY_CONSOLE_URL", "SETTINGS_DB",
 ]
 
 
@@ -22,3 +23,4 @@ def clean_env(monkeypatch):
     audit.configure(":memory:")
     company_policy.configure(":memory:")
     exception_requests.configure(":memory:")
+    settings.configure(":memory:")

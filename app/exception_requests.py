@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from . import settings
 from .company_policy import PolicyError
 
 MAX_PENDING = 1000  # the submit endpoint is open to the portal, so cap what a stray caller can pile up (undecided requests only)
@@ -95,14 +96,30 @@ def _row(r: sqlite3.Row) -> dict:
         "decided": r["decided"],
         "used": bool(r["used"]),
         "revoked": bool(r["revoked"]),
+        "once_seconds": _once_seconds(),  # how long an unused one-use approval stays open (the admin can change it); the extension counts with this
     }
+
+
+def _keep_days() -> float:
+    v = settings.override("keep_decided_days")
+    return KEEP_DECIDED_DAYS if v is None else v
+
+
+def _once_seconds() -> int:
+    v = settings.override("once_valid_hours")
+    return ONCE_VALID_SECONDS if v is None else v * 3600
+
+
+def count() -> int:
+    with _lock:
+        return _db.execute("SELECT COUNT(*) FROM exception_requests").fetchone()[0]
 
 
 def create(body: ExceptionIn) -> dict:
     # Without a name, tell the people sharing a demo apart by the tail of their browser id.
     requester = body.requester.strip() or f"직원-{body.client_id[-4:]}"
     with _lock:
-        _db.execute("DELETE FROM exception_requests WHERE status!='pending' AND created<?", (time.time() - KEEP_DECIDED_DAYS * 86400,))
+        _db.execute("DELETE FROM exception_requests WHERE status!='pending' AND created<?", (time.time() - _keep_days() * 86400,))
         if _db.execute("SELECT COUNT(*) FROM exception_requests WHERE status='pending'").fetchone()[0] >= MAX_PENDING:
             raise PolicyError("예외 요청이 너무 많이 쌓였어요. 관리자에게 문의하세요", 429, "too_many_requests")
         cur = _db.execute(
@@ -124,7 +141,7 @@ def listing(client_id: str | None = None) -> list[dict]:
 
 
 TTL_SECONDS = {"1h": 3600, "24h": 86400, "7d": 604800}
-ONCE_VALID_SECONDS = 86400  # a one-use approval nobody used lapses after a day instead of staying open for ever
+ONCE_VALID_SECONDS = 86400  # a one-use approval nobody used lapses after a day instead of staying open for ever (the admin can change it)
 
 
 def grants(client_id: str | None, site: str | None = None, now: float | None = None) -> list[dict]:
@@ -142,7 +159,7 @@ def grants(client_id: str | None, site: str | None = None, now: float | None = N
     out = []
     for r in rows:
         once = r["ttl"] == "1x"
-        seconds = TTL_SECONDS.get(r["ttl"]) or (ONCE_VALID_SECONDS if once else None)
+        seconds = TTL_SECONDS.get(r["ttl"]) or (_once_seconds() if once else None)
         end = (r["decided"] or 0) + seconds if seconds else None
         if end and now >= end:
             continue  # over

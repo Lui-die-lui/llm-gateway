@@ -9,10 +9,10 @@ from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool, StrictInt
 from starlette.concurrency import run_in_threadpool
 
-from . import audit, company_policy, exception_requests, notify, policy, rules_catalog, sessions, upstream
+from . import audit, company_policy, exception_requests, notify, policy, rules_catalog, sessions, settings, upstream
 from .evaluate import entity_examples, evaluate
 from .sanitizer import (
     ResponseBlocked,
@@ -32,6 +32,7 @@ industries = load_industries(INDUSTRIES_DIR)
 audit.configure(os.getenv("AUDIT_DB", str(Path(__file__).resolve().parent.parent / "data" / "audit.db")))
 company_policy.configure(os.getenv("POLICY_DB", str(Path(__file__).resolve().parent.parent / "data" / "policy.db")))
 exception_requests.configure(os.getenv("EXCEPTIONS_DB", str(Path(__file__).resolve().parent.parent / "data" / "exceptions.db")))
+settings.configure(os.getenv("SETTINGS_DB", str(Path(__file__).resolve().parent.parent / "data" / "settings.db")))
 
 app = FastAPI(title="LLM Gateway")
 if not os.getenv("GATEWAY_ADMIN_TOKEN"):
@@ -119,7 +120,7 @@ def require_caller(
     """Apps, the extension and the demo page must present a key to use the gateway. Returns the key's name for the audit log.
     The key is for this gateway only: it is never forwarded to the model provider."""
     keys = api_keys()
-    if not keys:
+    if not keys and not settings.active_key_count():
         return None
     bearer = authorization[7:].strip() if authorization and authorization[:7].lower() == "bearer " else None
     for supplied in (x_gateway_key, bearer):
@@ -127,6 +128,8 @@ def require_caller(
             for key, name in keys.items():
                 if secrets.compare_digest(supplied.encode(), key.encode()):
                     return name
+            if (name := settings.key_name(supplied)) is not None:  # a key made in the console
+                return name
     raise CallerKeyRequired
 
 
@@ -148,7 +151,8 @@ def split_header(value: str | None) -> list[str]:
 
 
 def response_scan_enabled() -> bool:
-    return os.getenv("RESPONSE_SCAN", "on").lower() != "off"
+    """The console setting wins; without one, the RESPONSE_SCAN environment variable (default on)."""
+    return settings.values()["response_scan"]
 
 
 # ---------------------------------------------------------------- info
@@ -168,31 +172,63 @@ def config():
         "response_scan": response_scan_enabled(),
         "streaming": True,
         "admin_protected": bool(os.getenv("GATEWAY_ADMIN_TOKEN")),
-        "caller_auth": bool(api_keys()),
+        "caller_auth": bool(api_keys()) or settings.active_key_count() > 0,
+    }
+
+
+def settings_payload() -> dict:
+    """Everything the console's settings page shows: what the admin can change, the facts set by environment variables, keys, counts and the change log.
+    Never a key, token or address: only yes/no, counts, names and the webhook's host."""
+    return {
+        "values": settings.values(),
+        "limits": {k: {"min": lo, "max": hi} for k, (kind, lo, hi, _l) in settings.SPEC.items() if kind == "int"},
+        "slack": {"configured": notify.configured(), "host": notify.host(), "source": settings.slack_source(), "console_link": bool(os.getenv("GATEWAY_CONSOLE_URL"))},
+        "keys": {"env_keys": len(api_keys()), "required": bool(api_keys()) or settings.active_key_count() > 0, "list": settings.list_keys()},
+        "data": {"audit_events": audit.count(), "exception_requests": exception_requests.count()},
+        "log": settings.recent_log(),
+        "environment": {
+            "provider": upstream.provider_name("external"),
+            "mock": upstream.mock(),
+            "admin_protected": bool(os.getenv("GATEWAY_ADMIN_TOKEN")),
+            "max_text": MAX_TEXT,
+            "cors_origins": [o for o in os.getenv("GATEWAY_CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o],
+            "stores_prompt_text": False,
+        },
     }
 
 
 @app.get("/v1/settings", dependencies=[Depends(require_admin)])
 def settings_view():
-    """The real state of this server, read-only, for the console's settings page. Names and yes/no only: never a key, token or address."""
-    return {
-        "upstream": {"provider": upstream.provider_name("external"), "mock": upstream.mock(), "internal_route": upstream.internal_available()},
-        "protection": {
-            "caller_auth": bool(api_keys()),
-            "caller_keys": len(api_keys()),
-            "admin_protected": bool(os.getenv("GATEWAY_ADMIN_TOKEN")),
-            "response_scan": response_scan_enabled(),
-            "max_text": MAX_TEXT,
-            "cors_origins": [o for o in os.getenv("GATEWAY_CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o],
-        },
-        "retention": {
-            "vault_ttl_seconds": sessions.TTL,
-            "once_valid_seconds": exception_requests.ONCE_VALID_SECONDS,
-            "decided_keep_days": exception_requests.KEEP_DECIDED_DAYS,
-            "stores_prompt_text": False,
-        },
-        "slack": {"configured": notify.configured(), "host": notify.host(), "console_link": bool(os.getenv("GATEWAY_CONSOLE_URL"))},
-    }
+    return settings_payload()
+
+
+class SettingsPatch(BaseModel):
+    # strict: "no" or 1.5 must be refused, not quietly turned into False or 1 (that could switch a protection off by a typo)
+    response_scan: StrictBool | None = None
+    vault_ttl_minutes: StrictInt | None = None
+    once_valid_hours: StrictInt | None = None
+    keep_decided_days: StrictInt | None = None
+    notify_new_exception: StrictBool | None = None
+
+
+@app.patch("/v1/settings", dependencies=[Depends(require_admin)])
+def settings_change(body: SettingsPatch):
+    """Change what the admin may change; takes effect at once. Only the fields that are sent are touched."""
+    settings.update(body.model_dump(exclude_none=True))
+    return settings_payload()
+
+
+class SlackIn(BaseModel):
+    url: str = Field(default="", max_length=500)  # empty = forget the saved address
+
+
+@app.put("/v1/settings/slack", dependencies=[Depends(require_admin)])
+def slack_set(body: SlackIn):
+    url = body.url.strip()
+    if url and not notify.valid(url):
+        return error(422, "invalid_webhook", message="웹훅 주소는 https:// 로 시작해야 해요")
+    settings.set_slack(url)
+    return settings_payload()
 
 
 @app.post("/v1/settings/slack/test", dependencies=[Depends(require_admin)])
@@ -200,6 +236,23 @@ def slack_test():
     """Send one test line to the configured Slack webhook, so the admin sees at once whether it works."""
     ok, message = notify.send(":white_check_mark: Gateway 연동 테스트 · 이 메시지가 보이면 새 예외 요청이 이 채널로 와요")
     return {"ok": ok, "message": message}
+
+
+class KeyIn(BaseModel):
+    name: str = Field(max_length=80)
+
+
+@app.post("/v1/settings/keys", dependencies=[Depends(require_admin)])
+def key_create(body: KeyIn):
+    """Make an access key. The key itself is in this answer and nowhere else: it is never shown again."""
+    key, row = settings.create_key(body.name)
+    return {"key": key, "item": row}
+
+
+@app.delete("/v1/settings/keys/{key_id}", dependencies=[Depends(require_admin)])
+def key_revoke(key_id: int):
+    settings.revoke_key(key_id)
+    return {"ok": True}
 
 
 @app.get("/v1/industries")
@@ -620,7 +673,9 @@ def exception_revoke(request_id: str):
 @app.delete("/v1/exceptions", dependencies=admin)
 def exception_clear():
     """Empty the exception requests (before a demo). Admin only; there is no undo."""
-    return {"deleted": exception_requests.clear()}
+    n = exception_requests.clear()
+    settings.log_event("데이터 비우기", f"예외 요청 {n}건을 지웠어요")
+    return {"deleted": n}
 
 
 # ---------------------------------------------------------------- audit / dashboard (metadata only)
@@ -662,7 +717,9 @@ def anomaly_ack(body: AnomalyAck):
 @app.delete("/v1/audit/events", dependencies=[Depends(require_admin)])
 def audit_clear():
     """Empty the audit log (before a demo). Admin only; there is no undo."""
-    return {"deleted": audit.clear()}
+    n = audit.clear()
+    settings.log_event("데이터 비우기", f"전송 기록 {n}건을 지웠어요")
+    return {"deleted": n}
 
 
 @app.get("/v1/audit/events", dependencies=[Depends(require_admin)])
