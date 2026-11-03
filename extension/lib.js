@@ -127,6 +127,24 @@
     return text.replace(PLACEHOLDER_ALL, (m) => (Object.prototype.hasOwnProperty.call(map, m) ? map[m] : m));
   }
 
+  /**
+   * Placeholders the model wrote with other brackets or spacing ("『사람_1』", "「사람 1」", "(사람_1)", a bare "사람_1"), restored only
+   * for the ones this tab really sent, so nothing unrelated is ever rewritten.
+   */
+  function restoreVariants(text, map) {
+    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    let out = text;
+    for (const key of Object.keys(map)) {
+      const m = /^\[([^\[\]\s]+)_(\d+)\]$/.exec(key);
+      if (!m) continue;
+      const core = `${esc(m[1])}\\s*[_＿ \\-]\\s*${m[2]}(?!\\d)`;
+      const bracketed = new RegExp(`[\\[『「【〈<(（]\\s*${core}\\s*[\\]』」】〉>)）]`, "g");
+      const bare = new RegExp(`(?<![\\p{L}\\p{N}_])${esc(m[1])}[_＿]${m[2]}(?!\\d)`, "gu");
+      out = out.replace(bracketed, () => map[key]).replace(bare, () => map[key]);
+    }
+    return out;
+  }
+
   /** Placeholders a model re-spelled: [{ raw: "[이메일 1]", fixed: "[이메일_1]" }]. */
   function findFuzzy(text) {
     const seen = new Set();
@@ -268,7 +286,7 @@
     return { news, active, used, told };
   }
 
-  const api = { exceptionNews, activeGrant, nearestGrant, makeClientId, approvalEnd, clock, remaining, describeDecision, TTL_LABEL, PLACEHOLDER, PLACEHOLDER_ALL, cps, maskValue, pairSpans, ALIASES, hasAlias, buildOutgoing, restoreAliases, restorePlaceholders, findFuzzy, CRITICAL, keepableLabels, canKeep, dayKey, portalBase };
+  const api = { exceptionNews, activeGrant, nearestGrant, makeClientId, approvalEnd, clock, remaining, describeDecision, TTL_LABEL, PLACEHOLDER, PLACEHOLDER_ALL, cps, maskValue, pairSpans, ALIASES, hasAlias, buildOutgoing, restoreAliases, restorePlaceholders, restoreVariants, findFuzzy, CRITICAL, keepableLabels, canKeep, dayKey, portalBase };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Gw = api;
 })(typeof self !== "undefined" ? self : this);

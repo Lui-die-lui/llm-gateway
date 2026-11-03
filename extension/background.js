@@ -185,7 +185,8 @@ async function sanitize(text, tabId, site) {
 async function restore(text, tabId) {
   const aliasMap = (await chrome.storage.session.get(aliasKey(tabId)))[aliasKey(tabId)] || {};
   // 1) what this tab remembers (works without the gateway), 2) registered replacement words, 3) the gateway's vault for the rest
-  const local = Gw.restorePlaceholders(Gw.restoreAliases(text, aliasMap), await originals(tabId));
+  const known = await originals(tabId);
+  const local = Gw.restoreVariants(Gw.restorePlaceholders(Gw.restoreAliases(text, aliasMap), known), known);
   if (!Gw.PLACEHOLDER.test(local)) return local !== text ? { ok: true, status: 200, data: { text: local } } : { ok: false, status: 404, data: {} };
   const vaultId = (await chrome.storage.session.get(vaultKey(tabId)))[vaultKey(tabId)];
   if (!vaultId) return local !== text ? { ok: true, status: 200, data: { text: local } } : { ok: false, status: 404, data: {} };

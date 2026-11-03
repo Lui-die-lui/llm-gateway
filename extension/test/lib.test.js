@@ -222,3 +222,12 @@ test("restorePlaceholders: puts back what this tab sent and leaves unknown place
   assert.equal(Gw.restorePlaceholders("그대로", map), "그대로");
   assert.equal(Gw.restorePlaceholders("[constructor_1] [toString_1]", map), "[constructor_1] [toString_1]"); // not fooled by object property names
 });
+
+test("restoreVariants: a re-spelled placeholder is restored, but only one this tab sent", () => {
+  const map = { "[사람_1]": "홍길동", "[이메일_1]": "kim@corp.co.kr" };
+  assert.equal(Gw.restoreVariants("『이메일_1』은 자리표시자예요", map), "kim@corp.co.kr은 자리표시자예요");
+  assert.equal(Gw.restoreVariants("「사람 1」님, (사람_1) 그리고 사람_1 에게", map), "홍길동님, 홍길동 그리고 홍길동 에게");
+  assert.equal(Gw.restoreVariants("[사람_1] 그대로", map), "홍길동 그대로"); // the strict form is fine too
+  assert.equal(Gw.restoreVariants("『사람_2』 와 사람_12 와 비사람_1", map), "『사람_2』 와 사람_12 와 비사람_1"); // another number, another word: untouched
+  assert.equal(Gw.restoreVariants("아무 일 없음", map), "아무 일 없음");
+});
