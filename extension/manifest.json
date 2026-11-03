@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LLM Gateway Guard",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "ChatGPT·Claude에 글을 보내기 전에 회사 게이트웨이로 민감정보를 가리고, 답변에서는 원래 값으로 되돌려 보여 줍니다.",
   "icons": {
     "16": "icons/icon16.png",

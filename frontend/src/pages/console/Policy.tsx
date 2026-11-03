@@ -9,10 +9,10 @@ import type { PolicyRule, RuleAction, RuleDraft, RuleKind } from '../../api/cons
 import type { AnalyzeResult } from '../../api/types';
 import { Help, Seg, Toggle } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
-import { industryName, useBuiltinGroups, useIndustries } from '../../features/catalog';
+import { useBuiltinGroups, useIndustries } from '../../features/catalog';
 import { useFeedback } from '../../features/feedback';
 import { ACTION_KO, splitByCodepoints } from '../../features/format';
-import { qk, useSettings } from '../../features/queries';
+import { qk } from '../../features/queries';
 
 const ACT_CLS: Record<RuleAction, string> = { redact: 'b-redact', block: 'b-block', log: 'b-clean' };
 const KINDS = [
@@ -72,7 +72,6 @@ export function PolicyPage() {
   const qc = useQueryClient();
   const { toast, confirm } = useFeedback();
   const policy = useQuery({ queryKey: qk.policy, queryFn: consoleApi.policy });
-  const settings = useSettings();
   const industries = useIndustries();
   const BUILTINS = useBuiltinGroups()?.flatMap((g) => g.rules.map((r) => r.name)) ?? [];
 
@@ -125,8 +124,8 @@ export function PolicyPage() {
   // ---- playground (real /v1/analyze)
   const [sample, setSample] = useState(SAMPLE);
   const [tplOn, setTplOn] = useState(true);
-  const companyIndustry = settings.data?.industry ?? 'cosmetics';
-  const run = useMutation({ mutationFn: (text: string) => gateway.analyze({ text, use_draft: true, industries: tplOn && industries.data?.some((i) => i.industry === companyIndustry) ? [companyIndustry] : [] }) });
+  const allIndustries = (industries.data ?? []).map((i) => i.industry); // no company setting exists: try every industry bundle
+  const run = useMutation({ mutationFn: (text: string) => gateway.analyze({ text, use_draft: true, industries: tplOn ? allIndustries : [] }) });
   const result: AnalyzeResult | undefined = run.data;
   const pieces = useMemo(() => (result && run.variables ? splitByCodepoints(run.variables, result.spans) : []), [result, run.variables]);
 
@@ -468,7 +467,7 @@ export function PolicyPage() {
             </label>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginTop: 8 }} className="t2">
               <input type="checkbox" checked={tplOn} onChange={(e) => setTplOn(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
-              업종 묶음({industryName(companyIndustry)}) 규칙도 같이 시험
+              업종 묶음 규칙(전체 업종)도 같이 시험
             </label>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '12px 0 10px', flexWrap: 'wrap', gap: 8 }}>
               <span className="lbl">결과</span>
