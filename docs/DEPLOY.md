@@ -30,7 +30,7 @@ Railway, Render, Fly.io처럼 Docker 이미지를 올리고 디스크(볼륨)를
 | `GATEWAY_ADMIN_TOKEN` | 길고 아무도 모르는 문자열. 콘솔에서 입력할 비밀번호가 됩니다 |
 | `GATEWAY_API_KEYS` | 앱·확장이 쓸 접속 키. `python -m app.keys 앱이름`으로 만든 줄을 쉼표로 이어 붙입니다 (아래 "실제 LLM을 연결할 때") |
 
-**선택: Slack 알림**: 직원이 새 예외 요청을 보내면 Slack 채널로 알려 줍니다. Slack에서 Incoming Webhook을 만들어 주소를 `SLACK_WEBHOOK_URL`에 넣고(비밀값이라 코드·채팅에 붙이지 마세요), 알림에 승인 화면 링크를 넣으려면 `GATEWAY_CONSOLE_URL`에 콘솔 주소를 넣습니다. 콘솔 설정 화면의 "Slack으로 테스트 보내기"로 확인합니다. 요청 번호·항목·사이트·기간·사유만 가고 입력한 글은 가지 않습니다.
+**선택: Slack 알림과 접속 키**: 둘 다 콘솔 `설정` 화면에서 바로 정할 수 있어서 환경변수는 필요 없습니다. Slack은 Incoming Webhook 주소를 입력하고(비밀값이라 서버에만 저장되고 다시 보여 주지 않습니다), 접속 키는 "키 만들기"로 발급합니다. 환경변수 `SLACK_WEBHOOK_URL`, `GATEWAY_API_KEYS`도 그대로 쓸 수 있고 콘솔에서 저장한 웹훅이 있으면 그쪽이 우선합니다. 알림에 승인 화면 링크를 넣으려면 `GATEWAY_CONSOLE_URL`에 콘솔 주소를 넣으세요. 설정은 `data/settings.db`에 저장되므로 Railway에서는 볼륨에 두지 않으면 재배포 때 초기화됩니다.
 
 ### main이 바뀌면 자동으로 배포되게 하기
 

@@ -6,7 +6,7 @@ import type { ConsoleUser, LoginResult, OtpResult } from '../api/consoleTypes';
 const MOCK_PASSWORD = 'test1234';
 const ADMIN_EMAIL = 'admin@example.com';
 const MAX_FAILS = 5;
-const SETTINGS = { lockout: true, twoFactor: false, idleMinutes: 30 };
+const SETTINGS = { lockout: true, twoFactor: false };
 
 let fails: Record<string, number> = {};
 let otpTickets: Record<string, string> = {};
@@ -44,5 +44,3 @@ export function verifyOtp(ticket: string, code: string): OtpResult {
   return { kind: 'ok', user: adminUser(), lastLogin: '' };
 }
 
-/** Only what the console reads: how long it may sit idle before signing out. */
-export const getSettings = () => ({ ...SETTINGS });

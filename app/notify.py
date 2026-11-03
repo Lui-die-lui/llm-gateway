@@ -11,18 +11,25 @@ from urllib.parse import urlparse
 
 import httpx
 
+from . import settings
+
 log = logging.getLogger("gateway.notify")
 TIMEOUT = 5.0
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}  # a plain http address is accepted only for a receiver on this machine (development, tests)
 
 
 def _url() -> str:
-    return os.getenv("SLACK_WEBHOOK_URL", "").strip()
+    return settings.slack_url()  # the console value, else the SLACK_WEBHOOK_URL environment variable
+
+
+def valid(url: str) -> bool:
+    """https anywhere, or plain http to a receiver on this machine (development, tests)."""
+    u = urlparse(url)
+    return bool(u.hostname) and (u.scheme == "https" or (u.scheme == "http" and u.hostname in LOCAL_HOSTS))
 
 
 def configured() -> bool:
-    u = urlparse(_url())
-    return bool(u.hostname) and (u.scheme == "https" or (u.scheme == "http" and u.hostname in LOCAL_HOSTS))
+    return valid(_url())
 
 
 def host() -> str | None:
@@ -44,9 +51,9 @@ def send(text: str) -> tuple[bool, str]:
     return False, f"Slack이 거절했어요 ({r.status_code}) · 웹훅 주소를 확인해 주세요"
 
 
-def send_later(text: str) -> None:
-    """Fire and forget: a slow or down Slack must not slow the employee's request."""
-    if configured():
+def send_later(text: str, switch: str = "notify_new_exception") -> None:
+    """Fire and forget: a slow or down Slack must not slow the employee's request. `switch` is the setting that turns this kind of notice on or off."""
+    if configured() and settings.values()[switch]:
         threading.Thread(target=send, args=(text,), daemon=True).start()
 
 

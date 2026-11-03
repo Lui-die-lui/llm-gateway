@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { Providers, makeQueryClient } from '../app/Providers';
@@ -16,6 +16,7 @@ function renderAt(path: string, extra?: (url: string, init?: RequestInit) => Res
         const rule = { id: 'b:이메일', name: '이메일', desc: '메일 주소', example: 'name@example.com', labels: ['이메일'], action: 'redact' };
         return new Response(JSON.stringify({ groups: [{ id: 'basic', name: '기본 정보', desc: '', rules: [rule] }] }), { status: 200 });
       }
+      if (/\/v1\/members$/.test(url) && (init?.method ?? 'GET') === 'GET') return new Response(JSON.stringify({ members: [], pending: [] }), { status: 200 });
       if (url.includes('/v1/policy/builtin')) return new Response(JSON.stringify({ version: 0, applied: {} }), { status: 200 });
       const body = url.includes('/v1/audit/events') || url.includes('/timeseries') || url.includes('/v1/industries') ? [] : url.includes('/summary') ? { requests: 0, by_status: {}, by_route: {}, by_industry: {}, findings: [], redacted_items: 0, response_redacted_items: 0 } : { status: 'ok' };
       return new Response(JSON.stringify(body), { status: 200 });
@@ -43,50 +44,248 @@ describe('console', () => {
     expect(await screen.findByRole('heading', { name: '예외 요청' })).toBeInTheDocument();
   });
 
-  it('has no pages for made-up data: members and the personal portal history are gone', async () => {
+  it('an address that no longer exists goes back to the overview', async () => {
     sessionStorage.setItem('gw.console.session', JSON.stringify({ user: { name: '보안관리자', email: 'admin@example.com', role: 'admin', owner: true }, lastLogin: '', lastActive: Date.now() }));
     const router = renderAt('/console/users');
     await waitFor(() => expect(router.state.location.pathname).toBe('/console'));
-    expect(screen.queryByText('구성원 · 가입 승인')).not.toBeInTheDocument();
   });
 
   const SESSION = JSON.stringify({ user: { name: '보안관리자', email: 'admin@example.com', role: 'admin', owner: true }, lastLogin: '', lastActive: Date.now() });
-  const SERVER = (slack: { configured: boolean; host: string | null; console_link: boolean }) => ({
-    upstream: { provider: 'openai', mock: false, internal_route: false },
-    protection: { caller_auth: true, caller_keys: 2, admin_protected: true, response_scan: true, max_text: 200000, cors_origins: ['http://localhost:3000'] },
-    retention: { vault_ttl_seconds: 1800, once_valid_seconds: 86400, decided_keep_days: 180, stores_prompt_text: false },
-    slack,
+  const baseServer = (): Record<string, unknown> => ({
+    values: { response_scan: true, vault_ttl_minutes: 30, once_valid_hours: 24, keep_decided_days: 180, notify_new_exception: true, notify_new_member: true },
+    limits: { vault_ttl_minutes: { min: 5, max: 240 }, once_valid_hours: { min: 1, max: 168 }, keep_decided_days: { min: 7, max: 730 } },
+    slack: { configured: false, host: null, source: null, console_link: false },
+    keys: { env_keys: 0, required: false, list: [] },
+    data: { audit_events: 12, exception_requests: 3, members: 8 },
+    log: [{ t: 1_700_000_000, what: '답변 검사', detail: '꺼짐 → 켜짐' }],
+    environment: { provider: 'openai', mock: false, admin_protected: true, max_text: 200000, cors_origins: ['http://localhost:3000'], stores_prompt_text: false },
   });
+  /** A tiny stand-in for the gateway's settings endpoints: keeps state and records what the page sent. */
+  function settingsServer() {
+    const state = baseServer() as { values: Record<string, unknown>; slack: Record<string, unknown>; keys: { required: boolean; list: unknown[] } };
+    const calls: { method: string; path: string; body: unknown }[] = [];
+    const handler = (url: string, init?: RequestInit) => {
+      const path = url.replace(/^https?:\/\/[^/]+/, '').replace(/^\/gw(?=\/)/, ''); // the dev server prefix is not part of the endpoint
+      if (!path.startsWith('/v1/settings') && !(path.startsWith('/v1/audit/events') && init?.method === 'DELETE') && !(path === '/v1/exceptions' && init?.method === 'DELETE')) return undefined;
+      const method = init?.method ?? 'GET';
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      if (method !== 'GET') calls.push({ method, path, body });
+      const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
+      if (path === '/v1/settings' && method === 'PATCH') Object.assign(state.values, body);
+      if (path === '/v1/settings/slack' && method === 'PUT') Object.assign(state.slack, body.url ? { configured: true, host: 'hooks.slack.com', source: 'console' } : { configured: false, host: null, source: null });
+      if (path === '/v1/settings/keys' && method === 'POST') {
+        state.keys = { required: true, list: [{ id: 1, name: body.name, tail: 'abcd', created: 1_700_000_000, revoked: false }] };
+        return ok({ key: 'gw_NEWKEY-shown-once', item: (state.keys.list[0] as object) });
+      }
+      if (method === 'DELETE' && !path.startsWith('/v1/settings')) return ok({ deleted: 12 });
+      if (method === 'DELETE') return ok({ ok: true });
+      if (path === '/v1/settings/slack/test') return ok({ ok: true, message: 'Slack으로 보냈어요' });
+      return ok(state);
+    };
+    return { handler, calls, state };
+  }
 
-  it('settings page shows what the server really has, and Slack is off without a webhook', async () => {
-    sessionStorage.setItem('gw.console.session', SESSION);
-    renderAt('/console/settings', (url) => (url.endsWith('/v1/settings') ? new Response(JSON.stringify(SERVER({ configured: false, host: null, console_link: false })), { status: 200 }) : undefined));
-    expect(await screen.findByRole('heading', { name: '설정' })).toBeInTheDocument();
-    expect(await screen.findByText('키 2개 등록됨 · 키 없이는 가림·복원을 쓸 수 없어요')).toBeInTheDocument();
-    expect(screen.getAllByText('30분')).toHaveLength(2); // vault TTL and the console's idle logout
-    expect(screen.getByText('1일')).toBeInTheDocument(); // one-use approval validity
-    expect(screen.getByText('저장 안 함')).toBeInTheDocument();
-    expect(screen.getByText('연결 안 됨')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Slack으로 테스트 보내기' })).toBeDisabled();
-    expect(screen.queryByText(/hooks\.slack\.com\/services/)).not.toBeInTheDocument();
-  });
-
-  it('sends a Slack test line when a webhook is set and reports the answer', async () => {
+  it('settings: change a number, save after the confirmation, and only the changed field is sent', async () => {
     sessionStorage.setItem('gw.console.session', SESSION);
     const user = userEvent.setup();
-    let posted = 0;
-    renderAt('/console/settings', (url, init) => {
-      if (url.endsWith('/v1/settings')) return new Response(JSON.stringify(SERVER({ configured: true, host: 'hooks.slack.com', console_link: true })), { status: 200 });
-      if (url.endsWith('/v1/settings/slack/test') && init?.method === 'POST') {
-        posted++;
-        return new Response(JSON.stringify({ ok: true, message: 'Slack으로 보냈어요' }), { status: 200 });
-      }
-      return undefined;
-    });
-    expect(await screen.findByText('보낼 곳: hooks.slack.com (웹훅 주소는 보안상 보여 드리지 않아요)')).toBeInTheDocument();
+    const srv = settingsServer();
+    renderAt('/console/settings', srv.handler);
+    const ttl = await screen.findByLabelText('되돌리기 매핑 보관');
+    expect(screen.getByRole('button', { name: '바뀐 것 없음' })).toBeDisabled();
+    await user.clear(ttl);
+    await user.type(ttl, '60');
+    await user.click(screen.getByRole('button', { name: '변경 저장' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(srv.calls.find((c) => c.method === 'PATCH')?.body).toEqual({ vault_ttl_minutes: 60 }));
+    expect(await screen.findByRole('button', { name: '바뀐 것 없음' })).toBeDisabled();
+  });
+
+  it('settings: a value outside the allowed range blocks saving and says why', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    const srv = settingsServer();
+    renderAt('/console/settings', srv.handler);
+    const ttl = await screen.findByLabelText('되돌리기 매핑 보관');
+    await user.clear(ttl);
+    await user.type(ttl, '1');
+    expect(await screen.findByText('5~240분 사이로 적어 주세요')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '변경 저장' })).toBeDisabled();
+    expect(srv.calls).toHaveLength(0);
+  });
+
+  it('settings: turning the answer check off asks first and warns what it means', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    const srv = settingsServer();
+    renderAt('/console/settings', srv.handler);
+    await user.click(await screen.findByLabelText('답변 검사'));
+    await user.click(screen.getByRole('button', { name: '변경 저장' }));
+    const dlg = within(await screen.findByRole('dialog'));
+    expect(dlg.getByText(/걸러 내지 못해요/)).toBeInTheDocument();
+    await user.click(dlg.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(srv.calls.find((c) => c.method === 'PATCH')?.body).toEqual({ response_scan: false }));
+  });
+
+  it('settings: the first access key warns that requests without one get blocked, then the key is shown once', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    const srv = settingsServer();
+    renderAt('/console/settings', srv.handler);
+    await user.click(await screen.findByRole('tab', { name: '접속 키' }));
+    await user.type(await screen.findByLabelText('키 이름'), '인사팀 앱');
+    await user.click(screen.getByRole('button', { name: '키 만들기' }));
+    const dlg = within(await screen.findByRole('dialog'));
+    expect(dlg.getByText(/키 없는 요청.*막혀요/)).toBeInTheDocument();
+    await user.click(dlg.getByRole('button', { name: '만들기' }));
+    expect(await screen.findByDisplayValue('gw_NEWKEY-shown-once')).toBeInTheDocument();
+    expect(srv.calls.find((c) => c.path === '/v1/settings/keys')?.body).toEqual({ name: '인사팀 앱' });
+    await user.click(screen.getByRole('button', { name: '닫기' }));
+    expect(screen.queryByDisplayValue('gw_NEWKEY-shown-once')).not.toBeInTheDocument();
+    expect(screen.getByText(/…abcd/)).toBeInTheDocument(); // afterwards only the name and the last four characters
+  });
+
+  it('settings: clearing data shows how many records go and calls the real delete', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    const srv = settingsServer();
+    renderAt('/console/settings', srv.handler);
+    await user.click(await screen.findByRole('tab', { name: '데이터 · 기록' }));
+    await screen.findByText(/지금 12건/);
+    const [firstWipe] = screen.getAllByRole('button', { name: '모두 지우기' });
+    if (!firstWipe) throw new Error('no wipe button');
+    await user.click(firstWipe);
+    expect(await screen.findByText(/12건이 지워지고 되돌릴 수 없어요/)).toBeInTheDocument();
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '모두 지우기' }));
+    await waitFor(() => expect(srv.calls.some((c) => c.method === 'DELETE' && c.path === '/v1/audit/events')).toBe(true));
+  });
+
+  it('settings: saves and clears the Slack webhook, tests it, and never shows the address', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    const srv = settingsServer();
+    renderAt('/console/settings', srv.handler);
+    await user.click(await screen.findByRole('tab', { name: '알림' }));
+    expect(await screen.findByRole('button', { name: 'Slack으로 테스트 보내기' })).toBeDisabled();
+    await user.type(screen.getByLabelText('Slack 웹훅 주소'), 'https://hooks.slack.com/services/T/B/SECRET');
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(srv.calls.find((c) => c.path === '/v1/settings/slack')?.body).toEqual({ url: 'https://hooks.slack.com/services/T/B/SECRET' }));
+    expect(await screen.findByText(/보낼 곳: hooks\.slack\.com/)).toBeInTheDocument();
+    expect(screen.queryByText(/SECRET/)).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue(/SECRET/)).not.toBeInTheDocument(); // the input is emptied after saving
     await user.click(screen.getByRole('button', { name: 'Slack으로 테스트 보내기' }));
     expect(await screen.findByText('Slack으로 보냈어요')).toBeInTheDocument();
-    expect(posted).toBe(1);
+    await user.click(screen.getByRole('button', { name: '지우기' }));
+    await waitFor(() => expect(srv.calls.some((c) => c.path === '/v1/settings/slack' && (c.body as { url: string }).url === '')).toBe(true));
+  });
+
+  it('settings: one tab at a time, the chosen tab survives a reload, and an unsaved change is marked on its tab', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    window.history.replaceState(null, '', '#keys');
+    renderAt('/console/settings', settingsServer().handler);
+    expect(await screen.findByRole('tab', { name: '접속 키', selected: true })).toBeInTheDocument(); // came back to the tab in the address
+    expect(screen.getByLabelText('키 이름')).toBeInTheDocument();
+    expect(screen.queryByLabelText('답변 검사')).not.toBeInTheDocument(); // other tabs' sections are not on the page
+    await user.click(screen.getByRole('tab', { name: '일반' }));
+    expect(window.location.hash).toBe('#general');
+    expect(screen.queryByLabelText('키 이름')).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText('답변 검사'));
+    await user.click(screen.getByRole('tab', { name: '알림' }));
+    expect(screen.getByRole('tab', { name: /일반/ })).toContainElement(screen.getByLabelText('저장 안 된 변경'));
+    expect(screen.getByRole('button', { name: '변경 저장' })).toBeEnabled(); // the save button stays reachable from every tab
+    window.history.replaceState(null, '', '#');
+  });
+
+  it('settings: the idle logout is a real browser setting the console reads', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    renderAt('/console/settings', settingsServer().handler);
+    await user.selectOptions(await screen.findByLabelText('자동 로그아웃'), '60');
+    expect(localStorage.getItem('gw.console.idleMinutes')).toBe('60');
+    localStorage.removeItem('gw.console.idleMinutes');
+  });
+
+  const PEOPLE = {
+    members: [
+      { id: 'M-0001', name: '김서연', email: 'seoyeon.kim@example.com', dept: '마케팅', status: 'active', created: 1_700_000_000, decided: 1_700_003_600 },
+      { id: 'M-0002', name: '이도윤', email: 'doyoon.lee@example.com', dept: '개발', status: 'active', created: 1_700_000_000, decided: 1_700_003_600 },
+    ],
+    pending: [{ id: 'M-0007', name: '오준서', email: 'junseo.oh@example.com', dept: '개발', status: 'pending', created: Math.floor(Date.now() / 1000) - 7200, decided: null }],
+  };
+  function membersServer() {
+    const state = structuredClone(PEOPLE);
+    const calls: { method: string; path: string }[] = [];
+    const handler = (url: string, init?: RequestInit) => {
+      const path = url.replace(/^https?:\/\/[^/]+/, '').replace(/^\/gw(?=\/)/, '');
+      if (!path.startsWith('/v1/members')) return undefined;
+      const method = init?.method ?? 'GET';
+      if (method !== 'GET') calls.push({ method, path });
+      const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
+      if (method === 'POST' && path.endsWith('/approve')) {
+        const m = state.pending.shift()!;
+        state.members.push({ ...m, status: 'active', decided: 1_700_009_999 });
+        return ok(m);
+      }
+      if (method === 'POST' && path.endsWith('/reject')) return ok(state.pending.shift());
+      if (method === 'DELETE') return ok(state.members.pop());
+      return ok(state);
+    };
+    return { handler, calls, state };
+  }
+
+  it('members: waiting requests come first, approve calls the real endpoint and the person moves to the members', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    window.history.replaceState(null, '', '#');
+    const user = userEvent.setup();
+    const srv = membersServer();
+    renderAt('/console/members', srv.handler);
+    expect(await screen.findByRole('tab', { name: /가입 승인/, selected: true })).toBeInTheDocument();
+    expect(screen.getByText('junseo.oh@example.com')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '오준서 가입 승인' }));
+    await waitFor(() => expect(srv.calls).toEqual([{ method: 'POST', path: '/v1/members/M-0007/approve' }]));
+    expect(await screen.findByText('기다리는 가입 신청이 없어요')).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /구성원/ }));
+    expect(await screen.findByText('junseo.oh@example.com')).toBeInTheDocument();
+    window.history.replaceState(null, '', '#');
+  });
+
+  it('members: rejecting asks first; the member list can be searched and a person removed after a confirmation', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    window.history.replaceState(null, '', '#');
+    const user = userEvent.setup();
+    const srv = membersServer();
+    renderAt('/console/members', srv.handler);
+    await user.click(await screen.findByRole('button', { name: '오준서 가입 반려' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '반려' }));
+    await waitFor(() => expect(srv.calls.at(-1)).toEqual({ method: 'POST', path: '/v1/members/M-0007/reject' }));
+    await user.click(await screen.findByRole('tab', { name: /구성원/ }));
+    await user.type(await screen.findByLabelText('이름·메일 검색'), '도윤');
+    expect(screen.queryByText('seoyeon.kim@example.com')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '이도윤 구성원에서 빼기' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '빼기' }));
+    await waitFor(() => expect(srv.calls.at(-1)?.method).toBe('DELETE'));
+    window.history.replaceState(null, '', '#');
+  });
+
+  it('join: the public form sends name, mail and department and says it was received; a refusal is shown', async () => {
+    const user = userEvent.setup();
+    let body: unknown;
+    let fail = false;
+    renderAt('/join', (url, init) => {
+      if (!url.endsWith('/v1/members/join')) return undefined;
+      body = JSON.parse(String(init?.body));
+      return fail ? new Response(JSON.stringify({ error: { message: '이미 신청했거나 가입된 메일 주소예요' } }), { status: 409 }) : new Response(JSON.stringify({ id: 'M-0009', status: 'pending' }), { status: 200 });
+    });
+    await user.type(await screen.findByLabelText('이름'), '윤지아');
+    await user.type(screen.getByLabelText('회사 메일'), 'jia.yoon@example.com');
+    await user.type(screen.getByLabelText(/부서/), '마케팅');
+    fail = true;
+    await user.click(screen.getByRole('button', { name: '가입 신청' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('이미 신청했거나');
+    fail = false;
+    await user.click(screen.getByRole('button', { name: '가입 신청' }));
+    expect(await screen.findByText('신청했어요')).toBeInTheDocument();
+    expect(body).toEqual({ name: '윤지아', email: 'jia.yoon@example.com', dept: '마케팅' });
   });
 
   it('enables "변경 n건 적용" only after a basic rule changes', async () => {

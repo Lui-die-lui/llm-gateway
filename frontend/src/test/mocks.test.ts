@@ -15,8 +15,4 @@ describe('console sign-in gate', () => {
     const r = db.login('admin@example.com', 'test1234');
     expect(r.kind === 'ok' && r.lastLogin).toBe('');
   });
-
-  it('only says how long the console may sit idle', () => {
-    expect(db.getSettings().idleMinutes).toBe(30);
-  });
 });

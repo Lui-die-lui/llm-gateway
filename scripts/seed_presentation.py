@@ -15,6 +15,9 @@ pipeline: /v1/sanitize and /v1/exceptions).
   --client-id b-xxxx...  the browser id the exception requests belong to: use the id of the browser that will present
                          (the popup's "자세히 보기" link ends with ?cid=<id>), so their answers and countdown show up there
   --with-anomaly         also add three blocked secrets within the last minutes, so the console shows a HIGH anomaly right away
+
+Also makes a small company: 6 members and 2 sign-up requests waiting for approval (fake names, example.com addresses). They go
+through the real join and approve endpoints; --reset empties them first.
 """
 import argparse
 import random
@@ -65,6 +68,18 @@ EXCEPTIONS = [
     ("조성비", "chatgpt.com", "1시간", "안정성 시험 결과를 영문으로 요약해야 해서 수치를 그대로 보내야 합니다 부탁드려요", "approved", "1h", "시험 요약 건 확인", 30),
 ]
 
+# (name, mail, department, days ago they joined, or None = still waiting for approval). Fake people, example.com addresses.
+MEMBERS = [
+    ("김서연", "seoyeon.kim@example.com", "마케팅", 41),
+    ("이도윤", "doyoon.lee@example.com", "개발", 38),
+    ("박지민", "jimin.park@example.com", "영업", 29),
+    ("최하은", "haeun.choi@example.com", "인사", 17),
+    ("정우진", "woojin.jung@example.com", "디자인", 9),
+    ("한소율", "soyul.han@example.com", "재무", 3),
+    ("오준서", "junseo.oh@example.com", "개발", None),
+    ("윤지아", "jia.yoon@example.com", "마케팅", None),
+]
+
 
 class Gateway:
     """The same calls either way: in-process (can backdate) or against a running gateway."""
@@ -103,6 +118,13 @@ class Gateway:
         with self.audit._lock:
             self.audit._db.execute("UPDATE requests SET ts=? WHERE id=(SELECT MAX(id) FROM requests)", (ts,))
             self.audit._db.commit()
+
+    def backdate_member(self, public_id: str, created: float, decided: float | None):
+        if self.api:
+            return
+        from app import members
+
+        members.backdate(public_id, created, decided)
 
     def backdate_exception(self, public_id: str, created: float, decided: float | None):
         if self.api:
@@ -150,6 +172,8 @@ def main() -> int:
     print(f"where:        {args.api or 'this machine (in-process)'}")
     print(f"reset first:  {'yes' if args.reset else 'no'}")
     print(f"prompts:      {len(events)} ({kinds['clean']} clean, {kinds['redact']} masked, {kinds['blocked']} blocked) over {'the last 7 days' if not args.api else 'now'}")
+    waiting = sum(1 for m in MEMBERS if m[3] is None)
+    print(f"members:      {len(MEMBERS) - waiting} members + {waiting} sign-up requests waiting")
     print(f"exceptions:   {len(EXCEPTIONS)} requests (1 waiting, 3 approved, 1 rejected) for browser {args.client_id}")
     print(f"anomaly:      {'3 blocked secrets in the last minutes' if args.with_anomaly else 'none (type a key into a prompt three times to make one live)'}")
     if not args.yes:
@@ -158,7 +182,7 @@ def main() -> int:
 
     gw = Gateway(args.api, args.admin_token, args.key)
     if args.reset:
-        for path in ("/v1/audit/events", "/v1/exceptions"):
+        for path in ("/v1/audit/events", "/v1/exceptions", "/v1/members"):
             r = gw.delete(path)
             print(f"reset {path}: {r.status_code} {r.text[:80]}")
             if r.status_code >= 400:
@@ -179,6 +203,18 @@ def main() -> int:
         for i in range(3):
             gw.post("/v1/sanitize", {"text": f"키 {KEY} 로 호출했는데 안 돼요", "site": "chatgpt.com", "client": CLIENT, "client_id": f"b-seed{i:029d}"})
         print("anomaly: 3 blocked secrets written")
+
+    for name, mail, dept, days in MEMBERS:
+        r = gw.post("/v1/members/join", {"name": name, "email": mail, "dept": dept})
+        if r.status_code >= 400:
+            print("member failed:", name, r.status_code, r.text[:100]); return 1
+        mid = r.json()["id"]
+        if days is not None:
+            d = gw.post(f"/v1/members/{mid}/approve", {})
+            if d.status_code >= 400:
+                print("approve failed:", d.status_code, d.text[:100]); return 1
+        gw.backdate_member(mid, now - (days if days is not None else 0) * 86400 - 3600 if days is not None else now - 7200, now - (days or 0) * 86400 if days is not None else None)
+        print(f"member {mid}: {name} · {dept} · {'가입 완료' if days is not None else '승인 대기'}")
 
     for entity, site, scope, reason, decision, ttl, memo, hours_ago in EXCEPTIONS:
         r = gw.post("/v1/exceptions", {"client_id": args.client_id, "requester": "시연 계정", "entity": entity, "site": site, "reason": reason, "scope": scope})

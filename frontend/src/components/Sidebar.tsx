@@ -51,7 +51,10 @@ export function Sidebar() {
     },
     {
       label: 'SYSTEM',
-      items: [{ to: '/console/settings', label: '설정', icon: 'settings' }],
+      items: [
+        { to: '/console/members', label: '구성원 · 가입 승인', icon: 'users', count: counts.members },
+        { to: '/console/settings', label: '설정', icon: 'settings' },
+      ],
     },
   ];
 

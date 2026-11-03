@@ -231,3 +231,10 @@ test("restoreVariants: a re-spelled placeholder is restored, but only one this t
   assert.equal(Gw.restoreVariants("『사람_2』 와 사람_12 와 비사람_1", map), "『사람_2』 와 사람_12 와 비사람_1"); // another number, another word: untouched
   assert.equal(Gw.restoreVariants("아무 일 없음", map), "아무 일 없음");
 });
+
+test("a one-use approval counts its lapse with the server's once_seconds when it is sent, else a day", () => {
+  const base = { id: "REQ-0001", status: "approved", ttl: "1x", decided: 1000, entity: "이메일", site: "", memo: "" };
+  assert.equal(Gw.activeGrant({ ...base }, 1_000_000)?.end, (1000 + 86400) * 1000);
+  assert.equal(Gw.activeGrant({ ...base, once_seconds: 7200 }, 1_000_000)?.end, (1000 + 7200) * 1000);
+  assert.equal(Gw.activeGrant({ ...base, once_seconds: 7200 }, (1000 + 7200) * 1000 + 1), null); // already over under the shorter setting
+});

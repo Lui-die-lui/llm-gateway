@@ -31,6 +31,9 @@ export const gateway = {
   ackAnomaly: (id: string) => request<{ ok: boolean }>('/v1/anomalies/ack', { method: 'POST', body: { id } }),
   /** Admin only, no undo: empties what the gateway stored (used before a demo). */
   clearAudit: () => request<{ deleted: number }>('/v1/audit/events', { method: 'DELETE' }),
+  clearMembers: () => request<{ deleted: number }>('/v1/members', { method: 'DELETE' }),
+  /** Public: a person asks to join; the admin decides in the console. */
+  joinMember: (body: { name: string; email: string; dept: string }) => request<{ id: string; status: string }>('/v1/members/join', { method: 'POST', body }),
   clearExceptions: () => request<{ deleted: number }>('/v1/exceptions', { method: 'DELETE' }),
   auditEvents: (q: AuditQuery = {}) =>
     request<AuditEvent[]>('/v1/audit/events', {

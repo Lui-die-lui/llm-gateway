@@ -5,7 +5,7 @@ import * as mock from '../mocks/db';
 import { ApiError, request } from './client';
 import { createReal, decideReal, realExceptions, realMine, revokeReal } from './exceptions';
 import { gateway } from './gateway';
-import type { Anomaly, BasicRuleState, ServerSettings, Decision, MinutePoint, PolicyRule, PolicyState, RuleDraft, Ttl } from './consoleTypes';
+import type { Anomaly, ApiKeyItem, MemberItem, MemberList, BasicRuleState, ServerSettings, SettingsValues, Decision, MinutePoint, PolicyRule, PolicyState, RuleDraft, Ttl } from './consoleTypes';
 
 /** The gateway's policy view, with the "new" flag the editor shows for rules that exist only in the draft. */
 interface ServerPolicy extends Omit<PolicyState, 'rules'> {
@@ -71,9 +71,16 @@ export const consoleApi = {
     });
   },
 
-  settings: () => served(mock.getSettings),
+  members: () => request<MemberList>('/v1/members'),
+  approveMember: (id: string) => request<MemberItem>(`/v1/members/${id}/approve`, { method: 'POST' }),
+  rejectMember: (id: string) => request<MemberItem>(`/v1/members/${id}/reject`, { method: 'POST' }),
+  removeMember: (id: string) => request<MemberItem>(`/v1/members/${id}`, { method: 'DELETE' }),
   serverSettings: () => request<ServerSettings>('/v1/settings'),
+  saveSettings: (patch: Partial<SettingsValues>) => request<ServerSettings>('/v1/settings', { method: 'PATCH', body: patch }),
+  setSlack: (url: string) => request<ServerSettings>('/v1/settings/slack', { method: 'PUT', body: { url } }),
   slackTest: () => request<{ ok: boolean; message: string }>('/v1/settings/slack/test', { method: 'POST' }),
+  createKey: (name: string) => request<{ key: string; item: ApiKeyItem }>('/v1/settings/keys', { method: 'POST', body: { name } }),
+  revokeKey: (id: number) => request<{ ok: boolean }>(`/v1/settings/keys/${id}`, { method: 'DELETE' }),
 };
 
 export const portalApi = {
