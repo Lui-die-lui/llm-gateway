@@ -1,5 +1,5 @@
 // Console session (mock login for now). Kept in sessionStorage so it ends with the tab, and dropped after the
-// idle time chosen in 설정 › 콘솔 자동 로그아웃.
+// idle time (30 minutes).
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';

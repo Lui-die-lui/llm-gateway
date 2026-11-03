@@ -54,7 +54,7 @@ export function BasicRulesPage() {
   const apply = useMutation({
     mutationFn: () => consoleApi.applyBasicRules(cur),
     onSuccess: () => {
-      toast(`${changes.length}건을 적용했어요 · 직원 확장이 몇 분 안에 받아요 · 관리자 작업에 기록`);
+      toast(`${changes.length}건을 적용했어요 · 직원 확장이 몇 분 안에 받아요`);
       qc.invalidateQueries({ queryKey: qk.basicRules });
       qc.invalidateQueries({ queryKey: qk.adminLog });
     },
@@ -95,7 +95,7 @@ export function BasicRulesPage() {
               <li>쓸 규칙만 체크해요 · 아직 적용 안 됨</li>
               <li>"변경 n건 적용"을 눌러요</li>
               <li>직원 확장이 몇 분 안에 새 규칙을 받아요</li>
-              <li>바꾼 내용은 기록 › 관리자 작업에 남아요</li>
+              <li>적용 전에는 파란 테두리로 바뀐 줄을 보여 줘요</li>
             </ol>
           </Help>
         </div>

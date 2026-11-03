@@ -10,10 +10,7 @@ import { ReportsPage } from '../pages/console/Reports';
 import { PolicyPage } from '../pages/console/Policy';
 import { BasicRulesPage } from '../pages/console/BasicRules';
 import { ExceptionsPage } from '../pages/console/Exceptions';
-import { UsersPage } from '../pages/console/Users';
-import { SettingsPage } from '../pages/console/Settings';
 import { PortalPage } from '../pages/portal/Portal';
-import { HistoryPage } from '../pages/portal/History';
 import { RequestPage } from '../pages/portal/Request';
 
 export const routes = [
@@ -34,13 +31,10 @@ export const routes = [
       { path: 'policy', element: <PolicyPage /> },
       { path: 'policy/basic', element: <BasicRulesPage /> },
       { path: 'exceptions', element: <ExceptionsPage /> },
-      { path: 'users', element: <UsersPage /> },
-      { path: 'settings', element: <SettingsPage /> },
       { path: 'token', element: <TokenPage /> },
     ],
   },
   { path: '/me', element: <PortalPage /> },
-  { path: '/me/history', element: <HistoryPage /> },
   { path: '/me/request', element: <RequestPage /> },
   { path: '*', element: <Navigate to="/console" replace /> },
 ];

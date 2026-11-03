@@ -13,7 +13,6 @@ export const qk = {
   timeseries: (bucket: string, since: number) => ['gw', 'timeseries', bucket, since] as const,
   audit: (q: object) => ['gw', 'audit', q] as const,
   company: ['mock', 'company'] as const,
-  joins: ['mock', 'joins'] as const,
   members: ['mock', 'members'] as const,
   policy: ['gw', 'policy'] as const,
   basicRules: ['gw', 'basicRules'] as const,
@@ -31,19 +30,17 @@ export const qk = {
 export const useHealth = () =>
   useQuery({ queryKey: qk.health, queryFn: gateway.health, refetchInterval: 30_000, retry: false });
 
-export const useCompany = () => useQuery({ queryKey: qk.company, queryFn: consoleApi.company });
-export const useJoinRequests = () => useQuery({ queryKey: qk.joins, queryFn: consoleApi.joinRequests });
 export const useExceptions = () => useQuery({ queryKey: qk.exceptions, queryFn: consoleApi.exceptions, refetchInterval: 5_000 });
 export const useSettings = () => useQuery({ queryKey: qk.settings, queryFn: consoleApi.settings });
 
-/** Counts for the sidebar badges and overview alerts. */
+export const useAnomalies = () => useQuery({ queryKey: qk.anomalies, queryFn: consoleApi.anomalies, refetchInterval: 15_000 });
+
+/** Counts for the sidebar badge and the overview: real exception requests waiting, and anomalies nobody has acknowledged. */
 export function usePendingCounts() {
-  const joins = useJoinRequests();
   const exc = useExceptions();
+  const anomalies = useAnomalies();
   return {
-    joins: joins.data?.filter((j) => !j.decision).length ?? 0,
-    joinsWarn: joins.data?.filter((j) => !j.decision && j.warn).length ?? 0,
     exceptions: exc.data?.filter((e) => e.status === 'pending').length ?? 0,
-    exceptionsUrgent: exc.data?.filter((e) => e.status === 'pending' && e.slaUrgent > 0).length ?? 0,
+    anomalies: anomalies.data?.filter((a) => !a.acked).length ?? 0,
   };
 }

@@ -1,13 +1,13 @@
 // 06 예외 요청 (Exceptions.dc.html). Mock: the gateway has no exception workflow yet.
 // Requests sent from the user portal (/me/request) show up here because both read the same mock store.
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { consoleApi } from '../../api/console';
 import { gateway } from '../../api/gateway';
 import { errorMessage } from '../../api/client';
 import type { Decision, ExceptionStatus, Ttl } from '../../api/consoleTypes';
-import { Help, MockBadge, Seg } from '../../components/Controls';
+import { Help, Seg } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
 import { useFeedback } from '../../features/feedback';
 import { qk, useExceptions } from '../../features/queries';
@@ -27,7 +27,6 @@ const TTL_HELP: Record<Ttl, string> = {
   '7d': '7일 허용: 만료 시 자동 회수되고 사용 내역이 감사 로그에 남습니다. 승인 즉시 적용돼요.',
 };
 const SEV_CLS = { CRITICAL: 'b-block', HIGH: 'b-redact', MEDIUM: 'b-muted' } as const;
-const SLA_COLOR = ['var(--ink-2)', '#B45309', '#B91C1C'];
 const TABS: [ExceptionStatus, string][] = [
   ['pending', '대기'],
   ['approved', '승인됨'],
@@ -149,7 +148,6 @@ export function ExceptionsPage() {
           <div className="crumb">정책 / 예외 요청</div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4 }}>
             <h1 style={{ margin: 0 }}>예외 요청</h1>
-            <MockBadge />
           </div>
           <p className="t2">차단된 사용자가 보낸 원문 전송 요청 · 승인 시 지정된 범위와 시간 동안만 허용됩니다</p>
         </div>
@@ -164,9 +162,6 @@ export function ExceptionsPage() {
           >
             요청 비우기
           </button>
-          <Link className="btn" to="/console/settings">
-            승인 정책 설정
-          </Link>
           <Help label="처리 방법 도움말" title="처리 방법">
             <ol>
               <li>직원이 막힌 전송을 사유와 함께 요청해요</li>
@@ -180,9 +175,9 @@ export function ExceptionsPage() {
 
       <section aria-label="요약" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 16 }}>
         {[
-          ['PENDING', pending.length, `SLA 임박 ${pending.filter((e) => e.slaUrgent > 0).length}건`, '#B45309'],
-          ['APPROVED 30D', 37 + approvedN, '평균 처리 2시간 14분', undefined],
-          ['REJECTED 30D', 16 + rejectedN, `반려율 ${Math.round(((16 + rejectedN) / (53 + approvedN + rejectedN)) * 100)}%`, undefined],
+          ['PENDING', pending.length, pending.length ? '관리자 결정을 기다려요' : '대기 중인 요청 없음', pending.length ? '#B45309' : undefined],
+          ['APPROVED', approvedN, '지금까지 승인한 요청', undefined],
+          ['REJECTED', rejectedN, approvedN + rejectedN ? `반려율 ${Math.round((rejectedN / (approvedN + rejectedN)) * 100)}%` : '결정한 요청 없음', undefined],
           ['ACTIVE GRANTS', grants.length, nextEnd === null ? '시간이 있는 승인 없음' : `가장 빠른 만료 ${left(nextEnd - now)} 후`, undefined],
         ].map(([l, v, n, c]) => (
           <div key={l as string} className="card" style={{ padding: '14px 16px' }}>
@@ -309,8 +304,8 @@ export function ExceptionsPage() {
                           · {r.dept}
                         </span>
                       </span>
-                      <span className="mono" style={{ fontSize: 12, color: r.status === 'pending' ? SLA_COLOR[r.slaUrgent] : 'var(--ink-3)' }}>
-                        {r.status === 'pending' ? r.sla : r.requestedAt}
+                      <span className="mono" style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                        {r.requestedAt}
                       </span>
                     </span>
                     <span className="t2" style={{ fontSize: 13.5, marginTop: 6, textAlign: 'left' }}>
@@ -318,7 +313,6 @@ export function ExceptionsPage() {
                     </span>
                     <span style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                       <span className={`badge ${SEV_CLS[r.sev]}`}>{r.sev}</span>
-                      {isReal(r.id) && <span className="badge b-accent">실제 접수</span>}
                       <span className="chip">{r.entity}</span>
                       <span className="chip">{r.scope}</span>
                     </span>
@@ -411,20 +405,6 @@ export function ExceptionsPage() {
                     <button type="button" className="btn btn-d" disabled={decide.isPending} onClick={() => onDecide('rejected')}>
                       반려
                     </button>
-                    {!isReal(cur.id) && (
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() =>
-                        consoleApi.requestMoreInfo(cur.id).then(() => {
-                          qc.invalidateQueries({ queryKey: qk.adminLog });
-                          toast(`${cur.user}님에게 추가 설명을 요청했어요`);
-                        })
-                      }
-                    >
-                      정보 추가 요청
-                    </button>
-                    )}
                     <button type="button" className="btn btn-p" disabled={decide.isPending || noEntity} title={noEntity ? '허용할 항목이 적혀 있지 않아 승인할 수 없어요' : undefined} onClick={() => onDecide('approved')}>
                       승인 · {TTL_KO[ttl]}
                     </button>

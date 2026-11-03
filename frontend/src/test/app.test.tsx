@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { Providers, makeQueryClient } from '../app/Providers';
 import { routes } from '../app/router';
-import { addJoinRequest } from '../mocks/db';
 
 function renderAt(path: string) {
   // The gateway is not running in unit tests: every real endpoint answers with an empty body.
@@ -32,27 +31,22 @@ function renderAt(path: string) {
 describe('console', () => {
   it('guards console routes and returns to the requested page after login', async () => {
     const user = userEvent.setup();
-    const router = renderAt('/console/users');
+    const router = renderAt('/console/exceptions');
     expect(await screen.findByRole('heading', { name: '관리자 계정으로 로그인' })).toBeInTheDocument();
     await user.type(screen.getByLabelText('아이디 (회사 이메일)'), 'admin@example.com');
     await user.type(screen.getByLabelText('비밀번호'), 'test1234');
     await user.click(screen.getByRole('button', { name: '다음' }));
     await user.click(await screen.findByRole('button', { name: '관리자 콘솔 열기 →' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/console/users'));
-    expect(await screen.findByRole('heading', { name: '구성원 · 가입 승인' })).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/console/exceptions'));
+    expect(await screen.findByRole('heading', { name: '예외 요청' })).toBeInTheDocument();
   });
 
-  it('approves a join request and updates the sidebar badge', async () => {
+  it('has no pages for made-up data: members, settings and the personal portal history are gone', async () => {
     sessionStorage.setItem('gw.console.session', JSON.stringify({ user: { name: '보안관리자', email: 'admin@example.com', role: 'admin', owner: true }, lastLogin: '', lastActive: Date.now() }));
-    addJoinRequest({ id: 't1', name: '테스트직원A', email: 'a@example.com', dept: '영업', when: '방금', check: '회사 메일 ✓', warn: false });
-    addJoinRequest({ id: 't2', name: '테스트직원B', email: 'b@example.com', dept: '개발', when: '방금', check: '회사 메일 ✓', warn: false });
-    const user = userEvent.setup();
-    renderAt('/console/users');
-    const approve = await screen.findByRole('button', { name: '테스트직원A 가입 승인' });
-    expect(await screen.findByLabelText('대기 2건')).toBeInTheDocument();
-    await user.click(approve);
-    expect(await screen.findByText(/테스트직원A 님 가입을 승인했어요/)).toBeInTheDocument();
-    expect(await screen.findByLabelText('대기 1건')).toBeInTheDocument();
+    const router = renderAt('/console/users');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/console'));
+    expect(screen.queryByText('구성원 · 가입 승인')).not.toBeInTheDocument();
+    expect(screen.queryByText('설정')).not.toBeInTheDocument();
   });
 
   it('enables "변경 n건 적용" only after a basic rule changes', async () => {

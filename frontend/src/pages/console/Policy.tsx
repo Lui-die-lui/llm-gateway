@@ -1,4 +1,4 @@
-// 05 정책 엔진 (Policy.dc.html). Rule list / editor / versions are mocks (the gateway has no rule-editing API).
+// 05 정책 엔진 (Policy.dc.html). Rules, drafts and applying them all go through /v1/policy.
 // "미리 시험하기" calls the real POST /v1/analyze.
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -117,7 +117,7 @@ export function PolicyPage() {
     },
     onError: fail,
   });
-  const apply = useMutation({ mutationFn: consoleApi.applyPolicy, onSuccess: (r) => (refresh(), toast(`버전 ${r.version}를 적용했어요 · 관리자 작업 기록에 남김`)), onError: fail });
+  const apply = useMutation({ mutationFn: consoleApi.applyPolicy, onSuccess: (r) => (refresh(), toast(`버전 ${r.version}를 적용했어요 · 직원 확장이 몇 분 안에 받아요`)), onError: fail });
 
   const pending = policy.data?.pending.length ?? 0;
   const isNew = mode === 'new';
@@ -182,7 +182,7 @@ export function PolicyPage() {
               <li>규칙을 고치고 "변경으로 저장" · 아직 적용 안 됨</li>
               <li>보안 관리자가 "승인하고 적용"을 누름</li>
               <li>직원 확장이 몇 분 안에 새 규칙을 받음</li>
-              <li>문제가 있으면 "변경 이력"에서 이전 버전으로 되돌리기</li>
+              <li>문제가 있으면 그 규칙을 끄거나 고쳐서 다시 승인하고 적용해요</li>
             </ol>
           </Help>
         </div>
@@ -294,9 +294,6 @@ export function PolicyPage() {
                 }}
               >
                 복제해서 새로 만들기
-              </button>
-              <button type="button" className="btn btn-sm" onClick={() => toast(`현재 버전 ${policy.data?.version} · 이력 조회는 기록 › 관리자 작업에서 볼 수 있어요`)}>
-                변경 이력
               </button>
               <button type="button" className="btn btn-sm btn-d" onClick={onDelete}>
                 삭제

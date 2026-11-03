@@ -1,13 +1,11 @@
 // 03 기록 (Logs.dc.html). "전송 기록" = GET /v1/audit/events (limit · offset · label · status).
-// "관리자 작업" is a mock until the server keeps an admin audit trail.
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { errorMessage } from '../../api/client';
-import { consoleApi } from '../../api/console';
 import { gateway } from '../../api/gateway';
 import type { AuditEvent, AuditStatus } from '../../api/types';
-import { Help, MockBadge, Seg } from '../../components/Controls';
+import { Help } from '../../components/Controls';
 import { Icon } from '../../components/Icon';
 import { QueryState } from '../../components/QueryState';
 import { useFeedback } from '../../features/feedback';
@@ -22,7 +20,6 @@ const STATUS_OPTS: [AuditStatus | '', string][] = [
   ['ok', '통과 · 가림'],
   ['upstream_error', '외부 LLM 오류'],
 ];
-const TONE_CLS = { clean: 'b-clean', accent: 'b-accent', redact: 'b-redact', block: 'b-block', muted: 'b-muted' } as const;
 
 /** "a,b,c" -> "a, b, c": the stored list has no spaces, so a long one could never wrap. */
 const industryText = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean).join(', ');
@@ -60,8 +57,7 @@ function download(name: string, text: string) {
 }
 
 export function LogsPage() {
-  const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'admin' ? 1 : 0;
+  const [params] = useSearchParams();
   const { toast, confirm } = useFeedback();
   const qc = useQueryClient();
   // Admin only, no undo: empties the gateway's audit log (used before a demo).
@@ -82,9 +78,8 @@ export function LogsPage() {
   const [onlyFlagged, setOnlyFlagged] = useState(false);
 
   const query = { limit: PAGE, offset: page * PAGE, status: status || undefined, label: label || undefined };
-  const events = useQuery({ queryKey: qk.audit(query), queryFn: () => gateway.auditEvents(query), placeholderData: keepPreviousData, enabled: tab === 0 });
-  const all = useQuery({ queryKey: qk.summary(0), queryFn: () => gateway.summary(0), enabled: tab === 0 });
-  const adminLog = useQuery({ queryKey: qk.adminLog, queryFn: consoleApi.adminLog, enabled: tab === 1 });
+  const events = useQuery({ queryKey: qk.audit(query), queryFn: () => gateway.auditEvents(query), placeholderData: keepPreviousData });
+  const all = useQuery({ queryKey: qk.summary(0), queryFn: () => gateway.summary(0) });
 
   const labels = useMemo(() => [...new Set((all.data?.findings ?? []).map((f) => f.label))], [all.data]);
 
@@ -139,34 +134,21 @@ export function LogsPage() {
         <div>
           <div className="crumb">모니터 / 기록</div>
           <h1>기록</h1>
-          <p className="t2">{tab === 0 ? '직원이 AI에 보낸 것에서 무엇을 찾고 어떻게 처리했나 · 원문은 저장하지 않아요' : '관리자가 콘솔에서 한 일 · 가입 승인, 규칙 적용, 예외 승인, 설정 변경'}</p>
+          <p className="t2">직원이 AI에 보낸 것에서 무엇을 찾고 어떻게 처리했나 · 원문은 저장하지 않아요</p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <Seg
-            label="기록 종류"
-            options={[
-              [0, '전송 기록'],
-              [1, '관리자 작업'],
-            ]}
-            value={tab}
-            onChange={(v) => setParams(v ? { tab: 'admin' } : {})}
-          />
           <button
             type="button"
             className="btn"
-            disabled={tab === 0 ? !rows.length : !adminLog.data?.length}
+            disabled={!rows.length}
             onClick={() => {
-              if (tab === 0) download(`gateway-audit-${Date.now()}.csv`, toCsv(rows));
-              else {
-                const a = adminLog.data ?? [];
-                download(`gateway-admin-${Date.now()}.csv`, ['time,who,action,target,note', ...a.map((r) => [r.t, r.who, r.act, r.target, r.note].map((v) => `"${v.replace(/"/g, '""')}"`).join(','))].join('\n'));
-              }
+              download(`gateway-audit-${Date.now()}.csv`, toCsv(rows));
               toast('CSV 내보내기를 시작했습니다 · 메타데이터만 포함');
             }}
           >
             CSV 내보내기
           </button>
-          {tab === 0 && (
+          {(
             <button
               type="button"
               className="btn"
@@ -188,7 +170,7 @@ export function LogsPage() {
         </div>
       </header>
 
-      {tab === 0 && (
+      {(
         <>
           <section className="card" aria-label="필터" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px' }}>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -440,55 +422,6 @@ export function LogsPage() {
         </>
       )}
 
-      {tab === 1 && (
-        <section className="card" style={{ padding: '14px 8px 8px' }}>
-          <div className="ch" style={{ padding: '0 10px' }}>
-            <h2 className="ct">
-              관리자 작업{' '}
-              <span className="t3" style={{ fontWeight: 400, fontSize: 13.5 }}>
-                · 누가 언제 무엇을 바꿨나 · 지울 수 없어요
-              </span>
-            </h2>
-            <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <MockBadge />
-              <span className="t3" style={{ fontSize: 13 }}>
-                최근 7일 · {adminLog.data?.length ?? 0}건
-              </span>
-            </span>
-          </div>
-          <QueryState isLoading={adminLog.isLoading} error={adminLog.error} />
-          <div className="tbl">
-            <table>
-              <thead>
-                <tr>
-                  <th>시각</th>
-                  <th>관리자</th>
-                  <th>작업</th>
-                  <th>대상</th>
-                  <th>내용</th>
-                </tr>
-              </thead>
-              <tbody>
-                {adminLog.data?.map((a, i) => (
-                  <tr key={i}>
-                    <td className="mono t3" style={{ fontSize: 12.5 }}>
-                      {a.t}
-                    </td>
-                    <td style={{ fontWeight: 500 }}>{a.who}</td>
-                    <td>
-                      <span className={`badge ${TONE_CLS[a.tone]}`}>{a.act}</span>
-                    </td>
-                    <td>{a.target}</td>
-                    <td className="t2" style={{ whiteSpace: 'normal' }}>
-                      {a.note}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
     </>
   );
 }

@@ -23,8 +23,7 @@ export function RequestPage() {
   const qc = useQueryClient();
   const nav = useNavigate();
   const { toast } = useFeedback();
-  const blocked = useQuery({ queryKey: qk.portal('blocked'), queryFn: portalApi.lastBlocked });
-  // The extension's block dialog opens this page with what it blocked and where; without it the card shows the sample.
+  // The extension's block dialog opens this page with what it blocked and where. Without that there is nothing to ask an exception for.
   const [params] = useSearchParams();
   const labels = params.get('labels') ?? '';
   const site = params.get('site') ?? '';
@@ -42,7 +41,7 @@ export function RequestPage() {
   });
 
   const len = reason.trim().length;
-  const can = len >= 20 && agree;
+  const can = len >= 20 && agree && !!labels;
   const done = submit.data;
   // After sending, keep looking at the answer: the security admin decides in the console, and an approval shows how long it lasts.
   const mine = useQuery({ queryKey: qk.portal('requests'), queryFn: portalApi.requests, refetchInterval: 5_000, enabled: !!done });
@@ -77,10 +76,10 @@ export function RequestPage() {
                 </span>
                 <span style={{ minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: 14, fontWeight: 600 }}>
-                    {labels ? `막힌 전송 · ${site || '브라우저 확장'}` : `막힌 전송 · ${blocked.data?.when ?? '…'} · ${blocked.data?.site ?? ''}`}
+                    {labels ? `막힌 전송 · ${site || '브라우저 확장'}` : '막힌 전송이 없어요'}
                   </span>
                   <span className="t2" style={{ fontSize: 12.5 }}>
-                    {labels ? `${labels.split(',').join(' · ')} — 항목 종류만 전달돼요` : blocked.data?.summary}
+                    {labels ? `${labels.split(',').join(' · ')} — 항목 종류만 전달돼요` : '채팅 화면에서 전송이 막혔을 때 나오는 안내의 "예외 요청"으로 들어와 주세요. 어떤 항목이 막혔는지 알아야 요청할 수 있어요.'}
                   </span>
                 </span>
               </div>

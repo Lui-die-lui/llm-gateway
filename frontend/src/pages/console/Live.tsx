@@ -1,7 +1,7 @@
 // 02 실시간 모니터링 (Live.dc.html). Event stream = /v1/audit/events polled at the chosen interval.
 // The per-minute chart is real (/v1/stats/timeseries?bucket=minute), and so are the anomalies (/v1/anomalies, computed from the audit log).
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { consoleApi } from '../../api/console';
 import { errorMessage } from '../../api/client';
@@ -63,9 +63,6 @@ export function LivePage() {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <Seg label="자동 새로고침" options={REFRESH} value={refresh} onChange={setRefresh} />
-          <Link className="btn" to="/console/settings">
-            알림 규칙
-          </Link>
           <Help label="이상 징후 기준 도움말" title="이상 징후 기준">
             <ol>
               <li>같은 곳에서 10분 안에 시크릿이 3번 이상 막히면 HIGH</li>

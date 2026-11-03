@@ -365,7 +365,6 @@ button{font:inherit;color:inherit}
               ),
             ),
             h("div", { class: "t3", style: "font-size:11.5px;line-height:1.6", text: "원래 단어는 홍*동처럼 일부만, 이 기기에 7일 보관돼요." }),
-            o.portalUrl ? h("a", { href: o.portalUrl, target: "_blank", rel: "noopener", text: "전체 보기 →" }) : null,
           )
         : null;
       rebuildDock();
