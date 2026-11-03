@@ -5,7 +5,7 @@ import * as mock from '../mocks/db';
 import { ApiError, request } from './client';
 import { createReal, decideReal, realExceptions, realMine, revokeReal } from './exceptions';
 import { gateway } from './gateway';
-import type { Anomaly, BasicRuleState, Decision, MinutePoint, PolicyRule, PolicyState, RuleDraft, Ttl } from './consoleTypes';
+import type { Anomaly, BasicRuleState, ServerSettings, Decision, MinutePoint, PolicyRule, PolicyState, RuleDraft, Ttl } from './consoleTypes';
 
 /** The gateway's policy view, with the "new" flag the editor shows for rules that exist only in the draft. */
 interface ServerPolicy extends Omit<PolicyState, 'rules'> {
@@ -72,6 +72,8 @@ export const consoleApi = {
   },
 
   settings: () => served(mock.getSettings),
+  serverSettings: () => request<ServerSettings>('/v1/settings'),
+  slackTest: () => request<{ ok: boolean; message: string }>('/v1/settings/slack/test', { method: 'POST' }),
 };
 
 export const portalApi = {

@@ -30,6 +30,8 @@ Railway, Render, Fly.io처럼 Docker 이미지를 올리고 디스크(볼륨)를
 | `GATEWAY_ADMIN_TOKEN` | 길고 아무도 모르는 문자열. 콘솔에서 입력할 비밀번호가 됩니다 |
 | `GATEWAY_API_KEYS` | 앱·확장이 쓸 접속 키. `python -m app.keys 앱이름`으로 만든 줄을 쉼표로 이어 붙입니다 (아래 "실제 LLM을 연결할 때") |
 
+**선택: Slack 알림**: 직원이 새 예외 요청을 보내면 Slack 채널로 알려 줍니다. Slack에서 Incoming Webhook을 만들어 주소를 `SLACK_WEBHOOK_URL`에 넣고(비밀값이라 코드·채팅에 붙이지 마세요), 알림에 승인 화면 링크를 넣으려면 `GATEWAY_CONSOLE_URL`에 콘솔 주소를 넣습니다. 콘솔 설정 화면의 "Slack으로 테스트 보내기"로 확인합니다. 요청 번호·항목·사이트·기간·사유만 가고 입력한 글은 가지 않습니다.
+
 ### main이 바뀌면 자동으로 배포되게 하기
 
 Railway가 GitHub 저장소와 연결돼 있으면 `main`에 push가 올 때마다 배포를 시작합니다. 그런데 push한 사람이 **Railway 프로젝트 멤버가 아니면 Railway가 배포를 멈춰 두고 멤버의 "허용"을 기다립니다.** 팀원이 PR을 병합할 때마다 프로젝트 주인이 직접 눌러야 하는 이유입니다.

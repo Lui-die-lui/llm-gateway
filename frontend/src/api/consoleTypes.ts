@@ -239,3 +239,11 @@ export interface BlockedSend {
   site: string;
   summary: string;
 }
+
+/** GET /v1/settings: the real state of the gateway (names and yes/no only, never a key, token or address). */
+export interface ServerSettings {
+  upstream: { provider: string; mock: boolean; internal_route: boolean };
+  protection: { caller_auth: boolean; caller_keys: number; admin_protected: boolean; response_scan: boolean; max_text: number; cors_origins: string[] };
+  retention: { vault_ttl_seconds: number; once_valid_seconds: number; decided_keep_days: number; stores_prompt_text: boolean };
+  slack: { configured: boolean; host: string | null; console_link: boolean };
+}
