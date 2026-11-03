@@ -634,12 +634,29 @@
     offStrip(s.enabled);
   });
 
+  // The note is only for a box we still cannot place a moment after the person (or the page's autofocus) lands in it: while a chat
+  // page is being drawn its box is often not there yet, and a note raised then would stay up for good. It is judged again later too.
+  let safeTimer;
+  let safeShown = false;
+  const SAFE_NOTE = { tone: "danger", text: "이 사이트의 입력창을 확실히 찾지 못했어요 · 보내기 전에 꼭 확인 창을 띄울게요" };
+  let safeWatch;
+  function safeNote(on) {
+    if (on === safeShown) return;
+    safeShown = on;
+    ui.strip("safe", on ? SAFE_NOTE : null);
+    clearInterval(safeWatch);
+    if (on) safeWatch = setInterval(() => !gone && judgeSafeNote(), 1000); // still unplaced? the note goes as soon as the box is known
+  }
+  function judgeSafeNote() {
+    const a = document.activeElement;
+    safeNote(safeMode() && isEditable(a) && !inOurUi(a));
+  }
   document.addEventListener(
     "focusin",
     (e) => {
-      if (safeMode() && isEditable(e.target) && !inOurUi(e.target))
-        ui.strip("safe", { tone: "danger", text: "이 사이트의 입력창을 확실히 찾지 못했어요 · 보내기 전에 꼭 확인 창을 띄울게요" });
-      else ui.strip("safe", null);
+      clearTimeout(safeTimer);
+      if (safeMode() && isEditable(e.target) && !inOurUi(e.target)) safeTimer = setTimeout(judgeSafeNote, 1200);
+      else safeNote(false);
     },
     true,
   );
@@ -875,5 +892,6 @@
     clearTimeout(noteTimer);
     noteTimer = setTimeout(noteNoPlaceholder, 1800);
     composerChanged();
+    if (safeShown && !safeMode()) safeNote(false); // the page finished drawing its chat box
   }).observe(document.body, { childList: true, subtree: true, characterData: true });
 })();
