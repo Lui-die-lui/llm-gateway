@@ -26,7 +26,6 @@ const TTL_HELP: Record<Ttl, string> = {
   '24h': '24시간 허용. 만료 시 자동 회수되고 사용 내역이 감사 로그에 남습니다.',
   '7d': '7일 허용: 만료 시 자동 회수되고 사용 내역이 감사 로그에 남습니다. 승인 즉시 적용돼요.',
 };
-const SEV_CLS = { CRITICAL: 'b-block', HIGH: 'b-redact', MEDIUM: 'b-muted' } as const;
 const TABS: [ExceptionStatus, string][] = [
   ['pending', '대기'],
   ['approved', '승인됨'],
@@ -299,10 +298,7 @@ export function ExceptionsPage() {
                   <button type="button" className={`exc-item${on ? ' on' : ''}`} aria-pressed={on} onClick={() => setSelId(r.id)}>
                     <span style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', width: '100%' }}>
                       <span style={{ fontSize: 14, fontWeight: 600 }}>
-                        {r.user}{' '}
-                        <span className="t3" style={{ fontWeight: 400 }}>
-                          · {r.dept}
-                        </span>
+                        {r.user}
                       </span>
                       <span className="mono" style={{ fontSize: 12, color: 'var(--ink-3)' }}>
                         {r.requestedAt}
@@ -312,7 +308,6 @@ export function ExceptionsPage() {
                       {r.title}
                     </span>
                     <span style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                      <span className={`badge ${SEV_CLS[r.sev]}`}>{r.sev}</span>
                       <span className="chip">{r.entity}</span>
                       <span className="chip">{r.scope}</span>
                     </span>
@@ -333,40 +328,23 @@ export function ExceptionsPage() {
                   <div className="lbl">{cur.id}</div>
                   <h2 style={{ margin: '6px 0 0', fontSize: 18, fontWeight: 600 }}>{cur.title}</h2>
                 </div>
-                <span className={`badge ${SEV_CLS[cur.sev]}`}>
-                  {cur.sev} · {cur.status === 'pending' ? cur.sla : TABS.find((t) => t[0] === cur.status)?.[1]}
-                </span>
+                <span className="badge b-muted">{TABS.find((t) => t[0] === cur.status)?.[1]}</span>
               </div>
               <dl className="kv" style={{ gridTemplateColumns: '110px minmax(0,1fr)' }}>
                 <dt>요청자</dt>
-                <dd>
-                  {cur.user} · {cur.dept} · 정책 편집 권한 없음
-                </dd>
+                <dd>{cur.user}</dd>
                 <dt>차단된 항목</dt>
-                <dd>
-                  {cur.entity} — 규칙{' '}
-                  <span className="mono" style={{ fontSize: 13 }}>
-                    {cur.rule}
-                  </span>
-                </dd>
+                <dd>{cur.entity}</dd>
                 <dt>대상</dt>
                 <dd>{cur.target}</dd>
                 <dt>요청 범위</dt>
                 <dd>{cur.scope}</dd>
-                <dt>최근 이력</dt>
-                <dd>{cur.history}</dd>
               </dl>
               <div>
                 <div className="lbl" style={{ marginBottom: 8 }}>
                   요청 사유 (사용자 작성)
                 </div>
                 <blockquote style={{ margin: 0, padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,.5)', border: '1px solid var(--line)', fontSize: 13.5, lineHeight: 1.7 }}>{cur.reason}</blockquote>
-              </div>
-              <div role="note" style={{ display: 'flex', gap: 10, padding: '12px 14px', borderRadius: 10, background: 'rgba(37,99,235,.08)', border: '1px solid rgba(37,99,235,.3)', fontSize: 13.5, lineHeight: 1.6 }}>
-                <span className="badge b-accent" style={{ flex: '0 0 auto' }}>
-                  대안
-                </span>
-                <span>{cur.alt}</span>
               </div>
               {cur.status === 'pending' ? (
                 <>
