@@ -4,10 +4,11 @@ os.environ["AUDIT_DB"] = ":memory:"  # before app.main is imported
 os.environ["POLICY_DB"] = ":memory:"
 os.environ["EXCEPTIONS_DB"] = ":memory:"
 os.environ["SETTINGS_DB"] = ":memory:"
+os.environ["MEMBERS_DB"] = ":memory:"
 
 import pytest
 
-from app import audit, company_policy, exception_requests, settings
+from app import audit, company_policy, exception_requests, members, settings
 
 ENV_KEYS = [
     "UPSTREAM_MODE", "UPSTREAM_PROVIDER", "UPSTREAM_MODEL", "UPSTREAM_API_KEY", "UPSTREAM_BASE_URL",
@@ -24,3 +25,4 @@ def clean_env(monkeypatch):
     company_policy.configure(":memory:")
     exception_requests.configure(":memory:")
     settings.configure(":memory:")
+    members.configure(":memory:")

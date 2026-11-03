@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, StrictBool, StrictInt
 from starlette.concurrency import run_in_threadpool
 
-from . import audit, company_policy, exception_requests, notify, policy, rules_catalog, sessions, settings, upstream
+from . import audit, company_policy, exception_requests, members, notify, policy, rules_catalog, sessions, settings, upstream
 from .evaluate import entity_examples, evaluate
 from .sanitizer import (
     ResponseBlocked,
@@ -32,6 +32,7 @@ industries = load_industries(INDUSTRIES_DIR)
 audit.configure(os.getenv("AUDIT_DB", str(Path(__file__).resolve().parent.parent / "data" / "audit.db")))
 company_policy.configure(os.getenv("POLICY_DB", str(Path(__file__).resolve().parent.parent / "data" / "policy.db")))
 exception_requests.configure(os.getenv("EXCEPTIONS_DB", str(Path(__file__).resolve().parent.parent / "data" / "exceptions.db")))
+members.configure(os.getenv("MEMBERS_DB", str(Path(__file__).resolve().parent.parent / "data" / "members.db")))
 settings.configure(os.getenv("SETTINGS_DB", str(Path(__file__).resolve().parent.parent / "data" / "settings.db")))
 
 app = FastAPI(title="LLM Gateway")
@@ -184,7 +185,7 @@ def settings_payload() -> dict:
         "limits": {k: {"min": lo, "max": hi} for k, (kind, lo, hi, _l) in settings.SPEC.items() if kind == "int"},
         "slack": {"configured": notify.configured(), "host": notify.host(), "source": settings.slack_source(), "console_link": bool(os.getenv("GATEWAY_CONSOLE_URL"))},
         "keys": {"env_keys": len(api_keys()), "required": bool(api_keys()) or settings.active_key_count() > 0, "list": settings.list_keys()},
-        "data": {"audit_events": audit.count(), "exception_requests": exception_requests.count()},
+        "data": {"audit_events": audit.count(), "exception_requests": exception_requests.count(), "members": members.count()},
         "log": settings.recent_log(),
         "environment": {
             "provider": upstream.provider_name("external"),
@@ -209,6 +210,7 @@ class SettingsPatch(BaseModel):
     once_valid_hours: StrictInt | None = None
     keep_decided_days: StrictInt | None = None
     notify_new_exception: StrictBool | None = None
+    notify_new_member: StrictBool | None = None
 
 
 @app.patch("/v1/settings", dependencies=[Depends(require_admin)])
@@ -675,6 +677,50 @@ def exception_clear():
     """Empty the exception requests (before a demo). Admin only; there is no undo."""
     n = exception_requests.clear()
     settings.log_event("데이터 비우기", f"예외 요청 {n}건을 지웠어요")
+    return {"deleted": n}
+
+
+# ---------------------------------------------------------------- members and sign-up requests
+
+class JoinIn(BaseModel):
+    name: str = Field(max_length=60)
+    email: str = Field(max_length=200)
+    dept: str = Field(default="", max_length=60)
+
+
+@app.post("/v1/members/join")
+def member_join(body: JoinIn):
+    """Public: a person asks to join. The admin decides in the console (and hears about it in Slack when a webhook is set)."""
+    created = members.join(body.name, body.email, body.dept)
+    notify.send_later(members.new_member_text(created), "notify_new_member")
+    return {"id": created["id"], "status": created["status"]}
+
+
+@app.get("/v1/members", dependencies=admin)
+def member_list():
+    return members.listing()
+
+
+@app.post("/v1/members/{member_id}/approve", dependencies=admin)
+def member_approve(member_id: str):
+    return members.approve(member_id)
+
+
+@app.post("/v1/members/{member_id}/reject", dependencies=admin)
+def member_reject(member_id: str):
+    return members.reject(member_id)
+
+
+@app.delete("/v1/members/{member_id}", dependencies=admin)
+def member_remove(member_id: str):
+    return members.remove(member_id)
+
+
+@app.delete("/v1/members", dependencies=admin)
+def member_clear():
+    """Empty the member list and the waiting requests (before a demo). Admin only; there is no undo."""
+    n = members.clear()
+    settings.log_event("데이터 비우기", f"구성원·가입 신청 {n}건을 지웠어요")
     return {"deleted": n}
 
 

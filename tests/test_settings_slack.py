@@ -63,7 +63,7 @@ def test_settings_reports_real_state_and_no_secrets(monkeypatch):
     d = r.json()
     assert d["environment"]["mock"] is True and d["environment"]["admin_protected"] is True
     assert d["keys"]["env_keys"] == 1 and d["keys"]["required"] is True
-    assert d["values"] == {"response_scan": True, "vault_ttl_minutes": 30, "once_valid_hours": 24, "keep_decided_days": 180, "notify_new_exception": True}
+    assert d["values"] == {"response_scan": True, "vault_ttl_minutes": 30, "once_valid_hours": 24, "keep_decided_days": 180, "notify_new_exception": True, "notify_new_member": True}
     assert d["slack"] == {"configured": False, "host": None, "source": None, "console_link": False}
     assert "supersecret" not in r.text and "gw_" not in r.text
 
@@ -224,5 +224,5 @@ def test_data_counts_and_clearing_are_logged():
     assert client.delete("/v1/exceptions").json()["deleted"] == 1
     client.delete("/v1/audit/events")
     d = client.get("/v1/settings").json()
-    assert d["data"] == {"audit_events": 0, "exception_requests": 0}
+    assert d["data"] == {"audit_events": 0, "exception_requests": 0, "members": 0}
     assert sum(1 for e in d["log"] if e["what"] == "데이터 비우기") == 2

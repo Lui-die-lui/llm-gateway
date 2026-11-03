@@ -51,9 +51,9 @@ def send(text: str) -> tuple[bool, str]:
     return False, f"Slack이 거절했어요 ({r.status_code}) · 웹훅 주소를 확인해 주세요"
 
 
-def send_later(text: str) -> None:
-    """Fire and forget: a slow or down Slack must not slow the employee's request."""
-    if configured() and settings.values()["notify_new_exception"]:
+def send_later(text: str, switch: str = "notify_new_exception") -> None:
+    """Fire and forget: a slow or down Slack must not slow the employee's request. `switch` is the setting that turns this kind of notice on or off."""
+    if configured() and settings.values()[switch]:
         threading.Thread(target=send, args=(text,), daemon=True).start()
 
 

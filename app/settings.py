@@ -27,8 +27,9 @@ SPEC = {
     "once_valid_hours": ("int", 1, 168, "1회 허용 유효 시간(시간)"),
     "keep_decided_days": ("int", 7, 730, "결정된 예외 요청 보관(일)"),
     "notify_new_exception": ("bool", None, None, "새 예외 요청 Slack 알림"),
+    "notify_new_member": ("bool", None, None, "새 가입 신청 Slack 알림"),
 }
-DEFAULTS = {"response_scan": True, "vault_ttl_minutes": 30, "once_valid_hours": 24, "keep_decided_days": 180, "notify_new_exception": True}
+DEFAULTS = {"response_scan": True, "vault_ttl_minutes": 30, "once_valid_hours": 24, "keep_decided_days": 180, "notify_new_exception": True, "notify_new_member": True}
 
 _lock = threading.Lock()
 _db: sqlite3.Connection | None = None
