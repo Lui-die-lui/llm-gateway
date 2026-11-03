@@ -1,7 +1,7 @@
 (() => {
 "use strict";
 const DEFAULT_GATEWAY = "http://localhost:8000";
-const DEFAULTS = { enabled: true, industries: [], hint: true };
+const DEFAULTS = { enabled: true, industries: [], hint: true, timeFormat: "clock" };
 const INDUSTRY_KO = { cosmetics: "화장품", medical: "의료", manufacturing: "제조", finance: "금융", hr: "인사", legal: "법무", it_dev: "IT 개발", ecommerce: "이커머스", logistics: "물류" };
 const $ = (id) => document.getElementById(id);
 
@@ -72,6 +72,8 @@ async function showExceptions() {
   if (!r?.ok) return void (el.textContent = "서버에 연결되면 보낸 요청이 보여요");
   if (!r.data.length) return void (el.textContent = "보낸 요청이 없어요");
   const mark = { pending: "대기", approved: "승인", used: "사용 완료", revoked: "회수", rejected: "반려", expired: "만료" };
+  let fmt = Gw.timeFormat((await chrome.storage.local.get(DEFAULTS)).timeFormat);
+  chrome.storage.onChanged.addListener((c) => c.timeFormat && ((fmt = Gw.timeFormat(c.timeFormat.newValue)), draw()));
   const draw = () => {
     const now = Date.now();
     el.replaceChildren(
@@ -80,7 +82,7 @@ async function showExceptions() {
         const row = document.createElement("div");
         row.className = `ex ${d.kind}`;
         row.append(Object.assign(document.createElement("b"), { textContent: mark[d.kind] }), ` ${d.text}`);
-        if (d.kind === "approved" && d.end) row.append(Object.assign(document.createElement("div"), { className: "left", textContent: `남은 시간 ${Gw.remaining(d.end - now)}` }));
+        if (d.kind === "approved" && d.end) row.append(Object.assign(document.createElement("div"), { className: "left", textContent: Gw.remaining(d.end - now, fmt) }));
         if (d.note) row.append(Object.assign(document.createElement("div"), { className: "memo", textContent: `관리자 메모 · ${d.note}` }));
         return row;
       }),
@@ -102,6 +104,14 @@ async function init() {
   $("gw-key").value = (await chrome.storage.local.get({ gatewayKey: "" })).gatewayKey;
   $("gw").addEventListener("submit", saveGateway);
   showPage();
+  const fmtNow = Gw.timeFormat(settings.timeFormat);
+  for (const r of document.querySelectorAll('input[name="timeFormat"]')) {
+    r.checked = r.value === fmtNow;
+    r.addEventListener("change", () => {
+      settings.timeFormat = r.value;
+      chrome.storage.local.set({ timeFormat: r.value });
+    });
+  }
   $("hint").checked = settings.hint !== false;
   $("hint").addEventListener("change", (e) => chrome.storage.local.set({ hint: e.target.checked }));
 

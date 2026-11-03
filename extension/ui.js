@@ -12,6 +12,8 @@
     check: '<path d="M20 6 9 17l-5-5"/>',
     close: '<path d="M18 6 6 18M6 6l12 12"/>',
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    hourglass: '<path d="M6 2h12M6 22h12M7 2v4.5a5 5 0 0 0 2 4l1.5 1.5-1.5 1.5a5 5 0 0 0-2 4V22M17 2v4.5a5 5 0 0 1-2 4L13.5 12l1.5 1.5a5 5 0 0 1 2 4V22"/>',
+    send: '<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>',
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0"/>',
   };
   const icon = (name, size = 16) => {
@@ -85,21 +87,50 @@ button{font:inherit;color:inherit}
 .gchip.warn .gi{background:rgba(180,83,9,.16)}
 .gchip .gt{font-variant-numeric:tabular-nums}
 .gcard{width:min(340px,calc(100vw - 24px));border-radius:20px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;background:rgba(255,255,255,.97);box-shadow:0 24px 50px -22px rgba(15,26,43,.5);animation:rise .18s cubic-bezier(.22,1,.36,1)}
-.gcard h3{margin:0;font-size:14px;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:8px}
-.gcard dl{margin:0;display:grid;grid-template-columns:76px minmax(0,1fr);gap:6px 10px;font-size:12.5px}
+.gcard h3{margin:0;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.gcard h3 .cnt{font-size:11.5px;font-weight:700;color:#065F46;background:rgba(16,185,129,.14);border-radius:999px;padding:1px 8px}
+.gcard h3 .xbtn{margin-left:auto}
+.gcard .gl{display:flex;flex-direction:column;gap:8px;max-height:min(46vh,340px);overflow:auto;margin:0;padding:0;list-style:none}
+.gcard .gitem{border:1px solid rgba(15,26,43,.1);border-radius:14px;padding:10px 12px;background:#fff}
+.gcard .gh{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;font-weight:700}
+.gcard .gh .gl-t{font-variant-numeric:tabular-nums;font-weight:700;color:#065F46;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.gcard .gh .gl-t.warn{color:#92400E}
+.gcard dl{margin:6px 0 0;display:grid;grid-template-columns:72px minmax(0,1fr);gap:4px 10px;font-size:12.5px}
 .gcard dt{color:#5F6B7D}.gcard dd{margin:0;overflow-wrap:anywhere}
-.gcard .why{font-size:12px;line-height:1.6;color:#4A5568;background:#F7F8FB;border-radius:12px;padding:8px 10px}
-.gcard .more{font-size:11.5px;color:#5F6B7D}
+.gcard .why{margin:0;font-size:12px;line-height:1.6;color:#4A5568;background:#F7F8FB;border-radius:12px;padding:8px 10px}
 
-/* popups for answers to exception requests (top right of the page) */
-.notices{position:fixed;top:16px;right:16px;display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 32px));pointer-events:none}
+/* answers to exception requests: slide in at the top centre, stay a few seconds, fade out */
+.notices{position:fixed;top:20px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:10px;width:min(400px,calc(100vw - 32px));pointer-events:none}
 .notices>*{pointer-events:auto}
-.ncard{display:flex;gap:12px;align-items:flex-start;border-radius:18px;padding:14px 12px 14px 14px;background:rgba(255,255,255,.97);border:1px solid #fff;box-shadow:0 24px 50px -22px rgba(15,26,43,.55);animation:rise .22s cubic-bezier(.22,1,.36,1)}
+.ncard{position:relative;overflow:hidden;display:flex;gap:12px;align-items:flex-start;border-radius:18px;padding:14px 12px 16px 14px;background:rgba(255,255,255,.98);border:1px solid #fff;box-shadow:0 24px 50px -20px rgba(15,26,43,.6);animation:pop .28s cubic-bezier(.2,1.15,.4,1)}
+.ncard.out{animation:pout .2s ease forwards}
+.ncard .nbar{position:absolute;left:0;bottom:0;height:3px;width:100%;transform-origin:left;background:currentColor;opacity:.35;animation:drain var(--dur,7s) linear forwards}
+.ncard:hover .nbar{animation-play-state:paused}
+.ncard.tone-ok{color:#047857}.ncard.tone-warn{color:#B45309}.ncard.tone-info{color:#1D4ED8}
 .ncard .ni{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;flex:0 0 auto}
-.ncard.tone-ok .ni{background:rgba(16,185,129,.14);color:#047857}.ncard.tone-warn .ni{background:rgba(217,119,6,.14);color:#B45309}.ncard.tone-info .ni{background:rgba(37,99,235,.12);color:#1D4ED8}
-.ncard .nb{flex:1;min-width:0}.ncard b{display:block;font-size:14px;margin-bottom:2px}
+.ncard.tone-ok .ni{background:rgba(16,185,129,.14)}.ncard.tone-warn .ni{background:rgba(217,119,6,.14)}.ncard.tone-info .ni{background:rgba(37,99,235,.12)}
+.ncard .nb{flex:1;min-width:0;color:#0F1A2B}.ncard b{display:block;font-size:14px;margin-bottom:2px}
 .ncard p{margin:0;font-size:12.5px;line-height:1.6;color:#4A5568}.ncard .nn{margin-top:6px;padding:6px 10px;border-radius:10px;background:#F7F8FB;color:#0F1A2B}
-@media (prefers-reduced-motion:reduce){.gcard,.ncard{animation:none}}
+@keyframes pop{from{opacity:0;transform:translateY(-16px) scale(.95)}to{opacity:1;transform:none}}
+@keyframes pout{to{opacity:0;transform:translateY(-10px) scale(.97)}}
+@keyframes drain{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+/* the in-page exception request form */
+.fld{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.fld>label,.fld>.lb{font-size:12px;font-weight:600;color:#4A5568}
+.fld input[type=text],.fld textarea{width:100%;border:1px solid rgba(15,26,43,.16);border-radius:12px;background:#fff;padding:9px 12px;font-size:13px;line-height:1.5;color:#0F1A2B;box-sizing:border-box}
+.fld textarea{min-height:92px;resize:vertical}
+.fld input:focus-visible,.fld textarea:focus-visible{outline:2px solid #2563EB;outline-offset:1px}
+.fld .ro{font-size:13px;padding:9px 12px;border-radius:12px;background:#F2F4F8;color:#0F1A2B}
+.fld .hint{font-size:11.5px;color:#5F6B7D;display:flex;justify-content:space-between}
+.fld .hint.bad{color:#DC2626}
+.segs{display:flex;gap:6px}
+.segs label{flex:1;position:relative}
+.segs input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.segs span{display:flex;align-items:center;justify-content:center;min-height:38px;border-radius:999px;border:1px solid rgba(15,26,43,.16);background:#fff;font-size:13px;font-weight:600;color:#4A5568}
+.segs input:checked+span{background:#0F1A2B;border-color:#0F1A2B;color:#fff}
+.segs input:focus-visible+span{outline:2px solid #2563EB;outline-offset:2px}
+.ferr{margin:10px 0 0;font-size:12.5px;color:#B91C1C}
+@media (prefers-reduced-motion:reduce){.gcard,.ncard,.ncard .nbar{animation:none}.ncard .nbar{display:none}}
 
 /* chips inside text */
 .ph{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;font-size:.92em;color:#1D4ED8;background:rgba(37,99,235,.09);border-radius:5px;padding:0 4px}
@@ -116,7 +147,7 @@ button{font:inherit;color:inherit}
 .dlg p{margin:4px 0 0;font-size:13px;line-height:1.6;color:#4A5568}
 .head{display:flex;gap:12px;align-items:flex-start}
 .badge{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto}
-.badge.warn{background:rgba(217,119,6,.14);color:#B45309}.badge.danger{background:rgba(220,38,38,.12);color:#DC2626}.badge.neutral{background:rgba(15,26,43,.08);color:#0F1A2B}
+.badge.ok{background:rgba(16,185,129,.14);color:#047857}.badge.warn{background:rgba(217,119,6,.14);color:#B45309}.badge.danger{background:rgba(220,38,38,.12);color:#DC2626}.badge.neutral{background:rgba(15,26,43,.08);color:#0F1A2B}
 .items{display:flex;flex-direction:column;gap:8px}
 .item{display:grid;grid-template-columns:minmax(130px,1fr) minmax(0,2fr);gap:12px;align-items:center;padding:12px 14px;border-radius:14px;background:#F7F8FB}
 @media (max-width:560px){.item{grid-template-columns:1fr}}
@@ -232,83 +263,123 @@ button{font:inherit;color:inherit}
       return !!main;
     }
 
-    /* ---------- approved exception: one chip on the left, the one that ends first ---------- */
-    let grantNow = null;
+    /* ---------- approved exceptions: one chip on the left (the one that ends first); open it to see all of them ---------- */
+    let grants = [];
     let grantOpen = false;
     let grantTimer;
-    const grantLine = (g, now) => `${g.once ? "1회 허용 · " : ""}남은 시간 ${root.Gw.remaining(g.end - now)}`;
+    let fmt = "clock";
+    const WARN_MS = 5 * 60_000;
+    const gsig = (list) => list.map((g) => `${g.id}:${g.end}`).join("|");
+    const chipText = (g, now) => `${g.once ? "1회 · " : ""}${root.Gw.remaining(g.end - now, fmt)}`;
     function renderGrant() {
-      if (!grantNow) {
+      if (!grants.length) {
         clearInterval(grantTimer);
         grantTimer = null;
         grantOpen = false;
         return dockL.replaceChildren();
       }
-      const g = grantNow;
+      const g = grants[0];
       const now = Date.now();
-      const warn = g.end - now < 5 * 60_000;
       const chip = h(
         "button",
-        { type: "button", class: `gchip${warn ? " warn" : ""}`, "aria-expanded": String(grantOpen), "aria-label": "예외 승인 남은 시간, 눌러서 자세히 보기", "data-testid": "gw-grant-chip", onclick: () => ((grantOpen = !grantOpen), renderGrant()) },
-        h("span", { class: "gi" }, icon("clock", 13)),
-        h("span", { class: "gt", "data-testid": "gw-grant-time", text: grantLine(g, now) }),
+        {
+          type: "button",
+          class: `gchip${g.end - now < WARN_MS ? " warn" : ""}`,
+          "aria-expanded": String(grantOpen),
+          "aria-label": `예외 승인 ${grants.length}건 · 가장 먼저 끝나는 것의 남은 시간 · 눌러서 자세히 보기`,
+          "data-testid": "gw-grant-chip",
+          onclick: () => ((grantOpen = !grantOpen), renderGrant()),
+        },
+        h("span", { class: "gi" }, icon("hourglass", 13)),
+        h("span", { class: "gt", "data-testid": "gw-grant-time", text: chipText(g, now) }),
       );
       const nodes = [chip];
       if (grantOpen) {
         const row = (k, v) => [h("dt", { text: k }), h("dd", { text: v })];
+        const item = (x) =>
+          h(
+            "li",
+            { class: "gitem", "data-testid": "gw-grant-item" },
+            h(
+              "div",
+              { class: "gh" },
+              h("span", { text: x.entity || "항목 미지정" }),
+              h("span", { class: `gl-t${x.end - now < WARN_MS ? " warn" : ""}`, "data-end": String(x.end), "data-once": x.once ? "1" : "" }, icon("hourglass", 12), h("span", { class: "v", text: root.Gw.remaining(x.end - now, fmt) })),
+            ),
+            h(
+              "dl",
+              {},
+              row("적용 사이트", x.site || "모든 사이트"),
+              row("허용 기간", x.once ? "1회만" : `${x.label} · ${root.Gw.clock(x.end, now)}까지`),
+              x.once ? row("안 쓰면", `${root.Gw.clock(x.end, now)}에 끝나요`) : null,
+              x.note ? row("관리자 메모", x.note) : null,
+            ),
+          );
+        const onceAny = grants.some((x) => x.once);
         nodes.unshift(
           h(
             "section",
             { class: "gcard", role: "region", "aria-label": "예외 승인 자세히", "data-testid": "gw-grant-card" },
-            h("h3", {}, "예외 승인 중", h("button", { type: "button", class: "xbtn", "aria-label": "닫기", onclick: () => ((grantOpen = false), renderGrant()) }, icon("close", 14))),
-            h(
-              "dl",
-              {},
-              row("허용 항목", g.entity || "항목 미지정"),
-              row("적용 사이트", g.site || "모든 사이트"),
-              row("허용 기간", g.once ? "1회만" : `${g.label} · ${root.Gw.clock(g.end, now)}까지`),
-              g.once ? row("안 쓰면", `${root.Gw.clock(g.end, now)}에 끝나요`) : null,
-              g.note ? row("관리자 메모", g.note) : null,
-            ),
-            h("p", { class: "why", text: `이 항목은 위 사이트에서 가려지지 않고 그대로 보내져요. ${g.once ? "한 번 쓰면 바로 사라지고" : "시간이 끝나면"} 자동으로 다시 보호돼요.` }),
-            g.others ? h("p", { class: "more", text: `다른 승인 ${g.others}건이 더 있어요 · 가장 먼저 끝나는 것만 보여 드려요` }) : null,
+            h("h3", {}, "예외 승인 중", grants.length > 1 ? h("span", { class: "cnt", text: `${grants.length}건` }) : null, h("button", { type: "button", class: "xbtn", "aria-label": "닫기", onclick: () => ((grantOpen = false), renderGrant()) }, icon("close", 14))),
+            h("ul", { class: "gl" }, ...grants.map(item)),
+            h("p", { class: "why", text: `위 항목은 해당 사이트에서 가려지지 않고 그대로 보내져요. ${onceAny ? "1회 허용은 한 번 쓰면 바로 사라지고, " : ""}시간이 끝나면 자동으로 다시 보호돼요.` }),
           ),
         );
       }
       dockL.replaceChildren(...nodes);
       place();
     }
-    /** Show the approval that ends first (null hides it). The second counts down by itself. */
-    function grant(g) {
-      const changed = !g || !grantNow || g.id !== grantNow.id || g.end !== grantNow.end || g.others !== grantNow.others;
-      grantNow = g || null;
-      if (!grantNow) return renderGrant();
+    /** Show the approvals that are running, the one ending first at the top (an empty list hides everything). `format`: "clock" | "text". */
+    function grant(list, format) {
+      const next = Array.isArray(list) ? list : list ? [list] : [];
+      const f = format || fmt;
+      const changed = gsig(next) !== gsig(grants) || f !== fmt;
+      grants = next;
+      fmt = f;
+      if (!grants.length) return renderGrant();
       if (changed) renderGrant();
       grantTimer ??= setInterval(() => {
-        if (!grantNow) return;
-        if (grantNow.end <= Date.now()) return grant(null);
+        const now = Date.now();
+        if (grants.some((g) => g.end <= now)) return grant(grants.filter((g) => g.end > now));
         const t = dockL.querySelector("[data-testid=gw-grant-time]");
-        if (t) t.textContent = grantLine(grantNow, Date.now());
-        const warn = grantNow.end - Date.now() < 5 * 60_000;
-        dockL.querySelector(".gchip")?.classList.toggle("warn", warn);
+        if (t) t.textContent = chipText(grants[0], now);
+        dockL.querySelector(".gchip")?.classList.toggle("warn", grants[0].end - now < WARN_MS);
+        for (const el of dockL.querySelectorAll("[data-end]")) {
+          const end = Number(el.dataset.end);
+          el.querySelector(".v").textContent = root.Gw.remaining(end - now, fmt);
+          el.classList.toggle("warn", end - now < WARN_MS);
+        }
       }, 1000);
     }
 
-    /* ---------- popup for an answer to an exception request ---------- */
+    /* ---------- answer to an exception request: slides in, stays a few seconds, fades out (never blocks the page) ---------- */
     const noticeTimers = new Map();
-    function notify(id, spec, ms = 60_000) {
+    function hideNotice(id) {
+      clearTimeout(noticeTimers.get(id));
+      const el = notices.querySelector(`[data-nid="${id}"]`);
+      if (!el || el.classList.contains("out")) return;
+      el.classList.add("out");
+      setTimeout(() => el.remove(), 200);
+    }
+    function notify(id, spec, ms = 7000) {
       clearTimeout(noticeTimers.get(id));
       notices.querySelector(`[data-nid="${id}"]`)?.remove();
       if (!spec) return;
       const card = h(
         "div",
-        { class: `ncard tone-${spec.tone || "info"}`, role: spec.tone === "warn" ? "alert" : "status", "data-nid": id, "data-testid": `gw-notice-${id}` },
+        { class: `ncard tone-${spec.tone || "info"}`, role: spec.tone === "warn" ? "alert" : "status", "data-nid": id, "data-testid": `gw-notice-${id}`, style: `--dur:${ms}ms` },
         h("span", { class: "ni" }, icon(spec.tone === "ok" ? "check" : spec.tone === "warn" ? "shieldAlert" : "bell", 18)),
         h("div", { class: "nb" }, h("b", { text: spec.title }), h("p", { text: spec.text }), spec.note ? h("p", { class: "nn", text: `관리자 메모 · ${spec.note}` }) : null),
-        h("button", { type: "button", class: "xbtn", "aria-label": "닫기", onclick: () => notify(id, null) }, icon("close", 14)),
+        h("button", { type: "button", class: "xbtn", "aria-label": "닫기", onclick: () => hideNotice(id) }, icon("close", 14)),
+        ms ? h("span", { class: "nbar" }) : null,
       );
       notices.prepend(card);
-      if (ms) noticeTimers.set(id, setTimeout(() => notify(id, null), ms));
+      if (ms) {
+        const arm = (t) => noticeTimers.set(id, setTimeout(() => hideNotice(id), t));
+        arm(ms);
+        card.addEventListener("mouseenter", () => clearTimeout(noticeTimers.get(id)));
+        card.addEventListener("mouseleave", () => arm(2500)); // read it in peace; it goes a moment after the pointer leaves
+      }
     }
 
     /* ---------- toast ---------- */
@@ -389,7 +460,7 @@ button{font:inherit;color:inherit}
             e.stopPropagation();
             done(onEscape);
           } else if (e.key === "Tab") {
-            const f = [...dlg.querySelectorAll("button:not([disabled]),a[href]")];
+            const f = [...dlg.querySelectorAll("button:not([disabled]),a[href],input:not([disabled]),textarea:not([disabled])")];
             if (!f.length) return;
             const first = f[0];
             const last = f[f.length - 1];
@@ -498,15 +569,7 @@ button{font:inherit;color:inherit}
     }
 
     /* ---------- U2-A secret block ---------- */
-    // The request page shows what was blocked and where; only the kinds of data and the site travel, never the text.
-    function requestPage(url, labels) {
-      const u = new URL(url); // already carries ?cid=…
-      if (labels.length) u.searchParams.set("labels", labels.join(","));
-      u.searchParams.set("site", location.hostname);
-      return u.href;
-    }
-
-    function blocked({ labels, requestUrl, canSelect }) {
+    function blocked({ labels, canRequest, canSelect }) {
       return modal(
         (done) =>
           h(
@@ -522,10 +585,84 @@ button{font:inherit;color:inherit}
               "div",
               { class: "btns" },
               canSelect ? h("button", { type: "button", class: "btn p", "data-autofocus": "1", text: "해당 부분 선택하기", onclick: () => done("select") }) : null,
-              requestUrl ? h("a", { class: "btn", href: requestPage(requestUrl, labels), target: "_blank", rel: "noopener", text: "예외 요청" }) : null,
+              canRequest ? h("button", { type: "button", class: "btn", "data-testid": "gw-request-open", text: "예외 요청", onclick: () => done("request") }) : null,
               h("button", { type: "button", class: "btn", text: "닫기", onclick: () => done("close") }),
             ),
           ),
+        { onEscape: "close" },
+      );
+    }
+
+    /* ---------- exception request, made right here (only the kinds of data and the site travel, never the prompt text) ---------- */
+    const MIN_REASON = 20;
+    function requestForm({ labels, site, send }) {
+      return modal(
+        (done) => {
+          let scope = "1회";
+          const entity = h("input", { type: "text", id: "gw-rq-entity", maxlength: "100", value: labels.join(", "), placeholder: "예: 이메일, 조성비" });
+          const reason = h("textarea", { id: "gw-rq-reason", maxlength: "1000", "data-autofocus": "1", placeholder: "왜 이 정보를 그대로 보내야 하는지 업무 사유를 적어 주세요" });
+          const count = h("span", { text: `0/${MIN_REASON}자 이상` });
+          const err = h("p", { class: "ferr", role: "alert", hidden: true });
+          const sendBtn = h("button", { type: "submit", class: "btn p", "data-testid": "gw-request-send", text: "요청 보내기" });
+          reason.addEventListener("input", () => {
+            const n = reason.value.trim().length;
+            count.textContent = `${n}/${MIN_REASON}자 이상`;
+            if (n >= MIN_REASON) {
+              err.hidden = true; // fixed what the message complained about
+              count.parentElement.classList.remove("bad");
+            }
+          });
+          const seg = h(
+            "div",
+            { class: "segs", role: "radiogroup", "aria-label": "허용 기간" },
+            ...["1회", "1시간", "24시간"].map((v) => h("label", {}, h("input", { type: "radio", name: "gw-rq-scope", value: v, checked: v === scope, onchange: () => (scope = v) }), h("span", { text: v }))),
+          );
+          const dlg = h(
+            "section",
+            { class: "dlg sm", role: "dialog", "aria-modal": "true", "aria-labelledby": "gw-rq-title", "data-testid": "gw-request" },
+            h("div", { class: "head" }, h("span", { class: "badge neutral" }, icon("send", 20)), h("div", {}, h("h2", { id: "gw-rq-title", text: "예외 요청하기" }), h("p", { text: "관리자가 승인하면 정해진 기간 동안 이 항목을 가리지 않고 보낼 수 있어요. 결과는 이 화면에서 알려 드려요." }))),
+          );
+          const form = h(
+            "form",
+            { novalidate: true },
+            h("div", { class: "fld" }, h("label", { for: "gw-rq-entity", text: "허용받을 항목" }), entity),
+            h("div", { class: "fld" }, h("span", { class: "lb", text: "적용 사이트" }), h("div", { class: "ro", text: site || "—" })),
+            h("div", { class: "fld" }, h("span", { class: "lb", text: "허용 기간" }), seg),
+            h("div", { class: "fld" }, h("label", { for: "gw-rq-reason", text: "사유" }), reason, h("div", { class: "hint" }, count)),
+            err,
+            h("div", { class: "btns", style: "margin-top:14px" }, sendBtn, h("button", { type: "button", class: "btn", text: "취소", onclick: () => done("close") })),
+          );
+          form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const why = reason.value.trim();
+            err.hidden = true;
+            if (why.length < MIN_REASON) {
+              count.parentElement.classList.add("bad");
+              err.textContent = `사유를 ${MIN_REASON}자 이상 적어 주세요`;
+              err.hidden = false;
+              return reason.focus();
+            }
+            sendBtn.disabled = true;
+            sendBtn.textContent = "보내는 중…";
+            const r = await send({ entity: entity.value.trim(), site, scope, reason: why });
+            if (r?.ok) {
+              dlg.replaceChildren(
+                h("div", { class: "head" }, h("span", { class: "badge ok" }, icon("check", 20)), h("div", {}, h("h2", { id: "gw-rq-title", text: "요청을 보냈어요" }), h("p", { text: "관리자가 확인하면 이 화면에 바로 알려 드려요. 그동안 입력한 글은 그대로 남아 있어요." }))),
+                h("div", { class: "btns", style: "margin-top:14px" }, h("button", { type: "button", class: "btn p", "data-autofocus": "1", "data-testid": "gw-request-done", text: "확인", onclick: () => done("sent") })),
+              );
+              dlg.querySelector("[data-autofocus]").focus();
+              return;
+            }
+            sendBtn.disabled = false;
+            sendBtn.textContent = "다시 보내기";
+            err.textContent = r?.message || "요청을 보내지 못했어요. 잠시 뒤 다시 시도해 주세요";
+            err.hidden = false;
+          });
+          dlg.append(form);
+          // Typing in this form must not reach the chat page's own key handlers (shortcuts, its Enter-to-send).
+          for (const ev of ["keydown", "keyup", "keypress"]) dlg.addEventListener(ev, (e) => e.stopPropagation());
+          return dlg;
+        },
         { onEscape: "close" },
       );
     }
@@ -586,7 +723,7 @@ button{font:inherit;color:inherit}
       host.remove();
     }
 
-    return { chip, strip, stripText, grant, notify, toast, history, review, blocked, cardSend, connection, place, destroy, host, shadow, h, icon, modal };
+    return { chip, strip, stripText, grant, notify, toast, history, review, blocked, requestForm, cardSend, connection, place, destroy, host, shadow, h, icon, modal };
   }
 
   root.GwUI = { create, h, icon };

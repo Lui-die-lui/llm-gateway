@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 SITES = ["chatgpt.com", "chatgpt.com", "chatgpt.com", "claude.ai"]
-CLIENT = "extension/0.6.0"
+CLIENT = "extension/0.7.0"
 DEMO_CLIENT_ID = "b-demo0000000000000000000000000001"
 KEY = "sk-abcdefghijklmnopqrstuvwx1234"  # fake: shaped like a key, opens nothing
 

@@ -215,8 +215,15 @@
   }
 
   /** "23시간 12분", "12분 05초", "45초": how long is left, counting down. */
-  function remaining(ms) {
+  /** The clock style is the default: 59:03, 1:09:00. "text" spells it out: 59분 03초, 1시간 09분. */
+  function remaining(ms, style = "text") {
     const s = Math.max(0, Math.floor(ms / 1000));
+    if (style === "clock") {
+      const hh = Math.floor(s / 3600);
+      const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+      const ss = String(s % 60).padStart(2, "0");
+      return hh ? `${hh}:${mm}:${ss}` : `${mm}:${ss}`;
+    }
     const d = Math.floor(s / 86400);
     const h = Math.floor((s % 86400) / 3600);
     const m = Math.floor((s % 3600) / 60);
@@ -225,6 +232,8 @@
     if (m) return `${m}분 ${String(s % 60).padStart(2, "0")}초`;
     return `${s}초`;
   }
+  const TIME_FORMATS = ["clock", "text"];
+  const timeFormat = (v) => (TIME_FORMATS.includes(v) ? v : "clock");
 
   /**
    * What to tell the person about one request. kind: pending | approved | used | revoked | rejected | expired.
@@ -267,6 +276,11 @@
     return live.length ? { ...live[0], others: live.length - 1 } : null;
   }
 
+  /** Every approval that is running, the one that ends first at the top. */
+  function liveGrants(active, now = Date.now()) {
+    return (active || []).filter((a) => a.end > now).sort((a, b) => a.end - b.end);
+  }
+
   /**
    * From the list of my requests: what has not been told yet (`news`), the approvals still running (`active`), and the
    * updated record of what has been told (`told`: id -> status). Pure, so the background worker and the tests share it.
@@ -286,7 +300,7 @@
     return { news, active, used, told };
   }
 
-  const api = { exceptionNews, activeGrant, nearestGrant, makeClientId, approvalEnd, clock, remaining, describeDecision, TTL_LABEL, PLACEHOLDER, PLACEHOLDER_ALL, cps, maskValue, pairSpans, ALIASES, hasAlias, buildOutgoing, restoreAliases, restorePlaceholders, restoreVariants, findFuzzy, CRITICAL, keepableLabels, canKeep, dayKey, portalBase };
+  const api = { exceptionNews, activeGrant, nearestGrant, liveGrants, makeClientId, approvalEnd, clock, remaining, timeFormat, TIME_FORMATS, describeDecision, TTL_LABEL, PLACEHOLDER, PLACEHOLDER_ALL, cps, maskValue, pairSpans, ALIASES, hasAlias, buildOutgoing, restoreAliases, restorePlaceholders, restoreVariants, findFuzzy, CRITICAL, keepableLabels, canKeep, dayKey, portalBase };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Gw = api;
 })(typeof self !== "undefined" ? self : this);
