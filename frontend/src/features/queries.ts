@@ -23,7 +23,6 @@ export const qk = {
   minutes: ['mock', 'minutes'] as const,
   heatmap: ['mock', 'heatmap'] as const,
   schedules: ['mock', 'schedules'] as const,
-  settings: ['mock', 'settings'] as const,
   serverSettings: ['gw', 'serverSettings'] as const,
   portal: (part: string) => ['mock', 'portal', part] as const,
 };
@@ -33,7 +32,6 @@ export const useHealth = () =>
 
 export const useExceptions = () => useQuery({ queryKey: qk.exceptions, queryFn: consoleApi.exceptions, refetchInterval: 5_000 });
 export const useServerSettings = () => useQuery({ queryKey: qk.serverSettings, queryFn: consoleApi.serverSettings, retry: false });
-export const useSettings = () => useQuery({ queryKey: qk.settings, queryFn: consoleApi.settings });
 
 export const useAnomalies = () => useQuery({ queryKey: qk.anomalies, queryFn: consoleApi.anomalies, refetchInterval: 15_000 });
 

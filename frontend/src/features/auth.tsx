@@ -2,10 +2,8 @@
 // idle time (30 minutes).
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import type { ConsoleUser } from '../api/consoleTypes';
-import { consoleApi } from '../api/console';
-import { qk } from './queries';
+import { getIdleMinutes } from './consolePrefs';
 
 const KEY = 'gw.console.session';
 
@@ -42,11 +40,12 @@ function write(s: Session | null): void {
   }
 }
 
+// Read each time it is checked, so changing it in the settings page applies at once.
+const idleMs = () => getIdleMinutes() * 60_000;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(read);
   const [expired, setExpired] = useState(false);
-  const settings = useQuery({ queryKey: qk.settings, queryFn: consoleApi.settings, enabled: !!session });
-  const idleMs = (settings.data?.idleMinutes ?? 30) * 60_000;
 
   const signIn = useCallback((user: ConsoleUser, lastLogin: string) => {
     const s = { user, lastLogin, lastActive: Date.now() };
@@ -63,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!session) return;
-    if (Date.now() - session.lastActive > idleMs) {
+    if (Date.now() - session.lastActive > idleMs()) {
       signOut('expired');
       return;
     }
@@ -77,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     const check = setInterval(() => {
       const cur = read();
-      if (!cur || Date.now() - cur.lastActive > idleMs) signOut('expired');
+      if (!cur || Date.now() - cur.lastActive > idleMs()) signOut('expired');
     }, 20_000);
     const evs = ['pointerdown', 'keydown', 'wheel'] as const;
     evs.forEach((e) => window.addEventListener(e, touch, { passive: true }));
@@ -85,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearInterval(check);
       evs.forEach((e) => window.removeEventListener(e, touch));
     };
-  }, [session, idleMs, signOut]);
+  }, [session, signOut]);
 
   const api = useMemo(() => ({ session, expired, signIn, signOut }), [session, expired, signIn, signOut]);
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;

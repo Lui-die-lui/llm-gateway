@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { Providers, makeQueryClient } from '../app/Providers';
@@ -51,42 +51,158 @@ describe('console', () => {
   });
 
   const SESSION = JSON.stringify({ user: { name: '보안관리자', email: 'admin@example.com', role: 'admin', owner: true }, lastLogin: '', lastActive: Date.now() });
-  const SERVER = (slack: { configured: boolean; host: string | null; console_link: boolean }) => ({
-    upstream: { provider: 'openai', mock: false, internal_route: false },
-    protection: { caller_auth: true, caller_keys: 2, admin_protected: true, response_scan: true, max_text: 200000, cors_origins: ['http://localhost:3000'] },
-    retention: { vault_ttl_seconds: 1800, once_valid_seconds: 86400, decided_keep_days: 180, stores_prompt_text: false },
-    slack,
+  const baseServer = (): Record<string, unknown> => ({
+    values: { response_scan: true, vault_ttl_minutes: 30, once_valid_hours: 24, keep_decided_days: 180, notify_new_exception: true },
+    limits: { vault_ttl_minutes: { min: 5, max: 240 }, once_valid_hours: { min: 1, max: 168 }, keep_decided_days: { min: 7, max: 730 } },
+    slack: { configured: false, host: null, source: null, console_link: false },
+    keys: { env_keys: 0, required: false, list: [] },
+    data: { audit_events: 12, exception_requests: 3 },
+    log: [{ t: 1_700_000_000, what: '답변 검사', detail: '꺼짐 → 켜짐' }],
+    environment: { provider: 'openai', mock: false, admin_protected: true, max_text: 200000, cors_origins: ['http://localhost:3000'], stores_prompt_text: false },
   });
+  /** A tiny stand-in for the gateway's settings endpoints: keeps state and records what the page sent. */
+  function settingsServer() {
+    const state = baseServer() as { values: Record<string, unknown>; slack: Record<string, unknown>; keys: { required: boolean; list: unknown[] } };
+    const calls: { method: string; path: string; body: unknown }[] = [];
+    const handler = (url: string, init?: RequestInit) => {
+      const path = url.replace(/^https?:\/\/[^/]+/, '').replace(/^\/gw(?=\/)/, ''); // the dev server prefix is not part of the endpoint
+      if (!path.startsWith('/v1/settings') && !(path.startsWith('/v1/audit/events') && init?.method === 'DELETE') && !(path === '/v1/exceptions' && init?.method === 'DELETE')) return undefined;
+      const method = init?.method ?? 'GET';
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      if (method !== 'GET') calls.push({ method, path, body });
+      const ok = (b: unknown) => new Response(JSON.stringify(b), { status: 200 });
+      if (path === '/v1/settings' && method === 'PATCH') Object.assign(state.values, body);
+      if (path === '/v1/settings/slack' && method === 'PUT') Object.assign(state.slack, body.url ? { configured: true, host: 'hooks.slack.com', source: 'console' } : { configured: false, host: null, source: null });
+      if (path === '/v1/settings/keys' && method === 'POST') {
+        state.keys = { required: true, list: [{ id: 1, name: body.name, tail: 'abcd', created: 1_700_000_000, revoked: false }] };
+        return ok({ key: 'gw_NEWKEY-shown-once', item: (state.keys.list[0] as object) });
+      }
+      if (method === 'DELETE' && !path.startsWith('/v1/settings')) return ok({ deleted: 12 });
+      if (method === 'DELETE') return ok({ ok: true });
+      if (path === '/v1/settings/slack/test') return ok({ ok: true, message: 'Slack으로 보냈어요' });
+      return ok(state);
+    };
+    return { handler, calls, state };
+  }
 
-  it('settings page shows what the server really has, and Slack is off without a webhook', async () => {
-    sessionStorage.setItem('gw.console.session', SESSION);
-    renderAt('/console/settings', (url) => (url.endsWith('/v1/settings') ? new Response(JSON.stringify(SERVER({ configured: false, host: null, console_link: false })), { status: 200 }) : undefined));
-    expect(await screen.findByRole('heading', { name: '설정' })).toBeInTheDocument();
-    expect(await screen.findByText('키 2개 등록됨 · 키 없이는 가림·복원을 쓸 수 없어요')).toBeInTheDocument();
-    expect(screen.getAllByText('30분')).toHaveLength(2); // vault TTL and the console's idle logout
-    expect(screen.getByText('1일')).toBeInTheDocument(); // one-use approval validity
-    expect(screen.getByText('저장 안 함')).toBeInTheDocument();
-    expect(screen.getByText('연결 안 됨')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Slack으로 테스트 보내기' })).toBeDisabled();
-    expect(screen.queryByText(/hooks\.slack\.com\/services/)).not.toBeInTheDocument();
-  });
-
-  it('sends a Slack test line when a webhook is set and reports the answer', async () => {
+  it('settings: change a number, save after the confirmation, and only the changed field is sent', async () => {
     sessionStorage.setItem('gw.console.session', SESSION);
     const user = userEvent.setup();
-    let posted = 0;
-    renderAt('/console/settings', (url, init) => {
-      if (url.endsWith('/v1/settings')) return new Response(JSON.stringify(SERVER({ configured: true, host: 'hooks.slack.com', console_link: true })), { status: 200 });
-      if (url.endsWith('/v1/settings/slack/test') && init?.method === 'POST') {
-        posted++;
-        return new Response(JSON.stringify({ ok: true, message: 'Slack으로 보냈어요' }), { status: 200 });
-      }
-      return undefined;
-    });
-    expect(await screen.findByText('보낼 곳: hooks.slack.com (웹훅 주소는 보안상 보여 드리지 않아요)')).toBeInTheDocument();
+    const srv = settingsServer();
+    renderAt('/console/settings', srv.handler);
+    const ttl = await screen.findByLabelText('되돌리기 매핑 보관');
+    expect(screen.getByRole('button', { name: '바뀐 것 없음' })).toBeDisabled();
+    await user.clear(ttl);
+    await user.type(ttl, '60');
+    await user.click(screen.getByRole('button', { name: '변경 저장' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(srv.calls.find((c) => c.method === 'PATCH')?.body).toEqual({ vault_ttl_minutes: 60 }));
+    expect(await screen.findByRole('button', { name: '바뀐 것 없음' })).toBeDisabled();
+  });
+
+  it('settings: a value outside the allowed range blocks saving and says why', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    const srv = settingsServer();
+    renderAt('/console/settings', srv.handler);
+    const ttl = await screen.findByLabelText('되돌리기 매핑 보관');
+    await user.clear(ttl);
+    await user.type(ttl, '1');
+    expect(await screen.findByText('5~240분 사이로 적어 주세요')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '변경 저장' })).toBeDisabled();
+    expect(srv.calls).toHaveLength(0);
+  });
+
+  it('settings: turning the answer check off asks first and warns what it means', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    const srv = settingsServer();
+    renderAt('/console/settings', srv.handler);
+    await user.click(await screen.findByLabelText('답변 검사'));
+    await user.click(screen.getByRole('button', { name: '변경 저장' }));
+    const dlg = within(await screen.findByRole('dialog'));
+    expect(dlg.getByText(/걸러 내지 못해요/)).toBeInTheDocument();
+    await user.click(dlg.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(srv.calls.find((c) => c.method === 'PATCH')?.body).toEqual({ response_scan: false }));
+  });
+
+  it('settings: the first access key warns that requests without one get blocked, then the key is shown once', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    const srv = settingsServer();
+    renderAt('/console/settings', srv.handler);
+    await user.click(await screen.findByRole('tab', { name: '접속 키' }));
+    await user.type(await screen.findByLabelText('키 이름'), '인사팀 앱');
+    await user.click(screen.getByRole('button', { name: '키 만들기' }));
+    const dlg = within(await screen.findByRole('dialog'));
+    expect(dlg.getByText(/키 없는 요청.*막혀요/)).toBeInTheDocument();
+    await user.click(dlg.getByRole('button', { name: '만들기' }));
+    expect(await screen.findByDisplayValue('gw_NEWKEY-shown-once')).toBeInTheDocument();
+    expect(srv.calls.find((c) => c.path === '/v1/settings/keys')?.body).toEqual({ name: '인사팀 앱' });
+    await user.click(screen.getByRole('button', { name: '닫기' }));
+    expect(screen.queryByDisplayValue('gw_NEWKEY-shown-once')).not.toBeInTheDocument();
+    expect(screen.getByText(/…abcd/)).toBeInTheDocument(); // afterwards only the name and the last four characters
+  });
+
+  it('settings: clearing data shows how many records go and calls the real delete', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    const srv = settingsServer();
+    renderAt('/console/settings', srv.handler);
+    await user.click(await screen.findByRole('tab', { name: '데이터 · 기록' }));
+    await screen.findByText(/지금 12건/);
+    const [firstWipe] = screen.getAllByRole('button', { name: '모두 지우기' });
+    if (!firstWipe) throw new Error('no wipe button');
+    await user.click(firstWipe);
+    expect(await screen.findByText(/12건이 지워지고 되돌릴 수 없어요/)).toBeInTheDocument();
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '모두 지우기' }));
+    await waitFor(() => expect(srv.calls.some((c) => c.method === 'DELETE' && c.path === '/v1/audit/events')).toBe(true));
+  });
+
+  it('settings: saves and clears the Slack webhook, tests it, and never shows the address', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    const srv = settingsServer();
+    renderAt('/console/settings', srv.handler);
+    await user.click(await screen.findByRole('tab', { name: '알림' }));
+    expect(await screen.findByRole('button', { name: 'Slack으로 테스트 보내기' })).toBeDisabled();
+    await user.type(screen.getByLabelText('Slack 웹훅 주소'), 'https://hooks.slack.com/services/T/B/SECRET');
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(srv.calls.find((c) => c.path === '/v1/settings/slack')?.body).toEqual({ url: 'https://hooks.slack.com/services/T/B/SECRET' }));
+    expect(await screen.findByText(/보낼 곳: hooks\.slack\.com/)).toBeInTheDocument();
+    expect(screen.queryByText(/SECRET/)).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue(/SECRET/)).not.toBeInTheDocument(); // the input is emptied after saving
     await user.click(screen.getByRole('button', { name: 'Slack으로 테스트 보내기' }));
     expect(await screen.findByText('Slack으로 보냈어요')).toBeInTheDocument();
-    expect(posted).toBe(1);
+    await user.click(screen.getByRole('button', { name: '지우기' }));
+    await waitFor(() => expect(srv.calls.some((c) => c.path === '/v1/settings/slack' && (c.body as { url: string }).url === '')).toBe(true));
+  });
+
+  it('settings: one tab at a time, the chosen tab survives a reload, and an unsaved change is marked on its tab', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    window.history.replaceState(null, '', '#keys');
+    renderAt('/console/settings', settingsServer().handler);
+    expect(await screen.findByRole('tab', { name: '접속 키', selected: true })).toBeInTheDocument(); // came back to the tab in the address
+    expect(screen.getByLabelText('키 이름')).toBeInTheDocument();
+    expect(screen.queryByLabelText('답변 검사')).not.toBeInTheDocument(); // other tabs' sections are not on the page
+    await user.click(screen.getByRole('tab', { name: '일반' }));
+    expect(window.location.hash).toBe('#general');
+    expect(screen.queryByLabelText('키 이름')).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText('답변 검사'));
+    await user.click(screen.getByRole('tab', { name: '알림' }));
+    expect(screen.getByRole('tab', { name: /일반/ })).toContainElement(screen.getByLabelText('저장 안 된 변경'));
+    expect(screen.getByRole('button', { name: '변경 저장' })).toBeEnabled(); // the save button stays reachable from every tab
+    window.history.replaceState(null, '', '#');
+  });
+
+  it('settings: the idle logout is a real browser setting the console reads', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    renderAt('/console/settings', settingsServer().handler);
+    await user.selectOptions(await screen.findByLabelText('자동 로그아웃'), '60');
+    expect(localStorage.getItem('gw.console.idleMinutes')).toBe('60');
+    localStorage.removeItem('gw.console.idleMinutes');
   });
 
   it('enables "변경 n건 적용" only after a basic rule changes', async () => {

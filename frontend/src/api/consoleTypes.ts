@@ -140,23 +140,6 @@ export interface TrainingCandidate {
   sentAt?: string;
 }
 
-export interface Settings {
-  companyName: string;
-  industry: string;
-  mailDomain: string;
-  mailOnly: boolean;
-  lockout: boolean;
-  twoFactor: boolean;
-  idleMinutes: 30 | 60 | 480;
-  sites: { chatgpt: boolean; claude: boolean; gemini: boolean };
-  slackConnected: boolean;
-  slackWorkspace: string;
-  slackAppName: string;
-  slackUnmatched: number;
-  retentionDays: 30 | 90 | 365;
-  deviceHistory: '7일' | '1일' | '남기지 않음';
-}
-
 export interface Anomaly {
   id: string;
   sev: 'HIGH' | 'MEDIUM' | 'LOW';
@@ -240,10 +223,29 @@ export interface BlockedSend {
   summary: string;
 }
 
-/** GET /v1/settings: the real state of the gateway (names and yes/no only, never a key, token or address). */
+/** An access key made in the console. The key itself is shown once, when it is made, and is not part of this. */
+export interface ApiKeyItem {
+  id: number;
+  name: string;
+  tail: string;
+  created: number;
+  revoked: boolean;
+}
+export interface SettingsValues {
+  response_scan: boolean;
+  vault_ttl_minutes: number;
+  once_valid_hours: number;
+  keep_decided_days: number;
+  notify_new_exception: boolean;
+}
+export type NumericSetting = 'vault_ttl_minutes' | 'once_valid_hours' | 'keep_decided_days';
+/** GET /v1/settings: what the admin can change, and the facts the server was started with. Never a key, token or address. */
 export interface ServerSettings {
-  upstream: { provider: string; mock: boolean; internal_route: boolean };
-  protection: { caller_auth: boolean; caller_keys: number; admin_protected: boolean; response_scan: boolean; max_text: number; cors_origins: string[] };
-  retention: { vault_ttl_seconds: number; once_valid_seconds: number; decided_keep_days: number; stores_prompt_text: boolean };
-  slack: { configured: boolean; host: string | null; console_link: boolean };
+  values: SettingsValues;
+  limits: Record<NumericSetting, { min: number; max: number }>;
+  slack: { configured: boolean; host: string | null; source: 'env' | 'console' | null; console_link: boolean };
+  keys: { env_keys: number; required: boolean; list: ApiKeyItem[] };
+  data: { audit_events: number; exception_requests: number };
+  log: { t: number; what: string; detail: string }[];
+  environment: { provider: string; mock: boolean; admin_protected: boolean; max_text: number; cors_origins: string[]; stores_prompt_text: boolean };
 }
