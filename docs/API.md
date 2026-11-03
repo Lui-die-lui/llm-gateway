@@ -193,11 +193,19 @@ const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
 | `DELETE /v1/audit/events` | 전송 기록을 모두 지웁니다 → `{deleted}`. 되돌릴 수 없고 번호가 처음부터 다시 시작합니다 |
 | `DELETE /v1/exceptions` | 예외 요청을 모두 지웁니다 → `{deleted}`. 되돌릴 수 없습니다 |
 
-## 8. 서버 설정 보기와 Slack 알림 (관리자 토큰 필요)
+## 8. 설정 (관리자 토큰 필요)
+
+콘솔의 설정 화면이 쓰는 호출입니다. 바꾼 값은 서버가 재시작 없이 바로 따르고, 바뀐 내용은 변경 내역에 남습니다. 키·토큰·웹훅 주소는 어떤 응답에도 내려가지 않습니다.
 
 | 호출 | 설명 |
 |---|---|
-| `GET /v1/settings` | 서버의 실제 설정 상태(읽기 전용). `{upstream, protection, retention, slack}`. 접속 키·토큰·웹훅 주소는 내려가지 않고 있음/없음과 개수, 웹훅의 호스트 이름만 나갑니다 |
-| `POST /v1/settings/slack/test` | `SLACK_WEBHOOK_URL`로 테스트 한 줄을 보냅니다 → `{ok, message}`. 설정이 없으면 `ok:false` |
+| `GET /v1/settings` | `{values, limits, slack, keys, data, log, environment}`. `values`는 바꿀 수 있는 값, `limits`는 숫자 값의 허용 범위, `slack`은 연결 여부·호스트 이름·출처(`console`/`env`), `keys`는 접속 키 목록(이름·끝 4자리·만든 시각·폐기 여부), `data`는 기록·예외 요청 건수, `log`는 최근 변경, `environment`는 서버 환경변수로 정한 읽기 전용 사실 |
+| `PATCH /v1/settings` | 보낸 항목만 바꿉니다: `response_scan`(켜짐/꺼짐), `vault_ttl_minutes`(5~240), `once_valid_hours`(1~168), `keep_decided_days`(7~730), `notify_new_exception`(켜짐/꺼짐). 형식이 다르거나(`"no"`, `1.5`) 범위를 벗어나면 422이고, 같이 보낸 다른 항목도 저장하지 않습니다 |
+| `PUT /v1/settings/slack` `{url}` | 웹훅 주소를 저장합니다(빈 문자열이면 지우고 환경변수 값으로 돌아감). `https://`만 받고, 이 PC의 `http://localhost`만 예외 |
+| `POST /v1/settings/slack/test` | 테스트 한 줄을 보냅니다 → `{ok, message}` |
+| `POST /v1/settings/keys` `{name}` | 접속 키를 만듭니다 → `{key, item}`. **키는 이 응답에만 있고 다시 볼 수 없습니다.** 서버에는 해시만 남습니다. 첫 키를 만들면 그때부터 키 없는 요청은 401입니다 |
+| `DELETE /v1/settings/keys/{id}` | 키를 폐기합니다. 환경변수(`GATEWAY_API_KEYS`)로 등록한 키는 여기서 지울 수 없습니다 |
 
-새 예외 요청(`POST /v1/exceptions`)이 만들어지면 `SLACK_WEBHOOK_URL`이 있을 때 Slack으로 알림이 갑니다. 보내는 일은 요청과 따로 진행돼서 Slack이 느리거나 꺼져 있어도 요청은 그대로 성공합니다. 웹훅 주소는 `https://`만 받고, 이 PC에서 도는 수신 서버(`http://localhost`)만 예외로 받습니다.
+설정은 `SETTINGS_DB`(기본 `data/settings.db`)에 저장됩니다. 접속 키는 환경변수 키와 콘솔에서 만든 키가 함께 유효합니다. 예외 요청의 응답에는 `once_seconds`(승인 뒤 쓰지 않은 1회 허용이 열려 있는 시간)가 들어 있어 확장이 서버와 같은 시간으로 셉니다.
+
+새 예외 요청(`POST /v1/exceptions`)이 만들어지면 웹훅이 있고 알림이 켜져 있을 때 Slack으로 알림이 갑니다(번호·요청자·항목·사이트·기간·사유만, 입력한 글은 아님). 알림은 요청과 따로 보내져서 Slack이 느리거나 꺼져 있어도 요청은 성공합니다.
