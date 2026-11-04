@@ -69,6 +69,25 @@
     }
   };
 
+  // Restoring the original values on screen is one switch: Gw.DEFAULT_RESTORE (lib.js), overridden by the popup's 복원 표시 setting.
+  // Off: the page shows what the AI really received ([사람_1] ...), and no restore request is made from any of the places below.
+  // The code that restores is unchanged; it is only not reached. Turning it on starts a pass at once.
+  let restoreEnabled = Gw.DEFAULT_RESTORE;
+  let onRestoreOn = () => {};
+  try {
+    chrome.storage?.local?.get({ restoreEnabled: undefined }).then((v) => {
+      restoreEnabled = Gw.restoreOn(v?.restoreEnabled);
+      if (restoreEnabled) onRestoreOn();
+    }, () => {});
+    chrome.storage?.onChanged?.addListener((c, area) => {
+      if (area !== "local" || !c.restoreEnabled) return;
+      restoreEnabled = Gw.restoreOn(c.restoreEnabled.newValue);
+      if (restoreEnabled) onRestoreOn();
+    });
+  } catch {
+    /* the extension was reloaded under this page */
+  }
+
   // Sites draw some of their cards in iframes (ChatGPT's sandboxed renderer). The same script runs there, but only to put the
   // originals back: no prompt box, no send guard, no screens. The tab (and so the tab's vault) is the same, so the background
   // answers as usual. Whether a given site's iframe is reachable depends on the site; the page-level restore does not depend on it.
@@ -77,7 +96,7 @@
     let busy = false;
     const FRAME_FIELDS = "input:not([type=password]):not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=file]),textarea";
     const restoreFrame = async () => {
-      if (busy || !document.body) return;
+      if (busy || !document.body || !restoreEnabled) return;
       busy = true;
       try {
         const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -108,6 +127,7 @@
     };
     let t;
     new MutationObserver(() => (clearTimeout(t), (t = setTimeout(restoreFrame, 300)))).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    onRestoreOn = restoreFrame;
     restoreFrame();
     return;
   }
@@ -725,7 +745,7 @@
       if (skipEl(el)) continue;
       const isReply = !isMine(node, el, mineSel);
       if (!isReply && HINT_SHOWN.test(value)) node.nodeValue = value = value.replace(HINT_SHOWN, "");
-      if (PLACEHOLDER.test(value) && asked.get(node) !== value) {
+      if (restoreEnabled && PLACEHOLDER.test(value) && asked.get(node) !== value) {
         asked.set(node, value);
         const res = await bg("restore", { text: value });
         if (res.ok && res.data.text !== value) {
@@ -739,9 +759,9 @@
         } else if (res.status === 404 && isReply) expired = true;
       }
     }
-    restored += await restoreFields();
+    if (restoreEnabled) restored += await restoreFields();
     // Misspelled placeholders are only looked for inside answers we can positively identify.
-    for (const root of document.querySelectorAll([...site.reply, ...(site.around || [])].join(","))) {
+    for (const root of restoreEnabled ? document.querySelectorAll([...site.reply, ...(site.around || [])].join(",")) : []) {
       const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       for (let n = w.nextNode(); n; n = w.nextNode()) {
         const el = n.parentElement;
@@ -846,7 +866,7 @@
 
   // The model did not use the placeholders we sent, so there is nothing to restore.
   function noteNoPlaceholder() {
-    if (!lastSent || lastSent.noted || lastSent.restored || !lastSent.expect) return;
+    if (!restoreEnabled || !lastSent || lastSent.noted || lastSent.restored || !lastSent.expect) return;
     const roots = [...document.querySelectorAll(site.reply.join(","))];
     if (roots.length <= lastSent.replies) return;
     const newest = roots[roots.length - 1];
@@ -895,4 +915,5 @@
     composerChanged();
     if (safeShown && !safeMode()) safeNote(false); // the page finished drawing its chat box
   }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  onRestoreOn = () => restoreReplies();
 })();

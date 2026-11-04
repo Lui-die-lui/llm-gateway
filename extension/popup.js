@@ -1,7 +1,7 @@
 (() => {
 "use strict";
 const DEFAULT_GATEWAY = "http://localhost:8000";
-const DEFAULTS = { enabled: true, industries: [], hint: true, timeFormat: "clock" };
+const DEFAULTS = { enabled: true, industries: [], hint: true, timeFormat: "clock", restoreEnabled: Gw.DEFAULT_RESTORE };
 const INDUSTRY_KO = { cosmetics: "화장품", medical: "의료", manufacturing: "제조", finance: "금융", hr: "인사", legal: "법무", it_dev: "IT 개발", ecommerce: "이커머스", logistics: "물류" };
 const $ = (id) => document.getElementById(id);
 
@@ -150,6 +150,8 @@ async function init() {
       chrome.storage.local.set({ timeFormat: r.value });
     });
   }
+  $("restore").checked = Gw.restoreOn(settings.restoreEnabled);
+  $("restore").addEventListener("change", (e) => chrome.storage.local.set({ restoreEnabled: e.target.checked }));
   $("hint").checked = settings.hint !== false;
   $("hint").addEventListener("change", (e) => chrome.storage.local.set({ hint: e.target.checked }));
 
