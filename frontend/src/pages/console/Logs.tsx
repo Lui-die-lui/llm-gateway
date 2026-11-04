@@ -9,8 +9,9 @@ import { Help } from '../../components/Controls';
 import { Icon } from '../../components/Icon';
 import { QueryState } from '../../components/QueryState';
 import { useFeedback } from '../../features/feedback';
-import { findingsText, fmt, hms, OUTCOME_BADGE, outcomeOf, providerName, ymdhms } from '../../features/format';
-import { qk } from '../../features/queries';
+import { daysAgo, findingsText, fmt, fmtMs, hms, OUTCOME_BADGE, outcomeOf, providerName, startOfToday, ymdhms } from '../../features/format';
+import { Select } from '../../components/Select';
+import { qk, useMembers } from '../../features/queries';
 
 const PAGE = 12;
 const STATUS_OPTS: [AuditStatus | '', string][] = [
@@ -20,6 +21,22 @@ const STATUS_OPTS: [AuditStatus | '', string][] = [
   ['ok', '통과 · 가림'],
   ['upstream_error', '외부 LLM 오류'],
 ];
+
+const PERIODS = [
+  ['all', '전체'],
+  ['today', '오늘'],
+  ['7d', '최근 7일'],
+  ['30d', '최근 30일'],
+] as const;
+type Period = (typeof PERIODS)[number][0];
+const SINCE: Record<Period, () => number | undefined> = { all: () => undefined, today: startOfToday, '7d': () => daysAgo(6), '30d': () => daysAgo(29) };
+const SITES = ['chatgpt.com', 'claude.ai'];
+const EXC = [
+  ['', '전체'],
+  ['yes', '예외 사용'],
+  ['no', '예외 없음'],
+] as const;
+type Exc = (typeof EXC)[number][0];
 
 /** "a,b,c" -> "a, b, c": the stored list has no spaces, so a long one could never wrap. */
 const industryText = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean).join(', ');
@@ -72,12 +89,18 @@ export function LogsPage() {
   const [q, setQ] = useState(params.get('q') ?? '');
   const [status, setStatus] = useState<AuditStatus | ''>('');
   const [label, setLabel] = useState('');
+  const [period, setPeriod] = useState<Period>('all');
+  const [site, setSite] = useState('');
+  const [dept, setDept] = useState('');
+  const [exc, setExc] = useState<Exc>('');
+  const members = useMembers();
   const [page, setPage] = useState(0);
   const [selId, setSelId] = useState<number | null>(null);
   const [flagged, setFlagged] = useState<Set<number>>(new Set());
   const [onlyFlagged, setOnlyFlagged] = useState(false);
 
-  const query = { limit: PAGE, offset: page * PAGE, status: status || undefined, label: label || undefined };
+  const since = SINCE[period]();
+  const query = { limit: PAGE, offset: page * PAGE, status: status || undefined, label: label || undefined, site: site || undefined, dept: dept || undefined, since: since === undefined ? undefined : Math.floor(since / 60) * 60, exception: exc === '' ? undefined : exc === 'yes' };
   const events = useQuery({ queryKey: qk.audit(query), queryFn: () => gateway.auditEvents(query), placeholderData: keepPreviousData });
   const all = useQuery({ queryKey: qk.summary(0), queryFn: () => gateway.summary(0) });
 
@@ -88,12 +111,12 @@ export function LogsPage() {
     return (events.data ?? []).filter((e) => {
       if (onlyFlagged && !flagged.has(e.id)) return false;
       if (!needle) return true;
-      return [reqId(e), String(e.id), e.provider, e.status, e.industries, ruleText(e)].some((v) => v.toLowerCase().includes(needle));
+      return [reqId(e), String(e.id), e.provider, e.status, e.industries, ruleText(e), e.user ?? '', e.dept ?? '', e.site ?? ''].some((v) => v.toLowerCase().includes(needle));
     });
   }, [events.data, q, onlyFlagged, flagged]);
 
   const sel = rows.find((e) => e.id === selId) ?? rows[0];
-  const filtered = !!(status || label || q || onlyFlagged);
+  const filtered = !!(status || label || q || onlyFlagged || period !== 'all' || site || dept || exc);
   const hasNext = (events.data?.length ?? 0) === PAGE;
 
   const setFilter = (fn: () => void) => {
@@ -102,11 +125,11 @@ export function LogsPage() {
     setSelId(null);
   };
 
+  const clearAll = () => setFilter(() => (setStatus(''), setLabel(''), setQ(''), setOnlyFlagged(false), setPeriod('all'), setSite(''), setDept(''), setExc('')));
   const views = [
-    { name: '차단만', on: status === 'blocked' && !label && !onlyFlagged, apply: () => setFilter(() => (setStatus('blocked'), setLabel(''), setOnlyFlagged(false))) },
-    { name: '연구소', on: false, apply: () => toast('부서별 보기는 감사 로그에 부서가 생기면 쓸 수 있어요', 'error') },
+    { name: '차단만', on: status === 'blocked' && !label && !onlyFlagged && exc === '', apply: () => setFilter(() => (setStatus('blocked'), setLabel(''), setOnlyFlagged(false), setExc(''))) },
+    { name: '예외 사용', on: exc === 'yes' && !status, apply: () => setFilter(() => (setExc(exc === 'yes' ? '' : 'yes'), setStatus(''))) },
     { name: '오탐 신고됨', on: onlyFlagged, apply: () => setFilter(() => setOnlyFlagged(!onlyFlagged)) },
-    { name: '예외 승인으로 보냄', on: false, apply: () => toast('예외 승인 연결은 서버에 예외 요청 API가 생기면 쓸 수 있어요', 'error') },
   ];
 
   const steps = (e: AuditEvent) => {
@@ -178,45 +201,24 @@ export function LogsPage() {
                 <span className="sr-only">검색</span>
                 <input className="in" style={{ width: '100%' }} placeholder="요청 ID, 사용자, 규칙 이름 검색" value={q} onChange={(e) => setQ(e.target.value)} />
               </label>
-              <label className="inline-field" title="감사 API에 기간 조건이 아직 없어요">
-                기간{' '}
-                <select className="sel" disabled>
-                  <option>전체</option>
-                </select>
-              </label>
-              <label className="inline-field">
-                처리{' '}
-                <select className="sel" value={status} onChange={(e) => setFilter(() => setStatus(e.target.value as AuditStatus | ''))}>
-                  {STATUS_OPTS.map(([v, l]) => (
-                    <option key={v} value={v}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="inline-field">
-                정보 종류{' '}
-                <select className="sel" value={label} onChange={(e) => setFilter(() => setLabel(e.target.value))}>
-                  <option value="">전체</option>
-                  {labels.map((l) => (
-                    <option key={l} value={l}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="inline-field" title="감사 로그에 사이트가 아직 없어요 (provider만 있음)">
-                사이트{' '}
-                <select className="sel" disabled>
-                  <option>전체</option>
-                </select>
-              </label>
-              <label className="inline-field" title="감사 로그에 부서가 아직 없어요">
-                부서{' '}
-                <select className="sel" disabled>
-                  <option>전체</option>
-                </select>
-              </label>
+              <div className="inline-field">
+                기간 <Select label="기간" value={period} options={PERIODS.map(([value, label]) => ({ value, label }))} onChange={(v) => setFilter(() => setPeriod(v))} width={120} />
+              </div>
+              <div className="inline-field">
+                처리 <Select label="처리" value={status} options={STATUS_OPTS.map(([value, label]) => ({ value, label }))} onChange={(v) => setFilter(() => setStatus(v))} width={130} />
+              </div>
+              <div className="inline-field">
+                정보 종류 <Select label="정보 종류" value={label} options={[{ value: '', label: '전체' }, ...labels.map((l) => ({ value: l, label: l }))]} onChange={(v) => setFilter(() => setLabel(v))} width={130} />
+              </div>
+              <div className="inline-field">
+                사이트 <Select label="사이트" value={site} options={[{ value: '', label: '전체' }, ...[...new Set([...SITES, ...rows.map((e) => e.site).filter((x): x is string => !!x)])].map((x) => ({ value: x, label: x }))]} onChange={(v) => setFilter(() => setSite(v))} width={140} />
+              </div>
+              <div className="inline-field">
+                부서 <Select label="부서" value={dept} options={[{ value: '', label: '전체' }, ...(members.data?.departments ?? []).map((d) => ({ value: d, label: d }))]} onChange={(v) => setFilter(() => setDept(v))} width={120} />
+              </div>
+              <div className="inline-field">
+                예외 <Select label="예외" value={exc} options={EXC.map(([value, label]) => ({ value, label }))} onChange={(v) => setFilter(() => setExc(v))} width={120} />
+              </div>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <span className="lbl">저장된 보기</span>
@@ -226,7 +228,7 @@ export function LogsPage() {
                 </button>
               ))}
               {filtered && (
-                <button type="button" className="link-btn" onClick={() => setFilter(() => (setStatus(''), setLabel(''), setQ(''), setOnlyFlagged(false)))}>
+                <button type="button" className="link-btn" onClick={clearAll}>
                   필터 지우기
                 </button>
               )}
@@ -285,10 +287,17 @@ export function LogsPage() {
                                 </span>
                               )}
                             </td>
-                            <td className="t3" title={e.caller ? '호출한 앱 (API 키 이름)' : '키를 쓰지 않았거나 사용자가 아직 없어요'}>
-                              {e.caller ?? '—'}
+                            <td title={e.user ? `${e.user} · ${e.dept || '부서 없음'}` : '이 브라우저는 아직 구성원과 연결되지 않았어요'}>
+                              {e.user ? (
+                                <>
+                                  <span>{e.user}</span>
+                                  {e.dept ? <span className="t3" style={{ fontSize: 12, marginLeft: 6 }}>{e.dept}</span> : null}
+                                </>
+                              ) : (
+                                <span className="t3">{e.caller ?? '알 수 없음'}</span>
+                              )}
                             </td>
-                            <td className="t2">{providerName(e.provider)}</td>
+                            <td className="t2">{e.site ?? providerName(e.provider)}</td>
                             <td className="t2">{findingsText(e)}</td>
                             <td className="mono num">{itemCount(e)}</td>
                             <td>
@@ -381,7 +390,7 @@ export function LogsPage() {
                             </span>
                           </span>
                           <span className="mono t3" style={{ fontSize: 12 }}>
-                            {i === steps(sel).length - 1 && sel.latency_ms != null ? `${Math.round(sel.latency_ms)}ms` : ''}
+                            {i === steps(sel).length - 1 && sel.latency_ms != null ? fmtMs(sel.latency_ms) : ''}
                           </span>
                         </li>
                       ))}

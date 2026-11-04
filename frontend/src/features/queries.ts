@@ -9,7 +9,7 @@ export const qk = {
   industries: ['gw', 'industries'] as const,
   builtinRules: ['gw', 'builtinRules'] as const,
   evalReport: ['gw', 'eval'] as const,
-  summary: (since: number) => ['gw', 'summary', since] as const,
+  summary: (since: number, until?: number) => ['gw', 'summary', since, until ?? null] as const,
   timeseries: (bucket: string, since: number) => ['gw', 'timeseries', bucket, since] as const,
   audit: (q: object) => ['gw', 'audit', q] as const,
   company: ['mock', 'company'] as const,

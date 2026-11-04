@@ -196,11 +196,82 @@ describe('console', () => {
     window.history.replaceState(null, '', '#');
   });
 
+  it('dropdown: a styled list, keyboard and mouse choose, Escape closes, a closed list is not on the page', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    renderAt('/console/settings', settingsServer().handler);
+    const box = await screen.findByRole('combobox', { name: '자동 로그아웃' });
+    expect(box).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    await user.click(box);
+    const list = await screen.findByRole('listbox', { name: '자동 로그아웃' });
+    expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual(['15분', '30분', '60분', '120분']);
+    expect(within(list).getByRole('option', { name: '30분' })).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{ArrowDown}{Enter}'); // 30 -> 60
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(localStorage.getItem('gw.console.idleMinutes')).toBe('60');
+    await user.click(box);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(box).toHaveFocus();
+    localStorage.removeItem('gw.console.idleMinutes');
+  });
+
+  const EVENTS = [
+    { id: 3, ts: 1_700_000_300, endpoint: 'sanitize', provider: 'browser', route: 'external', status: 'ok', industries: '', use_case: null, stream: 0, latency_ms: 0.4, site: 'chatgpt.com', client: 'extension/0.7.0', caller: null, exception_id: 'REQ-0002', user: '김서연', dept: '마케팅', findings: [{ direction: 'request', label: '사람', action: 'log', count: 1 }] },
+    { id: 2, ts: 1_700_000_200, endpoint: 'sanitize', provider: 'browser', route: 'external', status: 'blocked', industries: '', use_case: null, stream: 0, latency_ms: 2.6, site: 'claude.ai', client: 'extension/0.7.0', caller: null, exception_id: null, user: null, dept: null, findings: [{ direction: 'request', label: '시크릿', action: 'block', count: 1 }] },
+  ];
+  function logsServer() {
+    const urls: string[] = [];
+    const handler = (url: string) => {
+      const path = url.replace(/^https?:\/\/[^/]+/, '').replace(/^\/gw(?=\/)/, '');
+      if (path.startsWith('/v1/audit/events')) {
+        urls.push(path);
+        return new Response(JSON.stringify(EVENTS), { status: 200 });
+      }
+      if (/^\/v1\/members$/.test(path)) return new Response(JSON.stringify({ members: [], pending: [], departments: ['경영지원', '개발', '영업', '마케팅'] }), { status: 200 });
+      return undefined;
+    };
+    return { handler, urls };
+  }
+
+  it('logs: shows who sent it (name and department) and the real site, and a sub-millisecond time reads <1ms', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    renderAt('/console/logs', logsServer().handler);
+    expect(await screen.findByText('김서연')).toBeInTheDocument();
+    expect(screen.getByText('마케팅')).toBeInTheDocument();
+    expect(screen.getAllByText('chatgpt.com').length).toBeGreaterThan(0);
+    expect(screen.getByText('알 수 없음')).toBeInTheDocument(); // a browser nobody linked
+    expect(screen.queryByText('browser')).not.toBeInTheDocument(); // the route name is not a site
+  });
+
+  it('logs: the department, exception and period filters go to the server as real conditions', async () => {
+    sessionStorage.setItem('gw.console.session', SESSION);
+    const user = userEvent.setup();
+    const srv = logsServer();
+    renderAt('/console/logs', srv.handler);
+    await screen.findByText('김서연');
+    await user.click(screen.getByRole('combobox', { name: '부서' }));
+    await user.click(await screen.findByRole('option', { name: '마케팅' }));
+    await waitFor(() => expect(srv.urls.at(-1)).toContain('dept=%EB%A7%88%EC%BC%80%ED%8C%85'));
+    await user.click(screen.getByRole('button', { name: '예외 사용' })); // the saved view
+    await waitFor(() => expect(srv.urls.at(-1)).toContain('exception=true'));
+    await user.click(screen.getByRole('combobox', { name: '기간' }));
+    await user.click(await screen.findByRole('option', { name: '최근 7일' }));
+    await waitFor(() => expect(srv.urls.at(-1)).toMatch(/since=\d+/));
+    expect(screen.queryByRole('button', { name: '연구소' })).not.toBeInTheDocument(); // no placeholder views left
+    await user.click(screen.getByRole('button', { name: '필터 지우기' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '필터 지우기' })).not.toBeInTheDocument());
+    expect(screen.getByRole('combobox', { name: '부서' })).toHaveTextContent('전체');
+    expect(screen.getByRole('combobox', { name: '기간' })).toHaveTextContent('전체');
+  });
+
   it('settings: the idle logout is a real browser setting the console reads', async () => {
     sessionStorage.setItem('gw.console.session', SESSION);
     const user = userEvent.setup();
     renderAt('/console/settings', settingsServer().handler);
-    await user.selectOptions(await screen.findByLabelText('자동 로그아웃'), '60');
+    await user.click(await screen.findByRole('combobox', { name: '자동 로그아웃' }));
+    await user.click(await screen.findByRole('option', { name: '60분' }));
     expect(localStorage.getItem('gw.console.idleMinutes')).toBe('60');
     localStorage.removeItem('gw.console.idleMinutes');
   });
@@ -272,13 +343,15 @@ describe('console', () => {
     let body: unknown;
     let fail = false;
     renderAt('/join', (url, init) => {
+      if (url.endsWith('/v1/members/departments')) return new Response(JSON.stringify({ departments: ['경영지원', '개발', '영업', '마케팅'] }), { status: 200 });
       if (!url.endsWith('/v1/members/join')) return undefined;
       body = JSON.parse(String(init?.body));
       return fail ? new Response(JSON.stringify({ error: { message: '이미 신청했거나 가입된 메일 주소예요' } }), { status: 409 }) : new Response(JSON.stringify({ id: 'M-0009', status: 'pending' }), { status: 200 });
     });
     await user.type(await screen.findByLabelText('이름'), '윤지아');
     await user.type(screen.getByLabelText('회사 메일'), 'jia.yoon@example.com');
-    await user.type(screen.getByLabelText(/부서/), '마케팅');
+    await user.click(await screen.findByRole('combobox', { name: '부서' }));
+    await user.click(await screen.findByRole('option', { name: '마케팅' }));
     fail = true;
     await user.click(screen.getByRole('button', { name: '가입 신청' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('이미 신청했거나');

@@ -9,6 +9,7 @@ import { errorMessage } from '../../api/client';
 import type { NumericSetting, ServerSettings, SettingsValues } from '../../api/consoleTypes';
 import { Toggle } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
+import { Select } from '../../components/Select';
 import { useFeedback } from '../../features/feedback';
 import { IDLE_CHOICES, getIdleMinutes, setIdleMinutes } from '../../features/consolePrefs';
 import { qk, useServerSettings } from '../../features/queries';
@@ -45,10 +46,11 @@ const tabFromHash = (): TabId => {
   return TABS.some(([id]) => id === h) ? (h as TabId) : 'general';
 };
 
-const NUMERIC: { key: NumericSetting; title: string; sub: string; unit: string }[] = [
-  { key: 'vault_ttl_minutes', title: '되돌리기 매핑 보관', sub: '[사람_1] ↔ 원래 값. 서버 메모리에만 있고, 마지막으로 쓴 뒤 이 시간이 지나면 사라져요', unit: '분' },
-  { key: 'once_valid_hours', title: '1회 허용 유효 시간', sub: '승인했지만 쓰지 않으면 이 시간 뒤 저절로 끝나요', unit: '시간' },
-  { key: 'keep_decided_days', title: '결정된 예외 요청 보관', sub: '이보다 오래된 승인·반려 기록은 지워요', unit: '일' },
+// `scale`: how many of the server's unit make one shown unit (the server keeps hours; the page shows days).
+const NUMERIC: { key: NumericSetting; title: string; sub: string; unit: string; scale: number }[] = [
+  { key: 'vault_ttl_minutes', title: '되돌리기 매핑 보관', sub: '[사람_1] ↔ 원래 값. 서버 메모리에만 있고, 마지막으로 쓴 뒤 이 시간이 지나면 사라져요', unit: '분', scale: 1 },
+  { key: 'once_valid_hours', title: '1회 허용 유효 시간', sub: '승인했지만 쓰지 않으면 이 기간 뒤 저절로 끝나요', unit: '일', scale: 24 },
+  { key: 'keep_decided_days', title: '결정된 예외 요청 보관', sub: '이보다 오래된 승인·반려 기록은 지워요', unit: '일', scale: 1 },
 ];
 
 const when = (t: number) => new Date(t * 1000).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -71,7 +73,7 @@ export function SettingsPage() {
       for (const n of NUMERIC) {
         const { min, max } = s.limits[n.key];
         const v = draft[n.key];
-        if (!Number.isInteger(v) || v < min || v > max) p[n.key] = `${min}~${max}${n.unit} 사이로 적어 주세요`;
+        if (!Number.isInteger(v) || v < min || v > max) p[n.key] = `${Math.ceil(min / n.scale)}~${Math.floor(max / n.scale)}${n.unit} 사이로 적어 주세요`;
       }
     return p;
   }, [s, draft]);
@@ -232,10 +234,10 @@ export function SettingsPage() {
                     inputMode="numeric"
                     aria-label={n.title}
                     aria-invalid={!!problems[n.key]}
-                    min={s.limits[n.key].min}
-                    max={s.limits[n.key].max}
-                    value={Number.isNaN(draft[n.key]) ? '' : draft[n.key]}
-                    onChange={(e) => setDraft({ ...draft, [n.key]: e.target.value === '' ? NaN : Number(e.target.value) })}
+                    min={Math.ceil(s.limits[n.key].min / n.scale)}
+                    max={Math.floor(s.limits[n.key].max / n.scale)}
+                    value={Number.isNaN(draft[n.key]) ? '' : Math.ceil(draft[n.key] / n.scale)}
+                    onChange={(e) => setDraft({ ...draft, [n.key]: e.target.value === '' ? NaN : Number(e.target.value) * n.scale })}
                     style={{ width: 90, textAlign: 'right' }}
                   />
                   <span className="t2">{n.unit}</span>
@@ -350,24 +352,17 @@ export function SettingsPage() {
             <section id="console" className="card set-sec">
               <h2 className="ct">콘솔</h2>
               <Row title="자동 로그아웃" sub="이 브라우저에서 아무것도 하지 않으면 로그인 화면으로 돌아가요 · 바로 적용돼요">
-                <select
-                  className="sel"
-                  aria-label="자동 로그아웃"
+                <Select
+                  label="자동 로그아웃"
                   value={idle}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
+                  width={110}
+                  options={IDLE_CHOICES.map((m) => ({ value: m, label: `${m}분` }))}
+                  onChange={(v) => {
                     setIdle(v);
                     setIdleMinutes(v);
                     toast(`${v}분 동안 쓰지 않으면 로그아웃돼요`);
                   }}
-                  style={{ width: 110 }}
-                >
-                  {IDLE_CHOICES.map((m) => (
-                    <option key={m} value={m}>
-                      {m}분
-                    </option>
-                  ))}
-                </select>
+                />
               </Row>
             </section>
             )}

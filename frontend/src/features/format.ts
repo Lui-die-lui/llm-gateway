@@ -13,6 +13,19 @@ export function delta(cur: number, prev: number): { text: string; dir: 'up' | 'd
   return { text: `${d > 0 ? '+' : ''}${d.toFixed(1)}%`, dir };
 }
 
+/** A change is only worth showing when there is enough in the previous period: 1 → 0 is "-100%" but says nothing. */
+export const MIN_COMPARE_BASE = 5;
+export function compare(cur: number, prev: number): { text: string; dir: 'up' | 'down' | 'flat' } | null {
+  return prev < MIN_COMPARE_BASE ? null : delta(cur, prev);
+}
+
+/** Milliseconds as they are: a masking call is often well under 1 ms, which must not read as "0ms". */
+export function fmtMs(ms: number | null | undefined): string {
+  if (ms == null) return '—';
+  if (ms < 1) return '<1ms';
+  return ms < 10 ? `${ms.toFixed(1)}ms` : `${Math.round(ms)}ms`;
+}
+
 const two = (n: number) => String(n).padStart(2, '0');
 
 export function hms(ts: number): string {

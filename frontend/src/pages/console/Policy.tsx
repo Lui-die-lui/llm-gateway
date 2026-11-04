@@ -8,6 +8,7 @@ import { gateway } from '../../api/gateway';
 import type { PolicyRule, RuleAction, RuleDraft, RuleKind } from '../../api/consoleTypes';
 import type { AnalyzeResult } from '../../api/types';
 import { Help, Seg, Toggle } from '../../components/Controls';
+import { Select } from '../../components/Select';
 import { QueryState } from '../../components/QueryState';
 import { useBuiltinGroups, useIndustries } from '../../features/catalog';
 import { useFeedback } from '../../features/feedback';
@@ -365,10 +366,7 @@ export function PolicyPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12, marginTop: 4 }}>
                 <label className="field">
                   <span>무엇으로 바꿀까요</span>
-                  <select className="sel" style={{ height: 36 }}>
-                    <option>자리표시자 · [이름표_1]</option>
-                    <option>등록된 대체어</option>
-                  </select>
+                  <Select label="바꾸는 방식" value="ph" disabled width="100%" title="지금은 자리표시자로만 바꿔요" options={[{ value: 'ph', label: '자리표시자 · [이름표_1]' }]} onChange={() => undefined} />
                 </label>
                 <label className="field">
                   <span>이름표</span>

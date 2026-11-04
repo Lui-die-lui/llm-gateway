@@ -10,7 +10,7 @@ import { QueryState } from '../../components/QueryState';
 import { LineChart, RankBars, type RankItem } from '../../components/charts';
 import { industryName, useLabelCategory } from '../../features/catalog';
 import { useFeedback } from '../../features/feedback';
-import { daysAgo, fmt } from '../../features/format';
+import { daysAgo, fmt, fmtMs } from '../../features/format';
 import { qk } from '../../features/queries';
 
 type Range = '7D' | '30D' | '90D' | 'Q';
@@ -119,7 +119,7 @@ export function ReportsPage() {
     { label: '검사한 프롬프트', value: fmt(s?.requests), delta: reqDelta, ds: neutral, note: s ? `하루 평균 ${fmt(Math.round((s.requests / days) * 10) / 10)}` : '…' },
     { label: '가림률', value: redactRate == null ? '—' : `${redactRate.toFixed(1)}%`, delta: null, ds: neutral, note: '1건 이상 가린 전송 비율' },
     { label: '차단률', value: blockRate == null ? '—' : `${blockRate.toFixed(1)}%`, delta: dpct(blockRate, prevBlockRate), ds: blockRate != null && prevBlockRate != null && blockRate <= prevBlockRate ? okStyle : neutral, note: blockTop.length ? blockTop.map((f) => `${f.label} ${Math.round((f.count / (blockTotal || 1)) * 100)}%`).join(' · ') : '차단 없음' },
-    { label: '검사 시간 p95', value: p95 == null ? '—' : `${Math.round(p95)}ms`, delta: null, ds: neutral, note: '목표 80ms 이내 · 외부 LLM 시간 포함' },
+    { label: '검사 시간 p95', value: fmtMs(p95), delta: null, ds: neutral, note: '목표 80ms 이내 · 외부 LLM 시간 포함' },
   ];
 
   return (

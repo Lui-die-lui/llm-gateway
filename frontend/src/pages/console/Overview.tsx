@@ -9,7 +9,7 @@ import { Seg } from '../../components/Controls';
 import { QueryState } from '../../components/QueryState';
 import { RankBars, Sparkline, StackedBars, type RankItem } from '../../components/charts';
 import { useAuth } from '../../features/auth';
-import { daysAgo, delta, findingsText, fmt, hms, OUTCOME_BADGE, outcomeOf, pct, providerName, startOfToday } from '../../features/format';
+import { compare, daysAgo, findingsText, fmt, fmtMs, hms, OUTCOME_BADGE, outcomeOf, pct, providerName, startOfToday } from '../../features/format';
 import { qk, usePendingCounts } from '../../features/queries';
 import { useLabelCategory } from '../../features/catalog';
 
@@ -38,10 +38,13 @@ export function OverviewPage() {
 
   const days = range === '24H' ? 1 : range === '7D' ? 7 : 30;
   const since = range === '24H' ? startOfToday() : daysAgo(days - 1);
-  const prevSince = range === '24H' ? daysAgo(1) : daysAgo(days * 2 - 1);
+  // Like with like: today so far against yesterday up to the same time; a week or a month against the period right before it.
+  const nowMinute = Math.floor(Date.now() / 60_000) * 60;
+  const prevFrom = range === '24H' ? startOfToday() - 86400 : since - days * 86400;
+  const prevUntil = range === '24H' ? nowMinute - 86400 : since;
 
   const cur = useQuery({ queryKey: qk.summary(since), queryFn: () => gateway.summary(since), refetchInterval: 30_000 });
-  const upToPrev = useQuery({ queryKey: qk.summary(prevSince), queryFn: () => gateway.summary(prevSince) });
+  const prevQ = useQuery({ queryKey: qk.summary(prevFrom, prevUntil), queryFn: () => gateway.summary(prevFrom, prevUntil), refetchInterval: 60_000 });
   const series = useQuery({
     queryKey: qk.timeseries(range === '24H' ? 'hour' : 'day', since),
     queryFn: () => gateway.timeseries(range === '24H' ? 'hour' : 'day', since),
@@ -51,8 +54,8 @@ export function OverviewPage() {
   const events = useQuery({ queryKey: qk.audit({ limit: 6 }), queryFn: () => gateway.auditEvents({ limit: 6 }), refetchInterval: 10_000 });
 
   const s = cur.data;
-  // Previous period = (everything since prevSince) − (current period).
-  const prev = upToPrev.data && s ? { requests: upToPrev.data.requests - s.requests, redacted: upToPrev.data.redacted_items - s.redacted_items, blocked: blockedOf(upToPrev.data) - blockedOf(s) } : null;
+  const pd = prevQ.data;
+  const prev = pd ? { requests: pd.requests, redacted: pd.redacted_items, blocked: blockedOf(pd) } : null;
 
   const sparkVals = useMemo(() => {
     const pts = spark14.data ?? [];
@@ -88,12 +91,12 @@ export function OverviewPage() {
 
   const blockedTop = (s?.findings ?? []).filter((f) => f.action === 'block').slice(0, 2).map((f) => f.label).join(' · ');
   const periodWord = range === '24H' ? '오늘' : `최근 ${days}일`;
-  const vsWord = range === '24H' ? '어제 대비' : '직전 기간 대비';
+  const vsWord = range === '24H' ? '어제 같은 시각 대비' : '직전 기간 대비';
 
   const kpis = [
-    { label: '검사한 프롬프트', value: s?.requests, d: prev && s ? delta(s.requests, prev.requests) : null, color: '#64748B', cap: `${vsWord} · 14일 추이`, spark: sparkVals.requests, goodDown: false },
-    { label: '가림 처리', value: s?.redacted_items, d: prev && s ? delta(s.redacted_items, prev.redacted) : null, color: 'var(--c-redact)', cap: s ? `가린 항목 · 프롬프트 ${fmt(s.requests)}건 중` : '가린 항목', spark: sparkVals.redacted, goodDown: false },
-    { label: '전송 차단', value: s ? blockedOf(s) : undefined, d: prev && s ? delta(blockedOf(s), prev.blocked) : null, color: 'var(--c-block)', cap: blockedTop || '차단 없음', spark: sparkVals.blocked, goodDown: true },
+    { label: '검사한 프롬프트', value: s?.requests, d: prev && s ? compare(s.requests, prev.requests) : null, color: '#64748B', cap: `${vsWord} · 14일 추이`, spark: sparkVals.requests, goodDown: false },
+    { label: '가림 처리', value: s?.redacted_items, d: prev && s ? compare(s.redacted_items, prev.redacted) : null, color: 'var(--c-redact)', cap: s ? `가린 항목 · 프롬프트 ${fmt(s.requests)}건 중` : '가린 항목', spark: sparkVals.redacted, goodDown: false },
+    { label: '전송 차단', value: s ? blockedOf(s) : undefined, d: prev && s ? compare(blockedOf(s), prev.blocked) : null, color: 'var(--c-block)', cap: blockedTop || '차단 없음', spark: sparkVals.blocked, goodDown: true },
   ];
 
   const name = session?.user.name ?? '보안관리자';
@@ -155,7 +158,7 @@ export function OverviewPage() {
             <div key={k.label} className="card vz-card" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '16px 18px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{k.label}</span>
-                <span className="mono" style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, ...dStyle }}>
+                <span className="mono" title={k.d ? undefined : '비교할 이전 기록이 5건 미만이라 변화율은 표시하지 않아요'} style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 999, ...dStyle }}>
                   {k.d?.text ?? '비교 없음'}
                 </span>
               </div>
@@ -291,7 +294,7 @@ export function OverviewPage() {
                         <span className={`badge ${b.cls}`}>{b.label}</span>
                       </td>
                       <td className="mono t3 num" style={{ fontSize: 13 }}>
-                        {e.latency_ms == null ? '—' : `${Math.round(e.latency_ms)}ms`}
+                        {fmtMs(e.latency_ms)}
                       </td>
                     </tr>
                   );
