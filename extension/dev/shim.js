@@ -1,5 +1,5 @@
 // Stands in for the Chrome extension APIs on the dev page so the REAL background.js and content scripts run unchanged.
-// Query: ?industries=cosmetics,medical  &enabled=0  &gateway=http://localhost:8000
+// Query: ?industries=cosmetics,medical  &restore=1 (put the originals back on screen; off by default)  &enabled=0  &gateway=http://localhost:8000
 (() => {
   const q = new URLSearchParams(location.search);
   const mem = (initial) => {
@@ -29,6 +29,7 @@
     enabled: q.get("enabled") !== "0",
     industries: (q.get("industries") || "").split(",").filter(Boolean),
     gatewayUrl: q.get("gateway") || "http://localhost:8000",
+    ...(q.get("restore") === "1" ? { restoreEnabled: true } : {}), // restoring the originals on screen is off by default
   });
   local.area = "local";
   const session = mem({});

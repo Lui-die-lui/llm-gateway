@@ -383,7 +383,7 @@ async def chat_completions(
             industries=names,
             use_case=x_gateway_use_case,
             stream=streaming,
-            latency_ms=int((time.monotonic() - t0) * 1000),
+            latency_ms=round((time.monotonic() - t0) * 1000, 2),
             site=x_gateway_site,
             client=x_gateway_client,
             caller=caller,
@@ -524,11 +524,13 @@ def sanitize(body: SanitizeIn, caller: str | None = Depends(require_caller)):
         industries=body.industries,
         use_case=body.use_case,
         stream=False,
-        latency_ms=int((time.monotonic() - t0) * 1000),
+        latency_ms=round((time.monotonic() - t0) * 1000, 2),
         site=body.site,
         client=body.client,
         caller=caller,
-        exception_id=",".join(g["id"] for g in used) or None,
+        # Only an exception that really let something go out counts: a message that was stopped anyway used none (and a one-use approval is not spent).
+        exception_id=(",".join(g["id"] for g in used) or None) if route != "block" else None,
+        client_id=body.client_id,
         request_matches=matches,
     )
     if route == "block":
@@ -696,6 +698,35 @@ def member_join(body: JoinIn):
     return {"id": created["id"], "status": created["status"]}
 
 
+@app.get("/v1/members/departments")
+def member_departments():
+    """Public: the departments the join form offers."""
+    return {"departments": members.DEPARTMENTS}
+
+
+class LinkIn(BaseModel):
+    email: str = Field(max_length=200)
+    client_id: str = Field(min_length=4, max_length=64)
+
+
+@app.post("/v1/members/link")
+def member_link(body: LinkIn):
+    """Public: the extension says "this browser is that member's", by the member's company mail. Self-declared, used only to tell
+    in the log who sent what; it grants nothing."""
+    return members.link(body.email, body.client_id)
+
+
+@app.get("/v1/members/me")
+def member_me(client_id: str = Query(min_length=4, max_length=64)):
+    return members.me(client_id)
+
+
+@app.delete("/v1/members/link")
+def member_unlink(client_id: str = Query(min_length=4, max_length=64)):
+    members.unlink(client_id)
+    return {"ok": True}
+
+
 @app.get("/v1/members", dependencies=admin)
 def member_list():
     return members.listing()
@@ -727,9 +758,9 @@ def member_clear():
 # ---------------------------------------------------------------- audit / dashboard (metadata only)
 
 @app.get("/v1/stats/summary", dependencies=[Depends(require_admin)])
-def stats_summary(since: float = 0.0):
-    """`since` = unix seconds. Omit for all time."""
-    return audit.summary(since)
+def stats_summary(since: float = 0.0, until: float | None = None):
+    """`since` / `until` = unix seconds, the period is [since, until). Omit both for all time."""
+    return audit.summary(since, until)
 
 
 TZ_OFFSET = Query(0, ge=-840, le=840, description="minutes east of UTC, e.g. 540 for Korea")
@@ -778,9 +809,21 @@ def audit_events(
     until: float | None = None,
     site: str | None = None,
     client: str | None = None,
+    dept: str | None = None,
+    user: str | None = None,
+    exception: bool | None = None,
 ):
-    """Newest first. `since` (inclusive) / `until` (exclusive) are unix seconds. Total matches: X-Total-Count header."""
-    rows, total = audit.events(limit, offset, label, status, since, until, site, client)
+    """Newest first. `since` (inclusive) / `until` (exclusive) are unix seconds. Total matches: X-Total-Count header.
+    `dept` / `user` (a member id like M-0003) keep what the linked browsers of that department or person sent; `exception=true` keeps
+    what an approved exception let through as it was. Each event carries `user` / `dept` when its browser is linked to a member."""
+    ids = None
+    if dept or user:
+        ids = members.browsers_of(dept or None, user or None)
+    rows, total = audit.events(limit, offset, label, status, since, until, site, client, ids, exception)
+    who = members.who([r.get("client_id") or "" for r in rows])
+    for r in rows:
+        m = who.get(r.pop("client_id", None) or "")
+        r["user"], r["dept"] = (m["name"], m["dept"]) if m else (None, None)  # the browser id itself is never returned
     return JSONResponse(rows, headers={"X-Total-Count": str(total)})
 
 

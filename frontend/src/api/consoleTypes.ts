@@ -29,10 +29,13 @@ export interface MemberItem {
   status: 'active' | 'pending';
   created: number;
   decided: number | null;
+  /** How many of this member's browsers are linked (the ids themselves are never listed). */
+  browsers?: number;
 }
 export interface MemberList {
   members: MemberItem[];
   pending: MemberItem[];
+  departments: string[];
 }
 
 export type RuleKind = 'builtin' | 'words' | 'pattern' | 'ai';

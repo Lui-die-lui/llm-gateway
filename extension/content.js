@@ -7,7 +7,8 @@
   const SITES = {
     "chatgpt.com": {
       // #prompt-textarea is a contenteditable on the logged-in page; other layouts use a <textarea> or a bare ProseMirror.
-      composer: ["#prompt-textarea", 'textarea[name="prompt-textarea"]', 'div.ProseMirror[contenteditable="true"]'],
+      // The narrow-window layout uses a plain <textarea id="mobile-composer-prompt"> (and the wide one may use "...-composer-prompt" too).
+      composer: ["#prompt-textarea", 'textarea[name="prompt-textarea"]', 'textarea[id$="composer-prompt"]', 'div.ProseMirror[contenteditable="true"]'],
       send: ['button[data-testid="send-button"]', 'button[data-testid="composer-submit-button"]', 'button[aria-label="Send prompt"]', 'button[aria-label="프롬프트 보내기"]', 'button[aria-label="Send message"]'],
       reply: ['[data-message-author-role="assistant"]', '[data-dil-message-id]'],
       mine: ['[data-message-author-role="user"]'], // my own bubbles: shown with the original values again
@@ -68,6 +69,25 @@
     }
   };
 
+  // Restoring the original values on screen is one switch: Gw.DEFAULT_RESTORE (lib.js), overridden by the popup's 복원 표시 setting.
+  // Off: the page shows what the AI really received ([사람_1] ...), and no restore request is made from any of the places below.
+  // The code that restores is unchanged; it is only not reached. Turning it on starts a pass at once.
+  let restoreEnabled = Gw.DEFAULT_RESTORE;
+  let onRestoreOn = () => {};
+  try {
+    chrome.storage?.local?.get({ restoreEnabled: undefined }).then((v) => {
+      restoreEnabled = Gw.restoreOn(v?.restoreEnabled);
+      if (restoreEnabled) onRestoreOn();
+    }, () => {});
+    chrome.storage?.onChanged?.addListener((c, area) => {
+      if (area !== "local" || !c.restoreEnabled) return;
+      restoreEnabled = Gw.restoreOn(c.restoreEnabled.newValue);
+      if (restoreEnabled) onRestoreOn();
+    });
+  } catch {
+    /* the extension was reloaded under this page */
+  }
+
   // Sites draw some of their cards in iframes (ChatGPT's sandboxed renderer). The same script runs there, but only to put the
   // originals back: no prompt box, no send guard, no screens. The tab (and so the tab's vault) is the same, so the background
   // answers as usual. Whether a given site's iframe is reachable depends on the site; the page-level restore does not depend on it.
@@ -76,7 +96,7 @@
     let busy = false;
     const FRAME_FIELDS = "input:not([type=password]):not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=file]),textarea";
     const restoreFrame = async () => {
-      if (busy || !document.body) return;
+      if (busy || !document.body || !restoreEnabled) return;
       busy = true;
       try {
         const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -107,6 +127,7 @@
     };
     let t;
     new MutationObserver(() => (clearTimeout(t), (t = setTimeout(restoreFrame, 300)))).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    onRestoreOn = restoreFrame;
     restoreFrame();
     return;
   }
@@ -251,7 +272,7 @@
   document.addEventListener("visibilitychange", pollDecisions);
 
   /* ---------- state of the last sent message (for the change pill and the reply notes) ---------- */
-  let lastSent = null; // { entries, expect, noted, replies }
+  let lastSent = null; // { entries, restored }
   let keepableCache = { at: 0, set: new Set() };
   async function getKeepable() {
     if (Date.now() - keepableCache.at < 60_000) return keepableCache.set;
@@ -480,7 +501,7 @@
     if (outText !== text) writeText(box, outText);
     if (entries.length) {
       await bg("historyAdd", { entry: { kind: "텍스트", entries } });
-      lastSent = { entries, expect: entries.filter((e) => e.how !== "keep").length, noted: false, replies: document.querySelectorAll(site.reply.join(",")).length };
+      lastSent = { entries };
       ui.history(entries, { portalUrl: cfg.portalUrl });
     }
     await bg("statsAdd", { delta: { redacted: changed } });
@@ -666,7 +687,6 @@
   const wrote = new WeakSet(); // text nodes holding restored originals: never scanned again
   const masked = new Map(); // text node -> original text, for the "확인하기" button
   const scanned = new Map(); // text node text -> true
-  let noteTimer;
 
   // Sites change how they draw answers and cards (ChatGPT now uses a separate renderer for some answers), so the whole page is
   // searched for placeholders instead of trusting a list of containers. Only what the person is typing and our own UI are skipped.
@@ -724,7 +744,7 @@
       if (skipEl(el)) continue;
       const isReply = !isMine(node, el, mineSel);
       if (!isReply && HINT_SHOWN.test(value)) node.nodeValue = value = value.replace(HINT_SHOWN, "");
-      if (PLACEHOLDER.test(value) && asked.get(node) !== value) {
+      if (restoreEnabled && PLACEHOLDER.test(value) && asked.get(node) !== value) {
         asked.set(node, value);
         const res = await bg("restore", { text: value });
         if (res.ok && res.data.text !== value) {
@@ -738,9 +758,9 @@
         } else if (res.status === 404 && isReply) expired = true;
       }
     }
-    restored += await restoreFields();
+    if (restoreEnabled) restored += await restoreFields();
     // Misspelled placeholders are only looked for inside answers we can positively identify.
-    for (const root of document.querySelectorAll([...site.reply, ...(site.around || [])].join(","))) {
+    for (const root of restoreEnabled ? document.querySelectorAll([...site.reply, ...(site.around || [])].join(",")) : []) {
       const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       for (let n = w.nextNode(); n; n = w.nextNode()) {
         const el = n.parentElement;
@@ -843,30 +863,6 @@
     }
   }
 
-  // The model did not use the placeholders we sent, so there is nothing to restore.
-  function noteNoPlaceholder() {
-    if (!lastSent || lastSent.noted || lastSent.restored || !lastSent.expect) return;
-    const roots = [...document.querySelectorAll(site.reply.join(","))];
-    if (roots.length <= lastSent.replies) return;
-    const newest = roots[roots.length - 1];
-    const body = newest.textContent || "";
-    if (body.length < 20 || PLACEHOLDER.test(body)) return;
-    lastSent.noted = true;
-    ui.strip("noph", {
-      tone: "info",
-      text: "모델이 자리표시자를 쓰지 않아서 복원할 값이 없어요",
-      action: {
-        label: "“자리표시자를 그대로 써서” 다시 요청",
-        onClick: () => {
-          const box = findComposer();
-          if (box) writeText(box, `${readText(box)}${readText(box) ? "\n" : ""}답변에는 [사람_1] 같은 자리표시자를 그대로 써서 알려줘.`.trim());
-          toast("입력창에 넣었어요");
-          ui.strip("noph", null);
-        },
-      },
-    });
-  }
-
   // The popup asks "does the extension see this tab?" (no page content is returned).
   const seen = { intercepted: 0 };
   chrome.runtime.onMessage?.addListener((msg, _s, reply) => {
@@ -889,9 +885,8 @@
   new MutationObserver(() => {
     clearTimeout(timer);
     timer = setTimeout(restoreReplies, 300);
-    clearTimeout(noteTimer);
-    noteTimer = setTimeout(noteNoPlaceholder, 1800);
     composerChanged();
     if (safeShown && !safeMode()) safeNote(false); // the page finished drawing its chat box
   }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  onRestoreOn = () => restoreReplies();
 })();

@@ -19,7 +19,7 @@
 </head>
 <body>
   <!-- Mimics the parts of ChatGPT's page that content.js touches. Serve extension/ and open /dev/fake-chat.html
-       ?industries=cosmetics  &enabled=0  &reply=echo|plain|fuzzy|newpii  &layout=changed (composer selector no longer matches) | arrow (send arrow selector no longer matches) -->
+       ?industries=cosmetics  &enabled=0  &reply=echo|plain|fuzzy|newpii  &layout=mobile (ChatGPT's narrow layout: textarea#mobile-composer-prompt) | changed (composer selector no longer matches) | arrow (send arrow selector no longer matches) -->
   <div id="app">
     <div id="log"></div>
     <pre id="mailsent" data-gw-skip></pre>
@@ -33,7 +33,18 @@
     // layout=changed: the site renamed its composer, so the selector table no longer matches (safe mode).
     (() => {
       const mode = new URLSearchParams(location.search).get("layout");
-      document.getElementById("composer").id = mode === "changed" ? "box" : "prompt-textarea";
+      const el = document.getElementById("composer");
+      el.id = mode === "changed" ? "box" : "prompt-textarea";
+      if (mode === "mobile") {
+        // ChatGPT's narrow-window layout: a plain <textarea id="mobile-composer-prompt"> instead of the ProseMirror box.
+        const ta = document.createElement("textarea");
+        ta.id = "mobile-composer-prompt";
+        ta.setAttribute("aria-label", "ChatGPT와 채팅");
+        ta.placeholder = "ChatGPT에게 물어보세요";
+        ta.rows = 2;
+        ta.style.cssText = "width:100%;border:0;outline:0;resize:none;background:transparent;font:inherit";
+        el.replaceWith(ta);
+      }
     })();
   </script>
   <script src="shim.js"></script>
@@ -43,9 +54,9 @@
   <script>
     (() => {
     const reply = new URLSearchParams(location.search).get("reply") || "echo";
-    const composer = document.querySelector("[contenteditable]");
+    const composer = document.querySelector("[contenteditable], textarea#mobile-composer-prompt");
     function send() {
-      const text = composer.innerText.trim();
+      const text = (composer.value ?? composer.innerText).trim();
       if (!text) return;
       document.getElementById("sent").textContent = text; // what would leave for the external LLM
       const me = document.createElement("div");
@@ -55,7 +66,8 @@
       const turn = reply === "chatgpt" ? document.createElement("article") : null; // ChatGPT wraps each side in an <article>
       if (turn) (turn.dataset.testid = "conversation-turn-1"), turn.append(me);
       document.getElementById("log").append(turn || me);
-      composer.textContent = "";
+      if (composer.tagName === "TEXTAREA") composer.value = "";
+      else composer.textContent = "";
       if (reply === "chatgpt") return chatgptReply(text);
       if (reply === "dil") return dilReply(text);
       if (reply === "mail") return mailReply(text);

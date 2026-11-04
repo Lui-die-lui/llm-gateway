@@ -64,3 +64,21 @@ describe('chart helpers', () => {
     expect(data[9]).toMatchObject({ block: 0, redact: 0, pass: 0 });
   });
 });
+
+describe('compare and fmtMs', () => {
+  it('does not show a change when the previous period is too small to mean anything', async () => {
+    const { compare } = await import('../features/format');
+    expect(compare(0, 1)).toBeNull(); // 1 → 0 is "-100%" but says nothing
+    expect(compare(0, 4)).toBeNull();
+    expect(compare(0, 12)?.text).toBe('-100.0%'); // enough to compare: it is true, and shown
+    expect(compare(15, 10)).toEqual({ text: '+50.0%', dir: 'up' });
+  });
+  it('writes a sub-millisecond time as "<1ms", never "0ms"', async () => {
+    const { fmtMs } = await import('../features/format');
+    expect(fmtMs(0)).toBe('<1ms');
+    expect(fmtMs(0.4)).toBe('<1ms');
+    expect(fmtMs(2.46)).toBe('2.5ms');
+    expect(fmtMs(37.2)).toBe('37ms');
+    expect(fmtMs(null)).toBe('—');
+  });
+});

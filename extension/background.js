@@ -5,7 +5,7 @@
 if (typeof importScripts === "function") importScripts("lib.js"); // the dev page loads lib.js with a <script> tag instead
 
 const DEFAULT_GATEWAY = "http://localhost:8000";
-const DEFAULTS = { enabled: true, industries: [], hint: true, timeFormat: "clock" };
+const DEFAULTS = { enabled: true, industries: [], hint: true, timeFormat: "clock", restoreEnabled: Gw.DEFAULT_RESTORE };
 
 async function gatewayUrl() {
   const { gatewayUrl: url } = await chrome.storage.local.get({ gatewayUrl: DEFAULT_GATEWAY });
@@ -20,10 +20,10 @@ async function keyHeaders() {
   return gatewayKey ? { "X-Gateway-Key": gatewayKey } : {};
 }
 
-async function call(path, body) {
+async function call(path, body, method) {
   try {
     const r = await fetch((await gatewayUrl()) + path, {
-      method: body ? "POST" : "GET",
+      method: method || (body ? "POST" : "GET"),
       headers: { "Content-Type": "application/json", ...(await keyHeaders()) },
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -149,7 +149,7 @@ async function settings(tabId) {
   const gw = await gatewayUrl();
   const base = Gw.portalBase(gw);
   const cid = encodeURIComponent(await clientId());
-  return { enabled: s.enabled, industries: s.industries, gatewayUrl: gw, portalUrl: `${base}/me?cid=${cid}`, requestUrl: `${base}/me/request?cid=${cid}`, hint: s.hint !== false, timeFormat: Gw.timeFormat(s.timeFormat), tabId };
+  return { enabled: s.enabled, industries: s.industries, gatewayUrl: gw, portalUrl: `${base}/me?cid=${cid}`, requestUrl: `${base}/me/request?cid=${cid}`, hint: s.hint !== false, timeFormat: Gw.timeFormat(s.timeFormat), restoreEnabled: Gw.restoreOn(s.restoreEnabled), tabId };
 }
 
 /** An exception request sent from the in-page form: same record the console's request page makes. */
@@ -198,6 +198,8 @@ async function sanitize(text, tabId, site) {
 
 // Registered replacement words are swapped back here first, then the gateway restores the [유형_n] placeholders.
 async function restore(text, tabId) {
+  // Off (the default): nothing is looked up and the text comes back unchanged, so a caller sees "nothing to restore".
+  if (!Gw.restoreOn((await chrome.storage.local.get({ restoreEnabled: undefined })).restoreEnabled)) return { ok: true, status: 200, data: { text, skipped: true } };
   const aliasMap = (await chrome.storage.session.get(aliasKey(tabId)))[aliasKey(tabId)] || {};
   // 1) what this tab remembers (works without the gateway), 2) registered replacement words, 3) the gateway's vault for the rest
   const known = await originals(tabId);
@@ -255,6 +257,9 @@ async function handle(msg, tabId, site) {
     case "status": return status();
     case "clientId": return { id: await clientId() };
     case "exceptions": return call(await mineUrl());
+    case "memberMe": return call(`/v1/members/me?client_id=${encodeURIComponent(await clientId())}`);
+    case "memberLink": return call("/v1/members/link", { email: String(msg.email || "").trim(), client_id: await clientId() });
+    case "memberUnlink": return call(`/v1/members/link?client_id=${encodeURIComponent(await clientId())}`, undefined, "DELETE");
     case "requestException": return requestException(msg.request || {}, site);
     case "exceptionNews": lastPagePoll = Date.now(); return exceptionNews();
     case "stats": return getStats();

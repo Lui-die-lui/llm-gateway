@@ -33,6 +33,19 @@
       <p class="hint">공통 개인정보 · 시크릿은 항상 켜져 있어요</p>
     </section>
 
+    <section class="card" aria-labelledby="me-h">
+      <h2 id="me-h">내 계정</h2>
+      <div id="me-state" class="hint" role="status">확인 중…</div>
+      <form id="me-form" hidden>
+        <div class="row">
+          <input id="me-mail" type="email" placeholder="회사 메일 주소" autocomplete="email" spellcheck="false" aria-label="회사 메일 주소">
+          <button type="submit" class="btn small">연결</button>
+        </div>
+        <p class="hint">관리자가 승인한 구성원의 메일을 넣으면, 이 브라우저에서 보낸 글이 기록에 내 이름과 부서로 남아요.</p>
+      </form>
+      <button type="button" id="me-unlink" class="btn small" hidden>연결 끊기</button>
+    </section>
+
     <section class="card" aria-labelledby="ex-h">
       <h2 id="ex-h">내 예외 요청</h2>
       <div id="exceptions" class="exlist hint">확인 중…</div>
@@ -53,6 +66,7 @@
         </div>
         <label for="gw-key">접속 키 (회사에서 받은 경우)</label>
         <input id="gw-key" type="password" placeholder="gw_..." autocomplete="off" spellcheck="false">
+        <label class="opt"><input type="checkbox" id="restore"><span>복원 표시 (실험 기능)<small>켜면 화면에서 [사람_1] 같은 표시를 원래 값으로 되돌려 보여요. 꺼 두면 AI가 실제로 받은 모양 그대로 보여요. 이미 되돌린 글은 새로고침하면 다시 표시로 보여요</small></span></label>
         <label class="opt"><input type="checkbox" id="hint"><span>가린 자리 안내 문장 붙이기<small>없으면 AI가 [사람_1]을 빈칸으로 읽고 되물을 수 있어요</small></span></label>
         <div class="lbl-s" id="tf-l">예외 승인 남은 시간 표시</div>
         <div class="seg" role="radiogroup" aria-labelledby="tf-l">

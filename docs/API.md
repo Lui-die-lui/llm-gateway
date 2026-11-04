@@ -225,3 +225,12 @@ const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
 
 승인·반려·삭제는 설정 화면의 변경 내역에 남습니다. 저장소는 `MEMBERS_DB`(기본 `data/members.db`)입니다. 시연 데이터(구성원 6명 + 대기 2명)는 `scripts/seed_presentation.py`가 이 경로로 만듭니다. 공개 신청 화면은 `/join`입니다.
 
+### 9-1. 부서, 브라우저 연결, 기록에서 누가 보냈는지
+
+- 부서는 작은 회사의 큰 틀만 고정해 두었습니다: `경영지원`, `개발`, `영업`, `마케팅`. `GET /v1/members/departments`(공개)로 가입 폼이 받아 가고, 가입 신청의 `dept`는 이 중 하나이거나 비워야 합니다(아니면 422).
+- `POST /v1/members/link` `{email, client_id}`(공개): 확장이 "이 브라우저는 이 구성원의 것"이라고 알립니다. **승인된 구성원의 회사 메일**이어야 하고, 본인이 쓴 메일을 확인하는 절차는 없습니다(스스로 밝히는 방식). 그래서 연결은 기록에 이름과 부서를 붙이는 데만 쓰이고 아무 권한도 주지 않습니다. `GET /v1/members/me?client_id=` → `{linked, name, dept}`, `DELETE /v1/members/link?client_id=`로 끊습니다.
+- 브라우저 ID는 그 브라우저의 예외 승인을 쓰는 열쇠이기도 해서 **어떤 응답에도 내려가지 않습니다**. 구성원 목록에는 연결된 브라우저 개수(`browsers`)만 나옵니다.
+- `GET /v1/audit/events` 추가 조건: `dept`(부서), `user`(구성원 번호 `M-0003`), `exception=true|false`(승인된 예외로 그대로 나간 것/아닌 것), 그리고 기존 `site`, `since`, `until`. 각 기록에는 연결된 구성원이 있으면 `user`, `dept`가 붙습니다.
+- `GET /v1/stats/summary`에 `until`이 생겼습니다(`[since, until)`). 콘솔 개요가 "오늘 지금까지"와 "어제 같은 시각까지"를 같은 길이로 비교하는 데 씁니다.
+- 기록의 `latency_ms`는 소수 둘째 자리까지 저장합니다(가림 처리는 1ms보다 빨라서 정수로 자르면 0이 됩니다).
+

@@ -46,6 +46,8 @@ export interface AuditEvent {
   site: string | null;
   client: string | null;
   caller: string | null; // the API key's name (the app), decided by the gateway
+  user?: string | null; // the member whose linked browser sent it, when there is one
+  dept?: string | null;
   exception_id?: string | null; // the approved exception request that let something through as typed, e.g. "REQ-0003"
   findings: Finding[];
 }
@@ -67,6 +69,11 @@ export interface AuditQuery {
   offset?: number;
   label?: string;
   status?: AuditStatus;
+  site?: string;
+  dept?: string;
+  since?: number;
+  /** true: only what an approved exception let through as typed; false: only what none did. */
+  exception?: boolean;
 }
 
 export interface IndustryEntity {

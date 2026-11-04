@@ -6,6 +6,7 @@ import { consoleApi } from '../../api/console';
 import { errorMessage } from '../../api/client';
 import type { MemberItem } from '../../api/consoleTypes';
 import { QueryState } from '../../components/QueryState';
+import { Select } from '../../components/Select';
 import { useFeedback } from '../../features/feedback';
 import { qk, useMembers, useServerSettings } from '../../features/queries';
 import './settings.css';
@@ -113,14 +114,7 @@ export function MembersPage() {
                   <h2 className="ct" style={{ margin: 0 }}>구성원</h2>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <input className="in" aria-label="이름·메일 검색" placeholder="이름·메일 검색" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 180 }} />
-                    <select className="sel" aria-label="부서" value={dept} onChange={(e) => setDept(e.target.value)} style={{ width: 130 }}>
-                      <option value="">모든 부서</option>
-                      {depts.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
+                    <Select label="부서" value={dept} width={130} onChange={setDept} options={[{ value: '', label: '모든 부서' }, ...(data.departments ?? depts).map((d) => ({ value: d, label: d }))]} />
                   </div>
                 </div>
                 {members.length === 0 ? (
@@ -133,6 +127,7 @@ export function MembersPage() {
                       <tr>
                         <th>이름</th>
                         <th>부서</th>
+                        <th>확장 연결</th>
                         <th>가입일</th>
                         <th className="num">관리</th>
                       </tr>
@@ -152,6 +147,7 @@ export function MembersPage() {
                             </div>
                           </td>
                           <td>{m.dept || '—'}</td>
+                          <td className="t2" title="이 사람의 브라우저(확장)를 연결해 두면 기록에 이름과 부서가 나와요">{m.browsers ? `브라우저 ${m.browsers}개 연결` : '연결 전'}</td>
                           <td className="t2">{m.decided ? day(m.decided) : '—'}</td>
                           <td className="num">
                             <button type="button" className="btn btn-sm btn-d" aria-label={`${m.name} 구성원에서 빼기`} disabled={remove.isPending} onClick={() => onRemove(m)}>

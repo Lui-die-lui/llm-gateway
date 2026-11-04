@@ -1,6 +1,7 @@
 // 가입 신청: the public form the admin shares. Name, company mail and department only (no password): the admin decides in the console.
 import { useState, type FormEvent } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Select } from '../../components/Select';
 import { gateway } from '../../api/gateway';
 import { errorMessage } from '../../api/client';
 import { Icon } from '../../components/Icon';
@@ -9,6 +10,7 @@ export function JoinPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [dept, setDept] = useState('');
+  const depts = useQuery({ queryKey: ['gw', 'departments'], queryFn: gateway.departments, retry: false });
   const send = useMutation({ mutationFn: () => gateway.joinMember({ name: name.trim(), email: email.trim(), dept: dept.trim() }) });
 
   function submit(e: FormEvent) {
@@ -42,10 +44,10 @@ export function JoinPage() {
               <span>회사 메일</span>
               <input className="in" type="email" value={email} maxLength={120} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="name@company.com" />
             </label>
-            <label className="field">
-              <span>부서 (선택)</span>
-              <input className="in" value={dept} maxLength={30} onChange={(e) => setDept(e.target.value)} />
-            </label>
+            <div className="field">
+              <span>부서</span>
+              <Select label="부서" value={dept} width="100%" onChange={setDept} options={[{ value: '', label: '선택 안 함' }, ...(depts.data?.departments ?? []).map((d) => ({ value: d, label: d }))]} />
+            </div>
             {send.isError && (
               <div className="err-box" role="alert">
                 {errorMessage(send.error)}

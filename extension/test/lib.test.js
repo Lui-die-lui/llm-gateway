@@ -238,3 +238,16 @@ test("a one-use approval counts its lapse with the server's once_seconds when it
   assert.equal(Gw.activeGrant({ ...base, once_seconds: 7200 }, 1_000_000)?.end, (1000 + 7200) * 1000);
   assert.equal(Gw.activeGrant({ ...base, once_seconds: 7200 }, (1000 + 7200) * 1000 + 1), null); // already over under the shorter setting
 });
+
+test("restoring on screen is off by default and one setting turns it on", () => {
+  assert.equal(Gw.DEFAULT_RESTORE, false); // the switch for everyone: flip this one constant to bring restoring back
+  assert.equal(Gw.restoreOn(undefined), false); // nothing stored yet: the default
+  assert.equal(Gw.restoreOn(null), false);
+  assert.equal(Gw.restoreOn(true), true); // the popup's 복원 표시 setting wins over the default
+  assert.equal(Gw.restoreOn(false), false);
+});
+
+test("the restore helpers themselves are untouched by the switch: placeholders still go back when asked", () => {
+  const map = { "[사람_1]": "홍길동" };
+  assert.equal(Gw.restorePlaceholders("고객 [사람_1] 님", map), "고객 홍길동 님");
+});

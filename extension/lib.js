@@ -3,6 +3,11 @@
 (function (root) {
   "use strict";
 
+  // Putting the original values back on screen (messages, answers, cards) is an experimental feature and is OFF by default.
+  // Turning it on for everyone again is this one line (the popup's 복원 표시 setting overrides it per browser).
+  const DEFAULT_RESTORE = false;
+  const restoreOn = (v) => (v === undefined || v === null ? DEFAULT_RESTORE : !!v);
+
   const PLACEHOLDER = /\[[^\[\]\s]+_\d+\]/;
   const PLACEHOLDER_ALL = /\[[^\[\]\s]+_\d+\]/g;
   // "[이메일 1]" / "[이메일-1]": a model that changed the separator of a placeholder.
@@ -300,7 +305,7 @@
     return { news, active, used, told };
   }
 
-  const api = { exceptionNews, activeGrant, nearestGrant, liveGrants, makeClientId, approvalEnd, clock, remaining, timeFormat, TIME_FORMATS, describeDecision, TTL_LABEL, PLACEHOLDER, PLACEHOLDER_ALL, cps, maskValue, pairSpans, ALIASES, hasAlias, buildOutgoing, restoreAliases, restorePlaceholders, restoreVariants, findFuzzy, CRITICAL, keepableLabels, canKeep, dayKey, portalBase };
+  const api = { DEFAULT_RESTORE, restoreOn, exceptionNews, activeGrant, nearestGrant, liveGrants, makeClientId, approvalEnd, clock, remaining, timeFormat, TIME_FORMATS, describeDecision, TTL_LABEL, PLACEHOLDER, PLACEHOLDER_ALL, cps, maskValue, pairSpans, ALIASES, hasAlias, buildOutgoing, restoreAliases, restorePlaceholders, restoreVariants, findFuzzy, CRITICAL, keepableLabels, canKeep, dayKey, portalBase };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Gw = api;
 })(typeof self !== "undefined" ? self : this);

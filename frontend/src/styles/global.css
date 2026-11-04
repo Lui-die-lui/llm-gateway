@@ -629,3 +629,96 @@ tr.is-selected td {
     display: none !important;
   }
 }
+
+/* dropdown (components/Select.tsx): the pill button and the glass list that replace the browser's own <select> */
+.dd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 34px;
+  min-width: 96px;
+  padding: 0 12px 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  color: var(--ink);
+  font: 13.5px var(--font-sans);
+  cursor: pointer;
+  text-align: left;
+}
+.dd-btn:hover:not(:disabled) {
+  border-color: rgba(15, 26, 43, 0.28);
+}
+.dd-btn:focus-visible,
+.dd-btn[aria-expanded='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  background: #fff;
+}
+.dd-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.dd-val {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dd-chev {
+  flex: 0 0 auto;
+  color: var(--ink-3);
+  transition: transform 0.15s;
+}
+.dd-btn[aria-expanded='true'] .dd-chev {
+  transform: rotate(180deg);
+}
+.dd-menu {
+  box-sizing: border-box;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid #fff;
+  box-shadow: 0 24px 50px -22px rgba(15, 26, 43, 0.5), 0 2px 8px rgba(15, 26, 43, 0.08);
+  animation: dd-in 0.12s ease-out;
+}
+.dd-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 10px 0 12px;
+  border-radius: 10px;
+  font: 13.5px var(--font-sans);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dd-opt.act {
+  background: rgba(37, 99, 235, 0.09);
+}
+.dd-opt.sel {
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+@keyframes dd-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dd-menu {
+    animation: none;
+  }
+  .dd-chev {
+    transition: none;
+  }
+}
