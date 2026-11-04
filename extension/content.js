@@ -272,7 +272,7 @@
   document.addEventListener("visibilitychange", pollDecisions);
 
   /* ---------- state of the last sent message (for the change pill and the reply notes) ---------- */
-  let lastSent = null; // { entries, expect, noted, replies }
+  let lastSent = null; // { entries, restored }
   let keepableCache = { at: 0, set: new Set() };
   async function getKeepable() {
     if (Date.now() - keepableCache.at < 60_000) return keepableCache.set;
@@ -501,7 +501,7 @@
     if (outText !== text) writeText(box, outText);
     if (entries.length) {
       await bg("historyAdd", { entry: { kind: "텍스트", entries } });
-      lastSent = { entries, expect: entries.filter((e) => e.how !== "keep").length, noted: false, replies: document.querySelectorAll(site.reply.join(",")).length };
+      lastSent = { entries };
       ui.history(entries, { portalUrl: cfg.portalUrl });
     }
     await bg("statsAdd", { delta: { redacted: changed } });
@@ -687,7 +687,6 @@
   const wrote = new WeakSet(); // text nodes holding restored originals: never scanned again
   const masked = new Map(); // text node -> original text, for the "확인하기" button
   const scanned = new Map(); // text node text -> true
-  let noteTimer;
 
   // Sites change how they draw answers and cards (ChatGPT now uses a separate renderer for some answers), so the whole page is
   // searched for placeholders instead of trusting a list of containers. Only what the person is typing and our own UI are skipped.
@@ -864,30 +863,6 @@
     }
   }
 
-  // The model did not use the placeholders we sent, so there is nothing to restore.
-  function noteNoPlaceholder() {
-    if (!restoreEnabled || !lastSent || lastSent.noted || lastSent.restored || !lastSent.expect) return;
-    const roots = [...document.querySelectorAll(site.reply.join(","))];
-    if (roots.length <= lastSent.replies) return;
-    const newest = roots[roots.length - 1];
-    const body = newest.textContent || "";
-    if (body.length < 20 || PLACEHOLDER.test(body)) return;
-    lastSent.noted = true;
-    ui.strip("noph", {
-      tone: "info",
-      text: "모델이 자리표시자를 쓰지 않아서 복원할 값이 없어요",
-      action: {
-        label: "“자리표시자를 그대로 써서” 다시 요청",
-        onClick: () => {
-          const box = findComposer();
-          if (box) writeText(box, `${readText(box)}${readText(box) ? "\n" : ""}답변에는 [사람_1] 같은 자리표시자를 그대로 써서 알려줘.`.trim());
-          toast("입력창에 넣었어요");
-          ui.strip("noph", null);
-        },
-      },
-    });
-  }
-
   // The popup asks "does the extension see this tab?" (no page content is returned).
   const seen = { intercepted: 0 };
   chrome.runtime.onMessage?.addListener((msg, _s, reply) => {
@@ -910,8 +885,6 @@
   new MutationObserver(() => {
     clearTimeout(timer);
     timer = setTimeout(restoreReplies, 300);
-    clearTimeout(noteTimer);
-    noteTimer = setTimeout(noteNoPlaceholder, 1800);
     composerChanged();
     if (safeShown && !safeMode()) safeNote(false); // the page finished drawing its chat box
   }).observe(document.body, { childList: true, subtree: true, characterData: true });
