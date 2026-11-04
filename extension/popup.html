@@ -33,6 +33,19 @@
       <p class="hint">공통 개인정보 · 시크릿은 항상 켜져 있어요</p>
     </section>
 
+    <section class="card" aria-labelledby="me-h">
+      <h2 id="me-h">내 계정</h2>
+      <div id="me-state" class="hint" role="status">확인 중…</div>
+      <form id="me-form" hidden>
+        <div class="row">
+          <input id="me-mail" type="email" placeholder="회사 메일 주소" autocomplete="email" spellcheck="false" aria-label="회사 메일 주소">
+          <button type="submit" class="btn small">연결</button>
+        </div>
+        <p class="hint">관리자가 승인한 구성원의 메일을 넣으면, 이 브라우저에서 보낸 글이 기록에 내 이름과 부서로 남아요.</p>
+      </form>
+      <button type="button" id="me-unlink" class="btn small" hidden>연결 끊기</button>
+    </section>
+
     <section class="card" aria-labelledby="ex-h">
       <h2 id="ex-h">내 예외 요청</h2>
       <div id="exceptions" class="exlist hint">확인 중…</div>

@@ -7,7 +7,8 @@
   const SITES = {
     "chatgpt.com": {
       // #prompt-textarea is a contenteditable on the logged-in page; other layouts use a <textarea> or a bare ProseMirror.
-      composer: ["#prompt-textarea", 'textarea[name="prompt-textarea"]', 'div.ProseMirror[contenteditable="true"]'],
+      // The narrow-window layout uses a plain <textarea id="mobile-composer-prompt"> (and the wide one may use "...-composer-prompt" too).
+      composer: ["#prompt-textarea", 'textarea[name="prompt-textarea"]', 'textarea[id$="composer-prompt"]', 'div.ProseMirror[contenteditable="true"]'],
       send: ['button[data-testid="send-button"]', 'button[data-testid="composer-submit-button"]', 'button[aria-label="Send prompt"]', 'button[aria-label="프롬프트 보내기"]', 'button[aria-label="Send message"]'],
       reply: ['[data-message-author-role="assistant"]', '[data-dil-message-id]'],
       mine: ['[data-message-author-role="user"]'], // my own bubbles: shown with the original values again

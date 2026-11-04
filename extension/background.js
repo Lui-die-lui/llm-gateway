@@ -20,10 +20,10 @@ async function keyHeaders() {
   return gatewayKey ? { "X-Gateway-Key": gatewayKey } : {};
 }
 
-async function call(path, body) {
+async function call(path, body, method) {
   try {
     const r = await fetch((await gatewayUrl()) + path, {
-      method: body ? "POST" : "GET",
+      method: method || (body ? "POST" : "GET"),
       headers: { "Content-Type": "application/json", ...(await keyHeaders()) },
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -255,6 +255,9 @@ async function handle(msg, tabId, site) {
     case "status": return status();
     case "clientId": return { id: await clientId() };
     case "exceptions": return call(await mineUrl());
+    case "memberMe": return call(`/v1/members/me?client_id=${encodeURIComponent(await clientId())}`);
+    case "memberLink": return call("/v1/members/link", { email: String(msg.email || "").trim(), client_id: await clientId() });
+    case "memberUnlink": return call(`/v1/members/link?client_id=${encodeURIComponent(await clientId())}`, undefined, "DELETE");
     case "requestException": return requestException(msg.request || {}, site);
     case "exceptionNews": lastPagePoll = Date.now(); return exceptionNews();
     case "stats": return getStats();

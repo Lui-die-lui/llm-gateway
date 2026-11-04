@@ -65,6 +65,41 @@ function paintStatus(enabled, ok, gatewayUrl, keyBad = false) {
   $("status-sub").textContent = sub;
 }
 
+// Which member this browser belongs to (so the admin's log says who sent what). Self-declared by the company mail; it grants nothing.
+async function showMe() {
+  const state = $("me-state");
+  const r = await chrome.runtime.sendMessage({ type: "memberMe" });
+  if (!r?.ok) {
+    state.textContent = "서버에 연결되면 내 계정을 연결할 수 있어요";
+    $("me-form").hidden = true;
+    $("me-unlink").hidden = true;
+    return;
+  }
+  const linked = r.data.linked === true;
+  state.textContent = linked ? `${r.data.name} 님${r.data.dept ? ` · ${r.data.dept}` : ""}으로 연결돼 있어요` : "아직 연결 안 됨";
+  $("me-form").hidden = linked;
+  $("me-unlink").hidden = !linked;
+}
+
+async function linkMe(e) {
+  e.preventDefault();
+  const state = $("me-state");
+  const email = $("me-mail").value.trim();
+  if (!email) return;
+  const r = await chrome.runtime.sendMessage({ type: "memberLink", email });
+  if (r?.ok) {
+    $("me-mail").value = "";
+    return showMe();
+  }
+  const why = r?.status === 404 ? "승인된 구성원의 회사 메일이 아니에요" : r?.status === 0 ? "서버에 연결하지 못했어요" : "연결하지 못했어요";
+  state.textContent = why;
+}
+
+async function unlinkMe() {
+  await chrome.runtime.sendMessage({ type: "memberUnlink" });
+  showMe();
+}
+
 // The latest requests and where each one stands, with the time an approval lasts until.
 async function showExceptions() {
   const el = $("exceptions");
@@ -103,6 +138,9 @@ async function init() {
   $("gw-url").value = gatewayUrl;
   $("gw-key").value = (await chrome.storage.local.get({ gatewayKey: "" })).gatewayKey;
   $("gw").addEventListener("submit", saveGateway);
+  $("me-form").addEventListener("submit", linkMe);
+  $("me-unlink").addEventListener("click", unlinkMe);
+  showMe();
   showPage();
   const fmtNow = Gw.timeFormat(settings.timeFormat);
   for (const r of document.querySelectorAll('input[name="timeFormat"]')) {
