@@ -22,11 +22,12 @@ CREATE TABLE IF NOT EXISTS requests (
   industries TEXT NOT NULL,    -- comma separated
   use_case TEXT,
   stream INTEGER NOT NULL,
-  latency_ms INTEGER NOT NULL,
+  latency_ms REAL NOT NULL,
   site TEXT,                   -- hostname the client reported (chatgpt.com), if any
   client TEXT,                 -- client name/version the client reported (extension 0.3.0), if any
   exception_id TEXT,           -- the approved exception that let something through as it was, if any
-  caller TEXT                  -- the API key's name (hr-app), decided by the gateway; NULL when keys are not enabled
+  caller TEXT,                 -- the API key's name (hr-app), decided by the gateway; NULL when keys are not enabled
+  client_id TEXT               -- the browser's id: with the members' linked browsers it tells who sent it. Never returned as it is (it also opens that browser's approvals)
 );
 CREATE TABLE IF NOT EXISTS findings (
   request_id INTEGER NOT NULL REFERENCES requests(id),
@@ -56,7 +57,7 @@ def configure(path: str) -> None:
         _db.executescript(SCHEMA)
         # Databases created before site/client existed.
         have = {r["name"] for r in _db.execute("PRAGMA table_info(requests)")}
-        for col in ("site", "client", "caller", "exception_id"):
+        for col in ("site", "client", "caller", "exception_id", "client_id"):
             if col not in have:
                 _db.execute(f"ALTER TABLE requests ADD COLUMN {col} TEXT")
         _db.commit()
@@ -71,21 +72,22 @@ def record(
     industries: list[str],
     use_case: str | None,
     stream: bool,
-    latency_ms: int,
+    latency_ms: float,
     site: str | None = None,
     client: str | None = None,
     caller: str | None = None,
     exception_id: str | None = None,
+    client_id: str | None = None,
     request_matches: list[Match] = (),
     response_matches: list[Match] = (),
 ) -> None:
     with _lock:
         cur = _db.execute(
-            "INSERT INTO requests(ts,endpoint,provider,route,status,industries,use_case,stream,latency_ms,site,client,exception_id,caller)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO requests(ts,endpoint,provider,route,status,industries,use_case,stream,latency_ms,site,client,exception_id,caller,client_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 time.time(), endpoint, provider, route, status, ",".join(industries), use_case, int(stream), latency_ms,
-                _tag(site), _tag(client), _tag(exception_id), caller,
+                _tag(site), _tag(client), _tag(exception_id), caller, _tag(client_id),
             ),
         )
         rows = [
@@ -113,31 +115,35 @@ def _q(sql: str, *args) -> list[sqlite3.Row]:
     return _db.execute(sql, args).fetchall()
 
 
-def summary(since: float = 0.0) -> dict:
+def summary(since: float = 0.0, until: float | None = None) -> dict:
+    """Counts for requests in [since, until). `until` lets the console compare like with like (today so far against yesterday up to the same time)."""
+    until = 1e18 if until is None else until
     with _lock:
-        total = _q("SELECT COUNT(*) c FROM requests WHERE ts>=?", since)[0]["c"]
-        redacted_requests = _q(f"SELECT COUNT(*) c FROM requests r WHERE r.ts>=? AND {_HAS_REDACTION}", since)[0]["c"]
+        total = _q("SELECT COUNT(*) c FROM requests WHERE ts>=? AND ts<?", since, until)[0]["c"]
+        redacted_requests = _q(f"SELECT COUNT(*) c FROM requests r WHERE r.ts>=? AND r.ts<? AND {_HAS_REDACTION}", since, until)[0]["c"]
         # Nearest-rank p95 over every request (blocked ones are fast, so they pull it down; that is the real experience).
         p95 = None
         if total:
             p95 = _q(
-                "SELECT latency_ms FROM requests WHERE ts>=? ORDER BY latency_ms LIMIT 1 OFFSET ?",
+                "SELECT latency_ms FROM requests WHERE ts>=? AND ts<? ORDER BY latency_ms LIMIT 1 OFFSET ?",
                 since,
+                until,
                 math.ceil(0.95 * total) - 1,
             )[0]["latency_ms"]
-        by_status = {r["status"]: r["c"] for r in _q("SELECT status, COUNT(*) c FROM requests WHERE ts>=? GROUP BY status", since)}
-        by_route = {r["route"]: r["c"] for r in _q("SELECT route, COUNT(*) c FROM requests WHERE ts>=? GROUP BY route", since)}
+        by_status = {r["status"]: r["c"] for r in _q("SELECT status, COUNT(*) c FROM requests WHERE ts>=? AND ts<? GROUP BY status", since, until)}
+        by_route = {r["route"]: r["c"] for r in _q("SELECT route, COUNT(*) c FROM requests WHERE ts>=? AND ts<? GROUP BY route", since, until)}
         by_industry: Counter = Counter()
-        for r in _q("SELECT industries, COUNT(*) c FROM requests WHERE ts>=? GROUP BY industries", since):
+        for r in _q("SELECT industries, COUNT(*) c FROM requests WHERE ts>=? AND ts<? GROUP BY industries", since, until):
             for name in r["industries"].split(",") if r["industries"] else ["(none)"]:
                 by_industry[name] += r["c"]
         findings = [
             dict(r)
             for r in _q(
                 "SELECT f.direction, f.label, f.action, SUM(f.count) count FROM findings f"
-                " JOIN requests r ON r.id=f.request_id WHERE r.ts>=?"
+                " JOIN requests r ON r.id=f.request_id WHERE r.ts>=? AND r.ts<?"
                 " GROUP BY f.direction, f.label, f.action ORDER BY count DESC",
                 since,
+                until,
             )
         ]
     return {
@@ -208,6 +214,8 @@ def events(
     until: float | None = None,
     site: str | None = None,
     client: str | None = None,
+    client_ids: list[str] | None = None,
+    exception: bool | None = None,
 ) -> tuple[list[dict], int]:
     """-> (one page newest first, total rows matching the filters)."""
     where, args = [], []
@@ -224,6 +232,11 @@ def events(
     if label:
         where.append("id IN (SELECT request_id FROM findings WHERE label=?)")
         args.append(label)
+    if client_ids is not None:  # a department or a person: the browsers linked to them (an empty list matches nothing)
+        where.append(f"client_id IN ({','.join('?' * len(client_ids))})" if client_ids else "0")
+        args.extend(client_ids)
+    if exception is not None:  # whether an approved exception let something through as it was
+        where.append("exception_id IS NOT NULL" if exception else "exception_id IS NULL")
     clause = f"WHERE {' AND '.join(where)}" if where else ""
     with _lock:
         total = _q(f"SELECT COUNT(*) c FROM requests {clause}", *args)[0]["c"]

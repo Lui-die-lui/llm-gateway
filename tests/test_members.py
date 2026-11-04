@@ -27,7 +27,8 @@ def test_join_then_admin_approves_and_the_person_becomes_a_member():
 def test_reject_removes_the_request_and_the_person_may_apply_again():
     client.post("/v1/members/join", json=JOIN)
     assert client.post("/v1/members/M-0001/reject").status_code == 200
-    assert client.get("/v1/members").json() == {"members": [], "pending": []}
+    d = client.get("/v1/members").json()
+    assert d["members"] == [] and d["pending"] == []
     assert client.post("/v1/members/join", json=JOIN).status_code == 200
     log = client.get("/v1/settings").json()["log"]
     assert any(e["what"] == "가입 반려" and "seoyeon.kim@example.com" in e["detail"] for e in log)
@@ -93,3 +94,70 @@ def test_no_password_or_secret_is_ever_stored_or_returned():
     row = dict(members._db.execute("SELECT * FROM members").fetchone())
     assert set(row) == {"id", "name", "email", "dept", "status", "created", "decided"}
     assert "hunter2" not in json.dumps(client.get("/v1/members").json())
+
+
+# ---------------------------------------------------------------- departments, linked browsers, and the log that knows who sent what
+
+def _member(name, mail, dept):
+    mid = client.post("/v1/members/join", json={"name": name, "email": mail, "dept": dept}).json()["id"]
+    client.post(f"/v1/members/{mid}/approve")
+    return mid
+
+
+def test_departments_are_a_small_fixed_list_and_the_join_checks_it():
+    assert client.get("/v1/members/departments").json()["departments"] == ["경영지원", "개발", "영업", "마케팅"]
+    assert client.post("/v1/members/join", json={**JOIN, "dept": "연구소"}).status_code == 422  # not one of them
+    assert client.post("/v1/members/join", json={**JOIN, "dept": ""}).status_code == 200  # optional
+    assert client.get("/v1/members").json()["departments"] == ["경영지원", "개발", "영업", "마케팅"]
+
+
+def test_a_browser_is_linked_to_an_approved_member_by_mail_and_can_unlink():
+    client.post("/v1/members/join", json=JOIN)  # still waiting
+    assert client.post("/v1/members/link", json={"email": JOIN["email"], "client_id": "b-aaaa1111"}).status_code == 404
+    client.post("/v1/members/M-0001/approve")
+    r = client.post("/v1/members/link", json={"email": "SEOYEON.KIM@example.com", "client_id": "b-aaaa1111"})
+    assert r.status_code == 200 and r.json() == {"name": "김서연", "dept": "마케팅"}
+    assert client.get("/v1/members/me", params={"client_id": "b-aaaa1111"}).json() == {"linked": True, "name": "김서연", "dept": "마케팅"}
+    assert client.get("/v1/members/me", params={"client_id": "b-other000"}).json() == {"linked": False}
+    assert client.get("/v1/members").json()["members"][0]["browsers"] == 1
+    assert "b-aaaa1111" not in json.dumps(client.get("/v1/members").json())  # the id is never listed
+    assert client.post("/v1/members/link", json={"email": "nobody@example.com", "client_id": "b-aaaa1111"}).status_code == 404
+    assert client.delete("/v1/members/link", params={"client_id": "b-aaaa1111"}).status_code == 200
+    assert client.get("/v1/members/me", params={"client_id": "b-aaaa1111"}).json() == {"linked": False}
+
+
+def test_the_log_says_who_sent_it_and_filters_by_department_person_and_exception(monkeypatch):
+    seo = _member("김서연", "seoyeon@example.com", "마케팅")
+    _member("이도윤", "doyoon@example.com", "개발")
+    for mail, cid in (("seoyeon@example.com", "b-seo00001"), ("doyoon@example.com", "b-do000001")):
+        client.post("/v1/members/link", json={"email": mail, "client_id": cid})
+    for cid in ("b-seo00001", "b-seo00001", "b-do000001", "b-stranger1"):
+        client.post("/v1/sanitize", json={"text": "010-2345-6789", "site": "chatgpt.com", "client_id": cid})
+    allrows = client.get("/v1/audit/events").json()
+    assert len(allrows) == 4 and all("client_id" not in r for r in allrows)  # the browser id is not returned
+    assert {r["user"] for r in allrows} == {"김서연", "이도윤", None}
+    mk = client.get("/v1/audit/events", params={"dept": "마케팅"})
+    assert mk.headers["X-Total-Count"] == "2" and {r["dept"] for r in mk.json()} == {"마케팅"}
+    assert client.get("/v1/audit/events", params={"dept": "개발"}).headers["X-Total-Count"] == "1"
+    assert client.get("/v1/audit/events", params={"dept": "영업"}).headers["X-Total-Count"] == "0"  # a department nobody is linked to matches nothing
+    assert client.get("/v1/audit/events", params={"user": seo}).headers["X-Total-Count"] == "2"
+    assert client.get("/v1/audit/events", params={"site": "chatgpt.com"}).headers["X-Total-Count"] == "4"
+    assert client.get("/v1/audit/events", params={"exception": "true"}).headers["X-Total-Count"] == "0"
+
+
+def test_exception_filter_finds_what_an_approved_exception_let_through():
+    cid = "b-excep0001"
+    r = client.post("/v1/exceptions", json={"client_id": cid, "entity": "전화번호", "site": "chatgpt.com", "scope": "24시간", "reason": "고객 응대 업무에 번호가 그대로 필요합니다 확인 부탁드려요"}).json()
+    client.post(f"/v1/exceptions/{r['id']}/decide", json={"decision": "approved", "ttl": "24h", "memo": ""})
+    client.post("/v1/sanitize", json={"text": "010-2345-6789", "site": "chatgpt.com", "client_id": cid})  # let through under the approval
+    client.post("/v1/sanitize", json={"text": "kim@corp.co.kr", "site": "chatgpt.com", "client_id": cid})  # a kind that was not approved: masked
+    ex = client.get("/v1/audit/events", params={"exception": "true"})
+    assert ex.headers["X-Total-Count"] == "1" and ex.json()[0]["exception_id"] == r["id"]
+    assert client.get("/v1/audit/events", params={"exception": "false"}).headers["X-Total-Count"] == "1"
+
+
+def test_removing_a_member_unlinks_the_browsers():
+    mid = _member("김서연", "seoyeon@example.com", "마케팅")
+    client.post("/v1/members/link", json={"email": "seoyeon@example.com", "client_id": "b-seo00001"})
+    client.delete(f"/v1/members/{mid}")
+    assert client.get("/v1/members/me", params={"client_id": "b-seo00001"}).json() == {"linked": False}
