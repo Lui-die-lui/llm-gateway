@@ -161,3 +161,17 @@ def test_removing_a_member_unlinks_the_browsers():
     client.post("/v1/members/link", json={"email": "seoyeon@example.com", "client_id": "b-seo00001"})
     client.delete(f"/v1/members/{mid}")
     assert client.get("/v1/members/me", params={"client_id": "b-seo00001"}).json() == {"linked": False}
+
+
+def test_a_blocked_message_is_not_counted_as_using_an_exception():
+    cid = "b-excep0002"
+    r = client.post("/v1/exceptions", json={"client_id": cid, "entity": "사람", "site": "chatgpt.com", "scope": "24시간", "reason": "고객 응대 업무에 이름이 그대로 필요합니다 확인 부탁드려요"}).json()
+    client.post(f"/v1/exceptions/{r['id']}/decide", json={"decision": "approved", "ttl": "24h", "memo": ""})
+    ok = client.post("/v1/sanitize", json={"text": "고객 홍길동 문의", "site": "chatgpt.com", "client_id": cid})
+    assert ok.status_code == 200 and "홍길동" in ok.json()["text"]  # the name went through under the approval
+    stopped = client.post("/v1/sanitize", json={"text": "고객 홍길동 키 sk-abcdefghijklmnopqrstuvwxyz123456", "site": "chatgpt.com", "client_id": cid})
+    assert stopped.status_code == 403  # a secret that was not approved: nothing goes out
+    rows = {e["status"]: e for e in client.get("/v1/audit/events").json()}
+    assert rows["ok"]["exception_id"] == r["id"]
+    assert rows["blocked"]["exception_id"] is None  # the exception let nothing through here
+    assert client.get("/v1/audit/events", params={"exception": "true"}).headers["X-Total-Count"] == "1"

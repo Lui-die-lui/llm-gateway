@@ -528,7 +528,8 @@ def sanitize(body: SanitizeIn, caller: str | None = Depends(require_caller)):
         site=body.site,
         client=body.client,
         caller=caller,
-        exception_id=",".join(g["id"] for g in used) or None,
+        # Only an exception that really let something go out counts: a message that was stopped anyway used none (and a one-use approval is not spent).
+        exception_id=(",".join(g["id"] for g in used) or None) if route != "block" else None,
         client_id=body.client_id,
         request_matches=matches,
     )
