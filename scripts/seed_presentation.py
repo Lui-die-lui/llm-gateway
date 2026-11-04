@@ -68,17 +68,20 @@ EXCEPTIONS = [
     ("조성비", "chatgpt.com", "1시간", "안정성 시험 결과를 영문으로 요약해야 해서 수치를 그대로 보내야 합니다 부탁드려요", "approved", "1h", "시험 요약 건 확인", 30),
 ]
 
-# (name, mail, department, days ago they joined, or None = still waiting for approval). Fake people, example.com addresses.
+# (name, mail, department, days ago they joined or None = still waiting for approval, which seeded browser is theirs).
+# Fake people, example.com addresses, the four broad departments of a small company.
 MEMBERS = [
-    ("김서연", "seoyeon.kim@example.com", "마케팅", 41),
-    ("이도윤", "doyoon.lee@example.com", "개발", 38),
-    ("박지민", "jimin.park@example.com", "영업", 29),
-    ("최하은", "haeun.choi@example.com", "인사", 17),
-    ("정우진", "woojin.jung@example.com", "디자인", 9),
-    ("한소율", "soyul.han@example.com", "재무", 3),
-    ("오준서", "junseo.oh@example.com", "개발", None),
-    ("윤지아", "jia.yoon@example.com", "마케팅", None),
+    ("이도윤", "doyoon.lee@example.com", "개발", 41, 0),
+    ("정우진", "woojin.jung@example.com", "개발", 33, 1),
+    ("박지민", "jimin.park@example.com", "영업", 29, 2),
+    ("김서연", "seoyeon.kim@example.com", "마케팅", 24, 3),
+    ("한소율", "soyul.han@example.com", "경영지원", 12, 4),
+    ("최하은", "haeun.choi@example.com", "경영지원", 5, 5),
+    ("오준서", "junseo.oh@example.com", "개발", None, None),
+    ("윤지아", "jia.yoon@example.com", "마케팅", None, None),
 ]
+SEED_BROWSERS = 7  # the prompts come from 7 browsers (0..6); the 7th belongs to nobody in the list, so the log shows it as unknown
+DEMO_OWNER = "김서연"  # the presenter's browser (--client-id) is linked to this member, so exceptions and approvals show a name
 
 
 class Gateway:
@@ -173,7 +176,7 @@ def main() -> int:
     print(f"reset first:  {'yes' if args.reset else 'no'}")
     print(f"prompts:      {len(events)} ({kinds['clean']} clean, {kinds['redact']} masked, {kinds['blocked']} blocked) over {'the last 7 days' if not args.api else 'now'}")
     waiting = sum(1 for m in MEMBERS if m[3] is None)
-    print(f"members:      {len(MEMBERS) - waiting} members + {waiting} sign-up requests waiting")
+    print(f"members:      {len(MEMBERS) - waiting} members (broad departments: 개발, 영업, 마케팅, 경영지원) + {waiting} sign-up requests waiting")
     print(f"exceptions:   {len(EXCEPTIONS)} requests (1 waiting, 3 approved, 1 rejected) for browser {args.client_id}")
     print(f"anomaly:      {'3 blocked secrets in the last minutes' if args.with_anomaly else 'none (type a key into a prompt three times to make one live)'}")
     if not args.yes:
@@ -191,7 +194,7 @@ def main() -> int:
 
     sent = 0
     for ts, text, inds, _kind in events:
-        r = gw.post("/v1/sanitize", {"text": text, "industries": inds, "site": rng.choice(SITES), "client": CLIENT, "client_id": f"b-seed{rng.randint(0, 6):029d}"})
+        r = gw.post("/v1/sanitize", {"text": text, "industries": inds, "site": rng.choice(SITES), "client": CLIENT, "client_id": f"b-seed{rng.randint(0, SEED_BROWSERS - 1):029d}"})
         if r.status_code == 401:
             print("401: the server wants --key")
             return 1
@@ -204,7 +207,7 @@ def main() -> int:
             gw.post("/v1/sanitize", {"text": f"키 {KEY} 로 호출했는데 안 돼요", "site": "chatgpt.com", "client": CLIENT, "client_id": f"b-seed{i:029d}"})
         print("anomaly: 3 blocked secrets written")
 
-    for name, mail, dept, days in MEMBERS:
+    for name, mail, dept, days, browser in MEMBERS:
         r = gw.post("/v1/members/join", {"name": name, "email": mail, "dept": dept})
         if r.status_code >= 400:
             print("member failed:", name, r.status_code, r.text[:100]); return 1
@@ -213,7 +216,11 @@ def main() -> int:
             d = gw.post(f"/v1/members/{mid}/approve", {})
             if d.status_code >= 400:
                 print("approve failed:", d.status_code, d.text[:100]); return 1
-        gw.backdate_member(mid, now - (days if days is not None else 0) * 86400 - 3600 if days is not None else now - 7200, now - (days or 0) * 86400 if days is not None else None)
+            gw.post("/v1/members/link", {"email": mail, "client_id": f"b-seed{browser:029d}"})  # this person's browser, so the log says who sent what
+            if name == DEMO_OWNER:
+                gw.post("/v1/members/link", {"email": mail, "client_id": args.client_id})
+        created = now - (days * 86400 + 3600) if days is not None else now - 7200
+        gw.backdate_member(mid, created, now - days * 86400 if days is not None else None)
         print(f"member {mid}: {name} · {dept} · {'가입 완료' if days is not None else '승인 대기'}")
 
     for entity, site, scope, reason, decision, ttl, memo, hours_ago in EXCEPTIONS:
@@ -229,6 +236,12 @@ def main() -> int:
             decided = now - hours_ago * 3600
         gw.backdate_exception(rid, (decided or now) - 1800 if decision else now - 600, decided)
         print(f"exception {rid}: {entity} · {scope} · {decision or 'waiting'}")
+    # Two prompts sent under the approved "사람" exception (24 h): the person's name goes through as typed, the mail address is still masked.
+    for text in ("고객 박정민님께 보낼 사과 메일 초안 써줘. 회신은 customer.park@example.com 으로", "고객 최영희님 문의 답변 문구 만들어줘"):
+        r = gw.post("/v1/sanitize", {"text": text, "industries": [], "site": "chatgpt.com", "client": CLIENT, "client_id": args.client_id})
+        if r.status_code == 401:
+            print("401: the server wants --key"); return 1
+    print("exception-used prompts written: 2")
     print("\ndone. Open the console: 개요, 기록, 실시간, 분석 리포트 and 예외 요청 now have data.")
     return 0
 
