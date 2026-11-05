@@ -52,6 +52,7 @@ curl -X POST localhost:8000/v1/chat/completions \
 | [docs/API.md](docs/API.md) | 프론트엔드 (엔드포인트, 요청/응답 예, 스트리밍 사용법) |
 | [docs/TAXONOMY.md](docs/TAXONOMY.md) | 템플릿 작성자 (스키마, 검사 명령, tests 쓰는 법) |
 | [extension/README.md](extension/README.md) | Chrome 확장 설치 |
+| [docs/presentation/](docs/presentation/README.md) | 최종 발표 자료 (슬라이드 pptx·pdf, 발표문, 발표 시점 구현 상태) |
 
 ## 외부 LLM 선택 (OpenAI / Claude)
 
@@ -95,7 +96,7 @@ app/
 extension/         Chrome 확장 (MV3)  ← 조원 A가 실제 사이트에서 검증
 industries/        산업별 템플릿 YAML  ← 조원 B, C 작업 공간
 vendor/            gitleaks 기본 규칙 파일(v8.30.1, MIT)과 라이선스. 실행 중에 내려받지 않습니다
-docs/              블루프린트, API 명세, 템플릿 가이드
+docs/              블루프린트, API 명세, 템플릿 가이드, 최종 발표 자료(presentation/)
 tests/
 ```
 
